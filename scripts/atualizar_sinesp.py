@@ -204,6 +204,59 @@ def processar(conteudo, ano):
     return saida, lidas, diag
 
 
+URL_MUNICIPIOS_IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios'
+# População residente estimada (tabela 6579, variável 9324); reserva: Censo 2022 (tabela 4709, variável 93)
+URLS_POPULACAO_IBGE = [
+    'https://servicodados.ibge.gov.br/api/v3/agregados/6579/periodos/-1/variaveis/9324?localidades=N6[all]',
+    'https://servicodados.ibge.gov.br/api/v3/agregados/4709/periodos/-1/variaveis/93?localidades=N6[all]',
+]
+
+
+def baixar_json(url, tentativas=3):
+    for i in range(tentativas):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (mapa-da-seguranca)'})
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return json.loads(resp.read().decode('utf-8'))
+        except Exception as e:  # noqa: BLE001 - rede instável: tenta de novo
+            print(f'IBGE: {e}, nova tentativa')
+            time.sleep(5 * (i + 1))
+    return None
+
+
+def atualizar_populacao():
+    """dados/populacao.json: { ano, fonte, ufs: { UF: { nome_normalizado: [ibge, populacao] } } } para taxas por 100 mil."""
+    municipios = baixar_json(URL_MUNICIPIOS_IBGE)
+    if not municipios:
+        return
+    for url in URLS_POPULACAO_IBGE:
+        dados = baixar_json(url)
+        try:
+            serie = dados[0]['resultados'][0]['series']
+        except (TypeError, IndexError, KeyError):
+            continue
+        pop, ano = {}, ''
+        for s in serie:
+            ano, valor = next(iter(s['serie'].items()))
+            if str(valor).isdigit():
+                pop[str(s['localidade']['id'])] = int(valor)
+        if len(pop) < 5000:
+            continue
+        ufs = {}
+        for m in municipios:
+            try:
+                uf = m['microrregiao']['mesorregiao']['UF']['sigla']
+            except (TypeError, KeyError):
+                uf = (m.get('regiao-imediata') or {}).get('regiao-intermediaria', {}).get('UF', {}).get('sigla')
+            cod = str(m['id'])
+            if uf and cod in pop:
+                ufs.setdefault(uf, {})[normalizar(m['nome'])] = [cod, pop[cod]]
+        gravar(os.path.join(PASTA_SAIDA, 'populacao.json'), {'ano': ano, 'fonte': 'IBGE ' + url.split('/agregados/')[1].split('/')[0], 'ufs': ufs})
+        print(f'População: {len(pop)} municípios ({ano})')
+        return
+    print('População: não foi possível obter do IBGE')
+
+
 def gravar(caminho, obj):
     with open(caminho, 'w', encoding='utf-8') as f:
         json.dump(obj, f, ensure_ascii=False, separators=(',', ':'))
@@ -252,6 +305,7 @@ def main():
         mudou = True
         print(f'{ano}: {lidas} linhas, {len(resumo)} UFs')
 
+    atualizar_populacao()
     if mudou:
         manifesto['atualizadoEm'] = agora
         gravar(caminho_manifesto, manifesto)
