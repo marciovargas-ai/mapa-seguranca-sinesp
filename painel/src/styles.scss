@@ -1,0 +1,73 @@
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  color-scheme: light;
+  @include mat.theme((
+    color: (primary: mat.$azure-palette, tertiary: mat.$blue-palette),
+    typography: Roboto,
+    density: 0,
+  ));
+  --cor-perigo: #c62828;
+  --cor-sucesso: #2e7d32;
+  --cor-alerta: #e65100;
+}
+html.tema-escuro {
+  color-scheme: dark;
+  --cor-perigo: #ff8a80;
+  --cor-sucesso: #81c995;
+  --cor-alerta: #ffb74d;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+a { color: var(--mat-sys-primary); }
+
+.material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1;
+  display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga'; }
+mat-icon.mat-icon { font-family: 'Material Symbols Outlined'; }
+
+/* Blocos comuns às abas */
+.cartao { display: block; width: 100%; background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px; padding: 14px 16px; min-width: 0; }
+html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
+.nota { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin: 6px 0 0; }
+.tag { display: inline-flex; align-items: center; font: var(--mat-sys-label-small); font-weight: 600; border: 1px solid currentColor; border-radius: 6px;
+  padding: 1px 6px; white-space: nowrap; background: color-mix(in srgb, currentColor 8%, transparent); }
+.pilula { display: inline-flex; align-items: center; gap: 3px; font: var(--mat-sys-label-medium); background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface); border-radius: 999px; padding: 2px 9px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vazio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 28px 16px; color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium); }
+.vazio mat-icon { font-size: 36px; width: 36px; height: 36px; opacity: .6; }
+.vazio p { margin: 0; max-width: 46ch; }
+.vazio.pequeno { padding: 14px 8px; }
+.vazio.pequeno mat-icon { font-size: 26px; width: 26px; height: 26px; }
+.tabela { width: 100%; border-collapse: collapse; font: var(--mat-sys-body-medium); }
+.tabela th { text-align: left; font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); padding: 6px 8px; border-bottom: 1px solid var(--mat-sys-outline-variant); white-space: nowrap; }
+.tabela td { padding: 7px 8px; border-bottom: 1px solid var(--mat-sys-outline-variant); vertical-align: middle; }
+.tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.esqueleto { height: 14px; border-radius: 6px; margin: 8px 0; background: linear-gradient(90deg, var(--mat-sys-surface-container) 25%, var(--mat-sys-surface-container-high) 50%, var(--mat-sys-surface-container) 75%);
+  background-size: 200% 100%; animation: brilho 1.2s linear infinite; }
+.esqueleto.curto { width: 60%; }
+@keyframes brilho { to { background-position: -200% 0; } }
+
+/* Leaflet */
+.leaflet-container { font: var(--mat-sys-body-small); }
+.leaflet-popup-content-wrapper { border-radius: 12px; }
+.popup { max-width: 290px; }
+.popup-cat { font-weight: 700; }
+.popup-titulo { font-weight: 600; margin: 4px 0; font-size: 13px; line-height: 1.35; }
+.popup-meta { color: #475569; font-size: 11.5px; margin-bottom: 6px; }
+.popup-botao { margin-top: 8px; border: 0; border-radius: 999px; padding: 6px 12px; background: #1d4ed8; color: #fff; font: 600 12px Roboto, sans-serif; cursor: pointer; }
+.lista-sem-local { padding-left: 16px; margin: 6px 0 0; max-height: 220px; overflow: auto; }
+.marcador-sem-local div { background: #334155; color: #fff; border-radius: 999px; padding: 3px 9px; font: 600 11px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.rotulo-zona div { width: 24px; height: 24px; border-radius: 50%; color: #fff; font: 700 12px/24px Roboto, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+html.tema-escuro .leaflet-popup-content-wrapper, html.tema-escuro .leaflet-popup-tip { background: #1e2530; color: #e2e8f0; }
+html.tema-escuro .popup-meta { color: #94a3b8; }
