@@ -46,6 +46,24 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
         </div>
       </header>
 
+      <section class="orgaos" aria-label="Registros por órgão de segurança">
+        <h3>Órgãos de segurança <small>últimos 12 meses ({{ o.periodo }})</small></h3>
+        <div class="orgaos-grade">
+          @for (g of orgaos(); track g.id) {
+            <div class="orgao" [class.sem-base]="!g.oficial" [style.--cor-orgao]="g.cor">
+              <div class="orgao-topo"><i></i><b>{{ g.nome }}</b></div>
+              @if (g.oficial) {
+                <span class="orgao-num">{{ g.total }}</span>
+                <span class="orgao-sub">{{ g.sub }}</span>
+              } @else {
+                <span class="orgao-num pequeno">Sem base pública</span>
+                <span class="orgao-sub">{{ g.sub }}</span>
+              }
+            </div>
+          }
+        </div>
+      </section>
+
       @if (selecionado(); as e) {
         <section class="cartao destaque">
           <div class="destaque-topo">
@@ -116,6 +134,17 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
       border-radius: 8px; padding: 4px 10px; }
     .fatos mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--mat-sys-primary); }
     .fatos small { color: var(--mat-sys-on-surface-variant); font-weight: 400; }
+    .orgaos { margin-bottom: 12px; }
+    .orgaos h3 small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-left: 4px; }
+    .orgaos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
+    .orgao { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--mat-sys-outline-variant);
+      border-left: 4px solid var(--cor-orgao); background: var(--mat-sys-surface-container-low); }
+    .orgao.sem-base { opacity: .75; border-left-style: dashed; }
+    .orgao-topo { display: flex; align-items: center; gap: 6px; font: var(--mat-sys-label-large); }
+    .orgao-topo i { display: none; }
+    .orgao-num { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .orgao-num.pequeno { font: var(--mat-sys-title-small); }
+    .orgao-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
     .destaque { margin-bottom: 12px; }
     .destaque app-grafico { height: 220px; }
     .destaque-topo { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -179,6 +208,41 @@ export class OficialComponent {
       data: { labels: MESES, datasets },
       options: { plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 } } } },
     };
+  });
+
+  /**
+   * Registros por órgão: o Sinesp separa o que foi lançado pela PRF e pela PF
+   * (coluna "abrangência"); o restante vem das polícias Civil e Militar via SSP.
+   * Guarda Municipal e COPOM/190 não têm base pública nacional.
+   */
+  protected readonly orgaos = computed(() => {
+    const o = this.oficial();
+    if (!o?.disponivel) return [];
+    const fed: Record<string, Record<string, number>> = {};
+    for (const e of o.eventos) {
+      for (const [id, v] of Object.entries(e.federais || {})) (fed[id] ||= {})[e.nome] = v;
+    }
+    const soma = (m: Record<string, number>) => Object.values(m).reduce((x, y) => x + y, 0);
+    const principais = (m: Record<string, number>) =>
+      Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([n, v]) => `${n}: ${fmt(v)}`).join(' · ');
+    // Polícias do estado: o que sobra depois de tirar os lançamentos federais; manchete = mortes violentas intencionais
+    const estadual: Record<string, number> = {};
+    for (const e of o.eventos) {
+      const resto = e.total - soma(e.federais || {});
+      if (resto > 0) estadual[e.nome] = resto;
+    }
+    const letais = Object.entries(estadual).filter(([n]) => /^(homic[ií]dio doloso|feminic[ií]dio|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida)/i.test(n));
+    const graves = o.eventos.filter((e) => estadual[e.nome]).slice(0, 2).map((e) => `${e.nome}: ${fmt(estadual[e.nome])}`).join(' · ');
+    const noticias = this.store.filtrados().porOrgao;
+    const lista = [
+      { id: 'SSP', nome: 'Polícias Civil e Militar (SSP)', cor: ORGAO_POR_ID['PC'].cor, oficial: true,
+        total: fmt(letais.reduce((a, [, v]) => a + v, 0)), sub: 'mortes violentas intencionais' + (graves ? ' · ' + graves : '') },
+      ...['PRF', 'PF'].map((id) => ({ id, nome: ORGAO_POR_ID[id].nome, cor: ORGAO_POR_ID[id].cor, oficial: true,
+        total: fmt(soma(fed[id] || {})), sub: fed[id] ? principais(fed[id]) : 'nenhum registro federal neste local' })),
+      ...['GM', 'COPOM'].map((id) => ({ id, nome: ORGAO_POR_ID[id].nome, cor: ORGAO_POR_ID[id].cor, oficial: false, total: '',
+        sub: `Sem estatística aberta nacional. Citado em ${fmt(noticias[id]?.qtd || 0)} notícias.` })),
+    ];
+    return lista;
   });
 
   protected federais(e: EventoOficial) {

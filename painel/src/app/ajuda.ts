@@ -14,12 +14,14 @@ import { gravarLocal } from './core/util';
     <h2 mat-dialog-title>Como ler o painel</h2>
     <mat-dialog-content>
       <h4>Indicadores oficiais (prioridade)</h4>
-      <p>As abas <b>Oficial</b> e <b>Estado</b> mostram os registros do <b>Sinesp</b> (Ministério da Justiça) de {{ anos }}: cada ano lado a lado, o ano corrente comparado ao mesmo período do ano anterior e a taxa por 100 mil habitantes (população do IBGE). Os dados são atualizados automaticamente quando o Ministério publica.</p>
+      <p>Os números do topo e as abas <b>Dados oficiais</b> e <b>Estado</b> vêm do <b>Sinesp</b> (Ministério da Justiça), de {{ anos }}: cada ano lado a lado, o ano corrente comparado ao mesmo período do ano anterior e a taxa por 100 mil habitantes (população do IBGE). Um robô confere todo dia se o Ministério publicou mês novo, e a janela de anos avança sozinha na virada do ano.</p>
+      <h4>Órgãos de segurança</h4>
+      <p>O Sinesp reúne o que as polícias Civil e Militar lançam pelas secretarias estaduais (SSP) e separa os registros da <b>PRF</b> e da <b>PF</b>. Guarda Municipal e COPOM/190 não têm estatística aberta nacional; aparecem só pelas notícias.</p>
       <h4>Panorama do estado</h4>
       <p>Na aba <b>Estado</b>, os municípios aparecem em rankings (mais registros, maior taxa, maiores altas e quedas) e o mapa colore cada município pela taxa. Clique num município para abri-lo.</p>
       <h4>Insights</h4>
       <p>Comparações automáticas: variação no ano, posição no estado, taxa acima ou abaixo da média estadual, mês fora do padrão, zonas críticas e fontes mais citadas.</p>
-      <h4>Notícias e cruzamento por fonte</h4>
+      <h4>Notícias (complemento)</h4>
       <p>As ocorrências noticiadas vêm do Google Notícias e da imprensa local de cada estado, dos últimos 12 meses. Cada uma é marcada com os órgãos citados (PM, COPOM/190, Polícia Civil, PRF, Guarda Municipal, SSP, PF). Clique num órgão para filtrar o painel.</p>
       <h4>Zonas vermelhas</h4>
       <p>São os pontos da cidade onde as ocorrências se concentram: grade de {{ celula }} m, peso maior para crimes graves e fatos recentes, mínimo de {{ minimo }} registros por zona.</p>

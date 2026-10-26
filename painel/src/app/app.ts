@@ -26,11 +26,11 @@ import { OficialComponent } from './painel/oficial';
 import { ZonasComponent } from './painel/zonas';
 
 const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
-  { id: 'GERAL', rotulo: 'Visão geral', icone: 'dashboard' },
-  { id: 'OFICIAL', rotulo: 'Oficial', icone: 'account_balance' },
-  { id: 'ESTADO', rotulo: 'Estado', icone: 'insights' },
+  { id: 'OFICIAL', rotulo: 'Dados oficiais', icone: 'account_balance' },
+  { id: 'ESTADO', rotulo: 'Estado', icone: 'map' },
+  { id: 'GERAL', rotulo: 'Análise', icone: 'insights' },
   { id: 'ZONAS', rotulo: 'Zonas', icone: 'crisis_alert' },
-  { id: 'NOTICIAS', rotulo: 'Notícias', icone: 'newspaper' },
+  { id: 'NOTICIAS', rotulo: 'Notícias (complemento)', icone: 'newspaper' },
 ];
 
 @Component({
@@ -94,38 +94,47 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
             </span>
           </div>
 
-          <div class="filtros">
-            <mat-button-toggle-group [value]="store.periodoDias()" (change)="store.periodoDias.set($event.value)" aria-label="Período das notícias" hideSingleSelectionIndicator>
-              @for (p of periodos; track p.dias) { <mat-button-toggle [value]="p.dias">{{ p.rotulo }}</mat-button-toggle> }
-            </mat-button-toggle-group>
-            <mat-chip-set class="categorias" aria-label="Tipos de crime">
-              <mat-chip [highlighted]="!store.categorias().length" (click)="store.alternarCategoria('')">Todos</mat-chip>
-              @for (c of categorias; track c.id) {
-                <mat-chip [highlighted]="store.categorias().includes(c.id)" (click)="store.alternarCategoria(c.id)" [matTooltip]="c.nome">
-                  <i class="ponto" [style.background]="c.cor"></i>{{ c.curto }}
-                </mat-chip>
+          @if (avisoOficial(); as aviso) {
+            <div class="aviso-oficial" role="status">
+              <mat-icon>{{ aviso.icone }}</mat-icon>
+              <div><b>{{ aviso.titulo }}</b><span>{{ aviso.texto }}</span></div>
+            </div>
+          } @else {
+            <div class="kpis">
+              @for (k of kpis(); track k.rotulo) {
+                <div class="kpi oficial">
+                  <span class="kpi-rotulo" [title]="k.rotulo"><mat-icon>verified</mat-icon>{{ k.rotulo }}</span>
+                  <b [style.color]="k.cor || null">{{ k.valor }}</b>
+                  <span class="kpi-sub">
+                    @if (k.delta) { <app-delta [atual]="k.delta[0]" [anterior]="k.delta[1]" /> }
+                    {{ k.sub }}
+                  </span>
+                </div>
               }
-              @if (orgaoAtivo(); as g) {
-                <mat-chip class="chip-orgao" highlighted (removed)="store.definirOrgao('')">
-                  <i class="ponto" [style.background]="g.cor"></i>{{ g.curto }}
-                  <button matChipRemove aria-label="Remover filtro de órgão"><mat-icon>cancel</mat-icon></button>
-                </mat-chip>
-              }
-            </mat-chip-set>
-          </div>
-
-          <div class="kpis">
-            @for (k of kpis(); track k.rotulo) {
-              <div class="kpi" [class.oficial]="k.oficial">
-                <span class="kpi-rotulo" [title]="k.rotulo">@if (k.oficial) {<mat-icon>verified</mat-icon>}{{ k.rotulo }}</span>
-                <b [style.color]="k.cor || null">{{ k.valor }}</b>
-                <span class="kpi-sub">
-                  @if (k.delta) { <app-delta [atual]="k.delta[0]" [anterior]="k.delta[1]" /> }
-                  {{ k.sub }}
-                </span>
-              </div>
-            }
-          </div>
+            </div>
+            <p class="fonte-kpis">Sinesp/MJSP (polícias do estado, PRF e PF) · {{ periodoOficial() }}. Notícias entram só como complemento.</p>
+          }
+          @if (filtrosNoticias()) {
+            <div class="filtros">
+              <mat-button-toggle-group [value]="store.periodoDias()" (change)="store.periodoDias.set($event.value)" aria-label="Período das notícias" hideSingleSelectionIndicator matTooltip="Filtra só as notícias (complemento)">
+                @for (p of periodos; track p.dias) { <mat-button-toggle [value]="p.dias">{{ p.rotulo }}</mat-button-toggle> }
+              </mat-button-toggle-group>
+              <mat-chip-set class="categorias" aria-label="Tipos de crime">
+                <mat-chip [highlighted]="!store.categorias().length" (click)="store.alternarCategoria('')">Todos</mat-chip>
+                @for (c of categorias; track c.id) {
+                  <mat-chip [highlighted]="store.categorias().includes(c.id)" (click)="store.alternarCategoria(c.id)" [matTooltip]="c.nome">
+                    <i class="ponto" [style.background]="c.cor"></i>{{ c.curto }}
+                  </mat-chip>
+                }
+                @if (orgaoAtivo(); as g) {
+                  <mat-chip class="chip-orgao" highlighted (removed)="store.definirOrgao('')">
+                    <i class="ponto" [style.background]="g.cor"></i>{{ g.curto }}
+                    <button matChipRemove aria-label="Remover filtro de órgão"><mat-icon>cancel</mat-icon></button>
+                  </mat-chip>
+                }
+              </mat-chip-set>
+            </div>
+          }
         </header>
 
         <mat-tab-group class="abas" [selectedIndex]="indiceAba()" (selectedIndexChange)="store.aba.set(abas[$event].id)"
@@ -184,7 +193,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .status mat-icon { font-size: 16px; width: 16px; height: 16px; flex: none; }
     .status.ok mat-icon { color: var(--cor-sucesso); }
     .status.erro { color: var(--cor-perigo); }
-    .filtros { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
+    .filtros { margin-top: 10px; display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
     .filtros mat-button-toggle-group { --mat-button-toggle-height: 34px; flex: none; }
     .categorias { --mat-chip-container-height: 30px; }
     .ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -197,6 +206,10 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .kpi-rotulo mat-icon { font-size: 14px; width: 14px; height: 14px; color: var(--mat-sys-primary); flex: none; }
     .kpi b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .kpi-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; min-height: 20px; }
+    .aviso-oficial { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; margin-top: 10px;
+      background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
+    .aviso-oficial div { display: flex; flex-direction: column; gap: 2px; font: var(--mat-sys-body-medium); }
+    .fonte-kpis { margin: 6px 0 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
     .abas { flex: 1; min-height: 0; }
     .abas ::ng-deep .mat-mdc-tab-body-wrapper { flex: 1; min-height: 0; }
     .abas ::ng-deep .mat-mdc-tab-body-content { overflow: auto; }
@@ -244,41 +257,54 @@ export class App {
   protected readonly larguraPainel = signal(this.larguraInicial());
 
   protected readonly indiceAba = computed(() => ABAS.findIndex((a) => a.id === this.store.aba()));
+  protected readonly filtrosNoticias = computed(() => ['GERAL', 'ZONAS', 'NOTICIAS'].includes(this.store.aba()));
   protected readonly orgaoAtivo = computed(() => ORGAO_POR_ID[this.store.orgao()] || null);
   protected readonly contagem = computed(() => {
     const f = this.store.filtrados();
     return { zonas: f.zonas.length, noticias: fmt(f.todas.length) };
   });
 
+  /** Indicadores do topo: só estatística oficial (Sinesp). Notícias ficam nas abas de complemento. */
   protected readonly kpis = computed(() => {
-    const f = this.store.filtrados();
     const o = this.store.oficial();
-    const carregando = this.store.carregando() && (!this.store.dados() || !!this.store.dados()!.vazio);
-    const p = PERIODOS.find((x) => x.dias === this.store.periodoDias())?.rotulo || '';
-    const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string; oficial?: boolean }[] = [];
-    const ev = o?.disponivel ? o.eventos[0] : null;
-    if (ev && o!.anos) {
-      const parcial = o!.ultimoMes !== 'dez';
-      lista.push({ rotulo: `${ev.nome} · ${o!.anos[2]}`, valor: ev.porAno[2] == null ? '—' : fmt(ev.porAno[2]), oficial: true,
-        delta: [ev.porAno[2], ev.parcialAnterior], sub: parcial ? `vs jan–${o!.ultimoMes}/${o!.anos[1]}` : `vs ${o!.anos[1]}` });
-      if (ev.taxa != null) {
-        lista.push({ rotulo: 'Taxa por 100 mil hab.', valor: fmt1(ev.taxa), oficial: true,
-          sub: ev.taxaEstado ? `estado: ${fmt1(ev.taxaEstado)} · 12 meses` : '12 meses · ' + ev.nome.toLowerCase() });
-      }
+    if (!o?.disponivel || !o.anos) return [];
+    const parcial = o.ultimoMes !== 'dez';
+    const ano = o.anos[2];
+    const sub = parcial ? `jan–${o.ultimoMes}/${ano} vs ${o.anos[1]}` : `${ano} vs ${o.anos[1]}`;
+    const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string }[] = [];
+    const [ev, ...resto] = o.eventos;
+    if (!ev) return [];
+    lista.push({ rotulo: ev.nome, valor: ev.porAno[2] == null ? '—' : fmt(ev.porAno[2]), delta: [ev.porAno[2], ev.parcialAnterior], sub, cor: 'var(--cor-perigo)' });
+    if (ev.taxa != null) {
+      lista.push({ rotulo: ev.nome + ' por 100 mil', valor: fmt1(ev.taxa),
+        sub: ev.taxaEstado ? `estado: ${fmt1(ev.taxaEstado)} · 12 meses` : 'últimos 12 meses' });
     }
-    const graves = (f.porCat['CVLI'] || 0) + (f.porCat['CONFRONTO'] || 0);
-    const gravesAnt = (f.porCatAnt['CVLI'] || 0) + (f.porCatAnt['CONFRONTO'] || 0);
-    lista.push({ rotulo: 'Ocorrências noticiadas', valor: carregando ? '…' : fmt(f.todas.length),
-      delta: f.comparavel ? [f.todas.length, f.anteriores.length] : undefined, sub: f.comparavel ? `vs ${p} anteriores` : 'últimos 12 meses' });
-    if (lista.length < 4) {
-      lista.push({ rotulo: 'Homicídios e tiroteios', valor: carregando ? '…' : fmt(graves), cor: graves ? 'var(--cor-perigo)' : undefined,
-        delta: f.comparavel ? [graves, gravesAnt] : undefined, sub: 'noticiados' });
+    for (const e of resto) {
+      if (lista.length >= 4) break;
+      lista.push({ rotulo: e.nome, valor: e.porAno[2] == null ? '—' : fmt(e.porAno[2]), delta: [e.porAno[2], e.parcialAnterior], sub });
     }
-    const z = f.zonas[0];
-    lista.push({ rotulo: 'Zonas vermelhas', valor: carregando ? '…' : fmt(f.zonas.length),
-      sub: z ? 'Maior: ' + z.nome.split(',')[0] : f.precisas.length ? 'sem concentração relevante' : 'sem pontos precisos' });
-    return lista.slice(0, 4);
+    return lista;
   });
+
+  protected readonly periodoOficial = computed(() => {
+    const o = this.store.oficial();
+    return o?.periodoTresAnos ? `${o.periodoTresAnos} · importado em ${o.importadoEm}` : '';
+  });
+
+  /** Aviso no lugar dos indicadores quando o Sinesp ainda carrega ou não respondeu. */
+  protected readonly avisoOficial = computed(() => {
+    const o = this.store.oficial();
+    if (o?.disponivel && o.eventos.length) return null;
+    if (!o && (this.store.carregando() || !this.store.dados() || this.store.dados()!.vazio))
+      return { icone: 'hourglass_top', titulo: 'Carregando estatística oficial', texto: 'Buscando os registros do Sinesp de ' + this.anosJanela() + '…' };
+    return { icone: 'report', titulo: 'Estatística oficial indisponível para este local',
+      texto: (o?.motivo || 'O servidor não devolveu os dados do Sinesp.') + ' As notícias continuam disponíveis como complemento.' };
+  });
+
+  private anosJanela(): string {
+    const a = new Date().getFullYear();
+    return `${a - 2} a ${a}`;
+  }
 
   constructor() {
     queueMicrotask(() => {

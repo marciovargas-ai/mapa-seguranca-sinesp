@@ -26,7 +26,7 @@ export class PainelStore {
   readonly periodoDias = signal(CFG.PERIODO_PADRAO_DIAS);
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
-  readonly aba = signal<Aba>('GERAL');
+  readonly aba = signal<Aba>('OFICIAL');
   readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, fronteira: true, satelite: false, coropletico: true });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
@@ -112,8 +112,8 @@ export class PainelStore {
     this.uf.set(uf);
     this.escopo.set(ehEstado ? 'ESTADO' : 'CIDADE');
     this.cidade.set(ehEstado ? '' : mun!.nome);
-    if (ehEstado && (this.aba() === 'ZONAS' || this.aba() === 'GERAL')) this.aba.set('ESTADO');
-    if (!ehEstado && this.aba() === 'ESTADO') this.aba.set('GERAL');
+    if (ehEstado && this.aba() === 'ZONAS') this.aba.set('ESTADO');
+    if (!ehEstado && this.aba() === 'ESTADO') this.aba.set('OFICIAL');
     if (ufMudou) this.eventoPanorama.set(0);
 
     const lat = ehEstado ? meta.lat : mun!.lat;
