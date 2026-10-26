@@ -68,6 +68,12 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .popup-botao { margin-top: 8px; border: 0; border-radius: 999px; padding: 6px 12px; background: #1d4ed8; color: #fff; font: 600 12px Roboto, sans-serif; cursor: pointer; }
 .lista-sem-local { padding-left: 16px; margin: 6px 0 0; max-height: 220px; overflow: auto; }
 .marcador-sem-local div { background: #334155; color: #fff; border-radius: 999px; padding: 3px 9px; font: 600 11px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.rotulo-bairro div { display: inline-flex; align-items: center; gap: 5px; background: #fde68a; color: #1c1917; border: 1.5px solid #1c1917; border-radius: 6px;
+  padding: 2px 7px; font: 600 11.5px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
+.rotulo-bairro div:hover { background: #fcd34d; }
+.rotulo-bairro i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; }
+.popup-tags { margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.popup-tag { font-weight: 600; }
 .rotulo-zona div { width: 24px; height: 24px; border-radius: 50%; color: #fff; font: 700 12px/24px Roboto, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 html.tema-escuro .leaflet-popup-content-wrapper, html.tema-escuro .leaflet-popup-tip { background: #1e2530; color: #e2e8f0; }
 html.tema-escuro .popup-meta { color: #94a3b8; }

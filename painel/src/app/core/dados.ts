@@ -33,7 +33,7 @@ export const CFG = {
   COR_FRONTEIRA_ESTADO: '#d97706',
   CHAVE_AJUDA_VISTA: 'MAPA_SEG_V4_AJUDA',
   CHAVE_TEMA: 'MAPA_SEG_V4_TEMA',
-  CHAVE_LARGURA: 'MAPA_SEG_V4_LARGURA',
+  CHAVE_LARGURA: 'MAPA_SEG_V5_LARGURA',
 };
 
 export interface Categoria { id: string; nome: string; curto: string; cor: string; peso: number }

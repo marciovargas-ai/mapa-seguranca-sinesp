@@ -30,7 +30,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   { id: 'ESTADO', rotulo: 'Estado', icone: 'map' },
   { id: 'GERAL', rotulo: 'Análise', icone: 'insights' },
   { id: 'ZONAS', rotulo: 'Zonas', icone: 'crisis_alert' },
-  { id: 'NOTICIAS', rotulo: 'Notícias (complemento)', icone: 'newspaper' },
+  { id: 'NOTICIAS', rotulo: 'Notícias', icone: 'newspaper' },
 ];
 
 @Component({
@@ -276,8 +276,8 @@ export class App {
     if (!ev) return [];
     lista.push({ rotulo: ev.nome, valor: ev.porAno[2] == null ? '—' : fmt(ev.porAno[2]), delta: [ev.porAno[2], ev.parcialAnterior], sub, cor: 'var(--cor-perigo)' });
     if (ev.taxa != null) {
-      lista.push({ rotulo: ev.nome + ' por 100 mil', valor: fmt1(ev.taxa),
-        sub: ev.taxaEstado ? `estado: ${fmt1(ev.taxaEstado)} · 12 meses` : 'últimos 12 meses' });
+      lista.push({ rotulo: 'Taxa por 100 mil hab.', valor: fmt1(ev.taxa),
+        sub: (ev.taxaEstado ? `estado: ${fmt1(ev.taxaEstado)} · ` : '') + ev.nome.toLowerCase() });
     }
     for (const e of resto) {
       if (lista.length >= 4) break;
@@ -346,7 +346,7 @@ export class App {
   // --------------------------------------------------------------------------
   private larguraInicial(): number {
     const salva = Number(lerLocal(CFG.CHAVE_LARGURA));
-    return this.limitar(salva || Math.round(window.innerWidth * 0.56));
+    return this.limitar(salva || Math.round(window.innerWidth * 0.5));
   }
 
   private limitar(px: number): number {
@@ -379,7 +379,7 @@ export class App {
   }
 
   protected larguraPadrao(): void {
-    this.larguraPainel.set(this.limitar(Math.round(window.innerWidth * 0.56)));
+    this.larguraPainel.set(this.limitar(Math.round(window.innerWidth * 0.5)));
     gravarLocal(CFG.CHAVE_LARGURA, String(this.larguraPainel()));
   }
 }

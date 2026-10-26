@@ -54,7 +54,10 @@ const ESCALA = ['#fde0c5', '#facba6', '#f59e74', '#e5604b', '#c42e3c', '#8a1538'
         <div class="legenda-titulo">{{ leg.noMapa }} de {{ leg.total }} no mapa</div>
         <div class="legenda-sub">{{ leg.semLocal ? leg.semLocal + ' sem local identificado' : 'Todas com local preciso' }}</div>
         <div class="cats">
-          @for (c of leg.cats; track c.id) { <span><i [style.background]="c.cor"></i>{{ c.curto }}</span> }
+          @for (c of leg.cats; track c.id) {
+            <button type="button" class="cat" [class.ativa]="store.categorias().includes(c.id)" (click)="store.alternarCategoria(c.id)"
+              [attr.aria-pressed]="store.categorias().includes(c.id)" [title]="'Filtrar: ' + c.nome"><i [style.background]="c.cor"></i>{{ c.curto }} {{ c.qtd }}</button>
+          }
         </div>
         @if (camadas().calor) { <div class="gradiente"><span>menor</span><div></div><span>maior</span></div> }
         @if (camadas().zonas && leg.zonas) { <div class="legenda-zona"><i></i> Zona vermelha (concentração)</div> }
@@ -75,7 +78,11 @@ const ESCALA = ['#fde0c5', '#facba6', '#f59e74', '#e5604b', '#c42e3c', '#8a1538'
     .legenda-titulo { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface); }
     .legenda-sub { color: var(--mat-sys-on-surface-variant); margin-bottom: 6px; }
     .cats, .escala { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-    .cats span, .escala span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .escala span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .cat { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font: inherit; color: inherit; background: none; cursor: pointer;
+      border: 1px solid transparent; border-radius: 999px; padding: 1px 6px; margin-left: -6px; }
+    .cat:hover { border-color: var(--mat-sys-outline-variant); }
+    .cat.ativa { border-color: var(--mat-sys-primary); background: var(--mat-sys-primary-container); }
     .cats i { width: 9px; height: 9px; border-radius: 50%; }
     .escala i { width: 14px; height: 10px; border-radius: 2px; }
     .escala i.sem-dado { background: transparent; border: 1px dashed var(--mat-sys-outline); }
@@ -95,9 +102,11 @@ export class MapaComponent implements OnDestroy {
     { id: 'zonas', nome: 'Zonas vermelhas', icone: 'crisis_alert' },
     { id: 'calor', nome: 'Mapa de calor', icone: 'local_fire_department' },
     { id: 'pinos', nome: 'Ocorrências', icone: 'location_on' },
+    { id: 'bairros', nome: 'Nomes dos bairros', icone: 'label' },
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
     { id: 'coropletico', nome: 'Taxa por município (aba Estado)', icone: 'map' },
     { id: 'satelite', nome: 'Satélite', icone: 'satellite_alt' },
+    { id: 'mapaEscuro', nome: 'Mapa escuro', icone: 'dark_mode' },
   ];
 
   private map: any = null;
@@ -106,6 +115,7 @@ export class MapaComponent implements OnDestroy {
   private layerFronteira: any;
   private layerZonas: any;
   private layerSemLocal: any;
+  private layerBairros: any;
   private layerCoropletico: any;
   private cluster: any;
   private calor: any = null;
@@ -141,13 +151,13 @@ export class MapaComponent implements OnDestroy {
     if (!f.todas.length) return null;
     return {
       total: fmt(f.todas.length), noMapa: fmt(f.precisas.length), semLocal: f.semLocal.length ? fmt(f.semLocal.length) : '',
-      cats: CATEGORIAS.filter((c) => f.porCat[c.id]), zonas: f.zonas.length,
+      cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
     };
   });
 
   constructor() {
     effect(() => { if (this.map) return; this.iniciar(this.alvo().nativeElement); });
-    effect(() => { this.store.escuro(); this.camadas().satelite; this.aplicarBase(); });
+    effect(() => { const c = this.camadas(); c.satelite; c.mapaEscuro; untracked(() => this.aplicarBase()); });
     effect(() => { const f = this.store.filtrados(); const c = this.camadas(); const cor = this.coropleticoAtivo(); untracked(() => this.renderizar(f, c, cor)); });
     effect(() => {
       const d = this.store.dados(); const ver = this.camadas().fronteira; const esc = this.store.escopo();
@@ -191,7 +201,16 @@ export class MapaComponent implements OnDestroy {
     // Mapas base da Esri: não exigem chave de API
     const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
     const atrib = '&copy; Esri, HERE, Garmin, &copy; OpenStreetMap';
-    this.tiles['claro'] = L.tileLayer(esri + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: atrib, maxZoom: 19 });
+    // Ruas do OpenStreetMap (visual do painel antigo); se os blocos falharem, troca pelo mapa de ruas da Esri
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; colaboradores do OpenStreetMap', maxZoom: 19 });
+    let falhas = 0;
+    osm.on('tileerror', () => {
+      if (++falhas !== 4) return;
+      this.tiles['claro'] = L.tileLayer(esri + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: atrib, maxZoom: 19 });
+      this.map.removeLayer(osm);
+      this.aplicarBase();
+    });
+    this.tiles['claro'] = osm;
     this.tiles['escuro'] = L.layerGroup([
       L.tileLayer(esri + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: atrib, maxNativeZoom: 16, maxZoom: 19 }),
       L.tileLayer(esri + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 16, maxZoom: 19 }),
@@ -202,6 +221,7 @@ export class MapaComponent implements OnDestroy {
     this.layerFronteira = L.layerGroup().addTo(map);
     this.layerZonas = L.layerGroup().addTo(map);
     this.layerSemLocal = L.layerGroup().addTo(map);
+    this.layerBairros = L.layerGroup().addTo(map);
     this.cluster = typeof L.markerClusterGroup === 'function'
       ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 40, disableClusteringAtZoom: 16, showCoverageOnHover: false, spiderfyOnMaxZoom: true })
       : L.layerGroup();
@@ -228,7 +248,7 @@ export class MapaComponent implements OnDestroy {
 
   private aplicarBase(): void {
     if (!this.map) return;
-    const alvo = this.camadas().satelite ? this.tiles['satelite'] : this.store.escuro() ? this.tiles['escuro'] : this.tiles['claro'];
+    const alvo = this.camadas().satelite ? this.tiles['satelite'] : this.camadas().mapaEscuro ? this.tiles['escuro'] : this.tiles['claro'];
     Object.values(this.tiles).forEach((t) => { if (t !== alvo && this.map.hasLayer(t)) this.map.removeLayer(t); });
     if (!this.map.hasLayer(alvo)) alvo.addTo(this.map);
   }
@@ -262,6 +282,31 @@ export class MapaComponent implements OnDestroy {
       `<a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener"><b>Abrir notícia</b> (${esc(o.veiculo || 'fonte')})</a></div>`;
   }
 
+  /** Resumo do bairro: quantidade por tipo e as notícias mais recentes. */
+  private popupBairro(nome: string, cidade: string, todas: Ocorrencia[]): string {
+    const lista = todas.filter((o) => o.bairro === nome && o.cidade === cidade).sort((a, b) => b.ts - a.ts);
+    const cats: Record<string, number> = {};
+    lista.forEach((o) => (cats[o.cat] = (cats[o.cat] || 0) + 1));
+    const tipos = Object.keys(cats).sort((a, b) => cats[b] - cats[a])
+      .map((id) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[id].cor}">${esc(CATEGORIA_POR_ID[id].curto)} ${fmt(cats[id])}</span>`).join(' ');
+    return `<div class="popup"><b>${esc(nome)}</b> · ${fmt(lista.length)} ocorrências noticiadas<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
+      lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') +
+      '</ul><small>Fonte: notícias (complemento). A medida oficial está na aba Dados oficiais.</small></div>';
+  }
+
+  /** Resumo oficial do município ao clicar no contorno. */
+  private popupFronteira(): string {
+    const o = this.store.oficial();
+    const nome = this.store.nomeLocal();
+    let corpo = '<br><small>Estatística oficial indisponível para este local.</small>';
+    if (o?.disponivel && o.anos) {
+      corpo = '<ul class="lista-sem-local">' + o.eventos.slice(0, 5).map((e) =>
+        `<li>${esc(e.nome)}: <b>${e.porAno[2] == null ? '—' : fmt(e.porAno[2])}</b> em ${o.anos![2]}${e.taxa != null ? ` · ${fmt1(e.taxa)} por 100 mil` : ''}</li>`).join('') +
+        `</ul><small>Sinesp · ${esc(o.periodoTresAnos || '')}</small>`;
+    }
+    return `<div class="popup"><b>${esc(nome)}</b>${corpo}</div>`;
+  }
+
   private renderizar(f: ReturnType<PainelStore['filtrados']>, c: Camadas, coropletico: boolean): void {
     if (!this.map) return;
     this.cluster.clearLayers();
@@ -284,6 +329,20 @@ export class MapaComponent implements OnDestroy {
       mk.bindPopup(() => `<div class="popup"><b>${f.semLocal.length} notícias sem rua, bairro ou rodovia identificados</b><br><small>Aparecem aqui só como contador; ficam fora do calor e das zonas vermelhas.</small><ul class="lista-sem-local">` +
         f.semLocal.slice(0, 15).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul></div>');
       this.layerSemLocal.addLayer(mk);
+    }
+
+    // Rótulos clicáveis "Bairro (N)" no ponto médio das ocorrências com local preciso
+    this.layerBairros.clearLayers();
+    if (c.bairros && mostrarNoticias) {
+      f.locais.filter((b) => b.lat != null && b.qtd >= 2).slice(0, 25).forEach((b) => {
+        const cor = CATEGORIA_POR_ID[b.catTop]?.cor || '#334155';
+        const icone = L.divIcon({ className: 'rotulo-bairro', iconSize: null, iconAnchor: [-10, 26],
+          html: `<div><i style="background:${cor}"></i>${esc(b.nome)} <b>(${fmt(b.qtd)})</b></div>` });
+        const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome });
+        mk.bindPopup(() => this.popupBairro(b.nome, b.cidade, f.todas));
+        mk.on('click', () => { if (this.map.getZoom() < 14) this.mover(() => this.map.flyTo([b.lat, b.lng], 15, { duration: 0.5 })); });
+        this.layerBairros.addLayer(mk);
+      });
     }
 
     this.layerZonas.clearLayers();
@@ -364,9 +423,14 @@ export class MapaComponent implements OnDestroy {
     const geo = await this.obterMalha(codigo);
     if (token !== this.tokenFronteira || !geo?.features) return;
     const cor = ehEstado ? CFG.COR_FRONTEIRA_ESTADO : CFG.COR_FRONTEIRA_CIDADE;
-    const camada = L.geoJSON(geo, { pane: 'paneFronteira', interactive: false, style: { color: cor, weight: 2.2, fillColor: cor, fillOpacity: 0.04, dashArray: ehEstado ? null : '6 4' } });
+    const camada = L.geoJSON(geo, { pane: 'paneFronteira', interactive: false, style: { stroke: false, fillColor: cor, fillOpacity: ehEstado ? 0.03 : 0.08 } });
+    // Só a linha do contorno recebe clique, para não cobrir os pinos e os bairros
+    const linha = L.geoJSON(geo, { pane: 'paneZonas', style: { color: cor, weight: 3, fill: false, dashArray: ehEstado ? null : '6 4' } });
+    linha.bindTooltip(() => this.store.nomeLocal() + ' · clique para o resumo oficial', { sticky: true });
+    linha.bindPopup(() => this.popupFronteira());
     this.layerFronteira.clearLayers();
     this.layerFronteira.addLayer(camada);
+    this.layerFronteira.addLayer(linha);
     const b = camada.getBounds();
     if (!this.usuarioMoveu && b.isValid() && (ehEstado || this.store.filtrados().precisas.length < 3)) {
       this.mover(() => this.map.flyToBounds(b, { padding: [24, 24], duration: 0.6 }));
