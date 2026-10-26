@@ -26,7 +26,9 @@ const GRUPOS = {
   veiculos: { nome: 'Roubos e furtos de veículos', curto: 'Veículos', re: /^(roubo|furto) de ve[ií]culo/i },
   carga: { nome: 'Roubos de carga e a bancos', curto: 'Carga/bancos', re: /^roubo (de carga|a institui)/i },
   transito: { nome: 'Mortes no trânsito', curto: 'Trânsito', re: /^mortes? no tr[aâ]nsito/i },
-  repressao: { nome: 'Atuação policial: tráfico, armas e prisões', curto: 'Atuação policial', re: /^(tr[aá]fico de drogas|arma de fogo apreendida|mandado de pris)/i },
+  trafico: { nome: 'Tráfico de drogas', curto: 'Tráfico', re: /^tr[aá]fico de drogas/i },
+  armas: { nome: 'Armas de fogo apreendidas', curto: 'Armas', re: /^arma de fogo apreendida/i },
+  prisoes: { nome: 'Mandados de prisão cumpridos', curto: 'Prisões', re: /^mandado de pris/i },
   desaparecidos: { nome: 'Pessoas desaparecidas', curto: 'Desaparecidos', re: /^pessoa desaparecida/i },
 } as const;
 type Grupo = keyof typeof GRUPOS;
@@ -136,7 +138,8 @@ export function compilar(c: Entrada): Compilado {
   const posMvi = c.ehEstado ? { pos: null, percentil: null } : posicionar(linhasMvi, c.pop, c.ibge);
   posicao = posMvi.pos;
 
-  const cartao = (g: Grupo, extra: Partial<Indicador> = {}): void => {
+  const NOTA_ATUACAO = ' Alta pode indicar mais crime ou mais ação policial; por isso o cartão não fica vermelho.';
+  const cartao = (g: Grupo, extra: Partial<Indicador> = {}, nota = ''): void => {
     const a = ag(g);
     if (!a || (!a.total12 && !a.ano)) return;
     const e = agEstado(g);
@@ -151,7 +154,7 @@ export function compilar(c: Entrada): Compilado {
       delta: [a.ano, a.anterior], instavel, tom: v == null ? 'neutro' : v > 5 ? 'alerta' : v < -5 ? 'positivo' : 'neutro', fonte: 'Sinesp',
       dica: `Soma de: ${a.eventos.join(', ')}. ${periodoAno} comparado ao mesmo período de ${anos[1]}.` +
         (tx != null ? ` Taxa = registros dos últimos 12 meses ÷ população (IBGE) × 100 mil.` : '') +
-        (txE != null ? ` Estado: ${fmt1(txE)} por 100 mil.` : '') + (instavel ? ' Poucos casos: a variação percentual oscila muito.' : ''),
+        (txE != null ? ` Estado: ${fmt1(txE)} por 100 mil.` : '') + (instavel ? ' Poucos casos: a variação percentual oscila muito.' : '') + nota,
       ...extra,
     });
   };
@@ -170,10 +173,13 @@ export function compilar(c: Entrada): Compilado {
     cartao('tentativas');
     cartao('mulher');
     cartao('veiculos');
+    // Atuação policial: alta pode ser mais crime ou mais repressão, então fica neutra
+    cartao('trafico', { tom: 'neutro' }, NOTA_ATUACAO);
+    cartao('armas', { tom: 'neutro' }, NOTA_ATUACAO);
+    cartao('prisoes', { tom: 'neutro' }, NOTA_ATUACAO);
     cartao('intervencao');
     cartao('carga');
     cartao('transito');
-    cartao('repressao', { tom: 'neutro' });
     cartao('desaparecidos');
 
     // Registros federais (campo "abrangência" do Sinesp)
@@ -194,7 +200,7 @@ export function compilar(c: Entrada): Compilado {
   const comBairro = c.bairros.filter((b) => b.qtd > 0);
   indicadores.push({
     id: 'noticias', titulo: 'Ocorrências noticiadas (12 meses)', valor: fmt(f.todas.length),
-    sub: `${fmt(graves)} homicídios ou tiroteios · ${pct(f.precisas.length, f.todas.length)}% com local no mapa`, tom: 'neutro', fonte: 'Notícias',
+    sub: `${fmt(graves)} homicídios ou tiroteios · ${fmt(f.porCat['TRAFICO'] || 0)} tráfico · ${pct(f.precisas.length, f.todas.length)}% com local preciso`, tom: 'neutro', fonte: 'Notícias',
     dica: 'Google Notícias e imprensa local, classificadas automaticamente. Complementam o Sinesp com o onde e o quando, mas não medem o total de crimes.',
   });
   if (!c.ehEstado) {
@@ -249,11 +255,13 @@ export function compilar(c: Entrada): Compilado {
         (r ? `, ${r >= 1.1 ? fmt1(r) + ' vezes a do estado' : r <= 0.9 ? 'abaixo da do estado' : 'próxima da do estado'} (${fmt1(posicao.taxaEstado)})` : '') +
         `, o que põe o município em ${posicao.rank}º entre ${posicao.total} municípios com mais de 20 mil habitantes.`);
     } else if (tx != null) parecer.push(`Em 12 meses, a taxa é de ${fmt1(tx)} por 100 mil habitantes.`);
-    const mulher = ag('mulher'), veic = ag('veiculos'), ten = ag('tentativas');
+    const mulher = ag('mulher'), veic = ag('veiculos'), ten = ag('tentativas'), traf = ag('trafico'), armas = ag('armas');
     const partes: string[] = [];
     if (ten?.ano) partes.push(`${fmt(ten.ano)} tentativas de homicídio`);
     if (mulher?.ano) partes.push(`${fmt(mulher.ano)} casos de violência letal ou sexual contra a mulher`);
     if (veic?.ano) partes.push(`${fmt(veic.ano)} roubos e furtos de veículos`);
+    if (traf?.ano) partes.push(`${fmt(traf.ano)} ocorrências de tráfico de drogas`);
+    if (armas?.ano) partes.push(`${fmt(armas.ano)} armas de fogo apreendidas`);
     if (partes.length) parecer.push(`No mesmo período, ${partes.join(', ')}.`);
   } else if (!o) {
     parecer.push(`Estatística oficial do Sinesp indisponível para ${c.nomeLocal}: ${c.oficial?.motivo || 'aguardando o servidor'}. O retrato abaixo usa só as notícias, que são complemento.`);

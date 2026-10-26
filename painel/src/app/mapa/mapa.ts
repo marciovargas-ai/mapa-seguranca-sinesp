@@ -55,7 +55,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     } @else if (legenda(); as leg) {
       <div class="legenda">
         <div class="legenda-titulo">{{ leg.noMapa }} de {{ leg.total }} no mapa</div>
-        <div class="legenda-sub">{{ leg.semLocal ? leg.semLocal + ' sem local identificado' : 'Todas com local preciso' }}</div>
+        <div class="legenda-sub">{{ leg.aprox ? leg.aprox + ' pelo bairro citado (ponto vazado) · ' : '' }}{{ leg.semLocal ? leg.semLocal + ' sem local identificado' : 'todas no mapa' }}</div>
         <div class="cats">
           @for (c of leg.cats; track c.id) {
             <button type="button" class="cat" [class.ativa]="store.categorias().includes(c.id)" (click)="store.alternarCategoria(c.id)"
@@ -158,8 +158,10 @@ export class MapaComponent implements OnDestroy {
   protected readonly legenda = computed(() => {
     const f = this.store.filtrados();
     if (!f.todas.length) return null;
+    const aprox = this.store.escopo() === 'CIDADE' ? this.store.bairrosMapa().aproximadas.length : 0;
+    const sem = f.semLocal.length - aprox;
     return {
-      total: fmt(f.todas.length), noMapa: fmt(f.precisas.length), semLocal: f.semLocal.length ? fmt(f.semLocal.length) : '',
+      total: fmt(f.todas.length), noMapa: fmt(f.precisas.length + aprox), aprox: aprox ? fmt(aprox) : '', semLocal: sem > 0 ? fmt(sem) : '',
       cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
     };
   });
@@ -380,16 +382,27 @@ export class MapaComponent implements OnDestroy {
         m.bindPopup(() => this.popup(o));
         return m;
       });
+      // Notícias sem coordenada que citam um bairro: ponto aproximado (vazado) em volta do centro do bairro
+      if (this.store.escopo() === 'CIDADE') {
+        for (const a of bairros.aproximadas) {
+          const m = L.circleMarker([a.lat, a.lng], { renderer: this.renderer, radius: CFG.RAIO_PINO, color: CATEGORIA_POR_ID[a.o.cat].cor, weight: 2.2,
+            fillColor: '#ffffff', fillOpacity: 0.85 });
+          m.bindPopup(() => this.popup(a.o) + `<div class="popup-meta">Posição aproximada: centro do bairro ${esc(a.bairro)}</div>`);
+          pinos.push(m);
+        }
+      }
       if (this.cluster.addLayers) this.cluster.addLayers(pinos); else pinos.forEach((p) => this.cluster.addLayer(p));
     }
 
     this.layerSemLocal.clearLayers();
     const d = this.store.dados();
-    if (this.store.escopo() === 'CIDADE' && c.pinos && mostrarNoticias && f.semLocal.length && d) {
-      const icone = L.divIcon({ className: 'marcador-sem-local', html: `<div>${f.semLocal.length} sem local</div>`, iconSize: null });
+    const noBairro = new Set(bairros.aproximadas.map((a) => a.o));
+    const semLocal = f.semLocal.filter((o) => !noBairro.has(o));
+    if (this.store.escopo() === 'CIDADE' && c.pinos && mostrarNoticias && semLocal.length && d) {
+      const icone = L.divIcon({ className: 'marcador-sem-local', html: `<div>${semLocal.length} sem local</div>`, iconSize: null });
       const mk = L.marker([d.centroLat, d.centroLng], { icon: icone, keyboard: false, zIndexOffset: -100 });
-      mk.bindPopup(() => `<div class="popup"><b>${f.semLocal.length} notícias sem rua, bairro ou rodovia identificados</b><br><small>Aparecem aqui só como contador; ficam fora do calor e das zonas vermelhas.</small><ul class="lista-sem-local">` +
-        f.semLocal.slice(0, 15).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul></div>');
+      mk.bindPopup(() => `<div class="popup"><b>${semLocal.length} notícias sem rua nem bairro identificados</b><br><small>Aparecem aqui só como contador; ficam fora do calor e das zonas vermelhas.</small><ul class="lista-sem-local">` +
+        semLocal.slice(0, 15).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul></div>');
       this.layerSemLocal.addLayer(mk);
     }
 

@@ -1,4 +1,5 @@
 import { CacheDisco } from './cache-disco';
+import { Servidor } from './servidor';
 import { CATEGORIA_POR_ID } from './dados';
 import { Ocorrencia } from './modelos';
 import { fetchComTimeout, idadeDias, normalizar } from './util';
@@ -21,23 +22,52 @@ const SERVIDORES = ['https://overpass-api.de/api/interpreter', 'https://overpass
 const DIAS_CACHE = 90;
 const LUGAR = '["place"~"^(suburb|neighbourhood|quarter)$"]';
 
-export async function carregarBairros(ibge: string, reserva: Bairro[] = []): Promise<Bairro[]> {
-  const chave = 'BAIRROS_OSM_' + ibge;
+/**
+ * Carrega em duas etapas: primeiro só os pontos dos bairros (consulta leve, segundos),
+ * depois os contornos (pesada em cidades grandes). Se o OSM não responder pelo
+ * navegador, pede ao servidor. `parcial` recebe a lista de pontos assim que chega.
+ */
+export async function carregarBairros(ibge: string, parcial?: (lista: Bairro[]) => void): Promise<Bairro[]> {
+  const chave = 'BAIRROS_OSM2_' + ibge;
   const guardado = await CacheDisco.obter<Bairro[]>(chave, DIAS_CACHE);
   if (guardado?.length) return guardado;
-  const consulta = `[out:json][timeout:40];area["IBGE:GEOCODIGO"="${ibge}"]["admin_level"="8"]->.m;` +
-    `(relation["boundary"="administrative"]["admin_level"~"^(9|10)$"](area.m);way${LUGAR}(area.m);relation${LUGAR}(area.m););out geom;` +
-    `node${LUGAR}(area.m);out;`;
-  for (const url of SERVIDORES) {
-    try {
-      const r = await fetchComTimeout(url + '?data=' + encodeURIComponent(consulta), 30000);
-      if (!r.ok) continue;
-      const lista = montar((await r.json()).elements || []);
-      if (lista.length) { CacheDisco.salvar(chave, lista); return lista; }
-      break; // respondeu sem bairros: o OSM não tem bairros cadastrados para a cidade
-    } catch { /* tenta o próximo servidor */ }
+  const area = `area["IBGE:GEOCODIGO"="${ibge}"]["admin_level"="8"]->.m;`;
+  const alvos = `(relation["boundary"="administrative"]["admin_level"~"^(9|10)$"](area.m);way${LUGAR}(area.m);relation${LUGAR}(area.m););`;
+  const pontosQ = `[out:json][timeout:25];${area}(node${LUGAR}(area.m);${alvos.slice(1, -2)});out center tags;`;
+  const contornosQ = `[out:json][timeout:90];${area}${alvos}out geom;node${LUGAR}(area.m);out;`;
+
+  const chavePts = 'BAIRROS_PTS_' + ibge;
+  let pontos = (await CacheDisco.obter<Bairro[]>(chavePts, DIAS_CACHE)) || [];
+  if (!pontos.length) {
+    const el = await overpass(pontosQ, 25000);
+    pontos = el ? montar(el) : [];
+    if (!pontos.length) pontos = await Servidor.bairros(ibge);
+    if (pontos.length) CacheDisco.salvar(chavePts, pontos);
   }
-  return reserva;
+  if (pontos.length) parcial?.(pontos);
+
+  const el = await overpass(contornosQ, 95000);
+  const completos = el ? montar(el) : [];
+  if (completos.some((b) => b.aneis)) {
+    // Junta os bairros que só existem como ponto
+    const nomes = new Set(completos.map((b) => normalizar(b.n)));
+    const lista = completos.concat(pontos.filter((p) => !nomes.has(normalizar(p.n))));
+    CacheDisco.salvar(chave, lista);
+    return lista;
+  }
+  return pontos;
+}
+
+/** Consulta o Overpass nos dois servidores ao mesmo tempo e fica com o primeiro que responder. */
+async function overpass(consulta: string, ms: number): Promise<any[] | null> {
+  const pedir = (url: string) => fetchComTimeout(url + '?data=' + encodeURIComponent(consulta), ms)
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((j) => (Array.isArray(j?.elements) ? j.elements : Promise.reject('vazio')));
+  try {
+    return await Promise.any(SERVIDORES.map(pedir));
+  } catch {
+    return null;
+  }
 }
 
 const r5 = (v: number) => Math.round(v * 1e5) / 1e5;
@@ -119,7 +149,10 @@ function dentro(lat: number, lng: number, aneis: [number, number][][]): boolean 
  * nome citado. Devolve o resumo por bairro e os pontos extras do mapa de calor
  * (notícias que só citam o bairro entram no centro dele).
  */
-export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]): { lista: BairroResumo[]; calorExtra: [number, number, number][]; ligadas: number } {
+export interface Aproximada { o: Ocorrencia; lat: number; lng: number; bairro: string }
+
+export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
+  { lista: BairroResumo[]; calorExtra: [number, number, number][]; ligadas: number; aproximadas: Aproximada[] } {
   const resumo = new Map<string, BairroResumo>();
   const porNome = new Map(bairros.map((b) => [normalizar(b.n), b]));
   const comContorno = bairros.filter((b) => b.aneis);
@@ -128,12 +161,20 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]): { 
   bairros.forEach((b) => resumo.set(normalizar(b.n), novo(b, true)));
 
   const calorExtra: [number, number, number][] = [];
+  const aproximadas: Aproximada[] = [];
   let ligadas = 0;
+  // Nomes de bairro para procurar no título (os mais longos primeiro: "Vila Nova Cachoeirinha" antes de "Vila Nova")
+  const procurar = bairros.map((b) => ({ b, n: ' ' + normalizar(b.n) + ' ' })).filter((x) => x.n.length >= 6).sort((a, b) => b.n.length - a.n.length);
   for (const o of ocorrencias) {
     let alvo: Bairro | undefined;
     if (o.precisa && o.lat != null && o.lng != null) alvo = comContorno.find((b) => dentro(o.lat!, o.lng!, b.aneis!));
     const citado = o.bairro && o.bairro !== 'Local não informado' ? normalizar(o.bairro.split(',')[0]) : '';
     if (!alvo && citado) alvo = porNome.get(citado);
+    if (!alvo && !o.precisa && procurar.length) {
+      const titulo = ' ' + normalizar(o.titulo) + ' ';
+      const cidade = ' ' + normalizar(o.cidade) + ' ';
+      alvo = procurar.find((x) => x.n !== cidade && titulo.includes(x.n))?.b;
+    }
     let chave = alvo ? normalizar(alvo.n) : '';
     // Bairro citado que o OSM não conhece, mas com coordenada: entra como bairro próprio
     if (!alvo && citado && o.precisa && citado !== normalizar(o.cidade)) {
@@ -148,10 +189,22 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]): { 
     if (o.cat === 'CVLI' || o.cat === 'CONFRONTO') r.graves++;
     if (idadeDias(o.ts) <= 30) r.recentes++;
     r.ocorrencias.push(o);
-    if (!o.precisa) calorExtra.push([r.lat, r.lng, CATEGORIA_POR_ID[o.cat]?.peso || 0.5]);
+    if (!o.precisa) {
+      calorExtra.push([r.lat, r.lng, CATEGORIA_POR_ID[o.cat]?.peso || 0.5]);
+      // Espalha os pontos aproximados num raio de ~300 m em volta do centro do bairro (posição fixa por notícia)
+      const h = hash(o.id || o.titulo);
+      const ang = (h % 360) * (Math.PI / 180), dist = 0.0008 + ((h >> 9) % 100) / 100 * 0.0022;
+      aproximadas.push({ o, lat: r.lat + Math.sin(ang) * dist, lng: r.lng + Math.cos(ang) * dist * 1.1, bairro: r.nome });
+    }
   }
   const lista = [...resumo.values()];
   lista.forEach((r) => { r.catTop = Object.keys(r.cats).sort((a, b) => r.cats[b] - r.cats[a])[0] || ''; });
   lista.sort((a, b) => b.qtd - a.qtd || b.graves - a.graves || a.nome.localeCompare(b.nome));
-  return { lista, calorExtra, ligadas };
+  return { lista, calorExtra, ligadas, aproximadas };
+}
+
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
 }

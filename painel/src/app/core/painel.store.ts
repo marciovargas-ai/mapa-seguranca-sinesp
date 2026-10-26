@@ -157,7 +157,10 @@ export class PainelStore {
     if (!ehEstado && this.bairrosOsm()?.ibge !== mun!.ibge) {
       const ibge = mun!.ibge;
       this.bairrosOsm.set({ ibge, lista: [], carregando: true });
-      carregarBairros(ibge).then((lista) => { if (this.bairrosOsm()?.ibge === ibge) this.bairrosOsm.set({ ibge, lista, carregando: false }); });
+      const vale = () => this.bairrosOsm()?.ibge === ibge;
+      carregarBairros(ibge, (pontos) => { if (vale()) this.bairrosOsm.set({ ibge, lista: pontos, carregando: true }); })
+        .then((lista) => { if (vale()) this.bairrosOsm.set({ ibge, lista: lista.length ? lista : this.bairrosOsm()!.lista, carregando: false }); })
+        .catch(() => { if (vale()) this.bairrosOsm.set({ ...this.bairrosOsm()!, carregando: false }); });
     }
     if (this.populacao()?.uf !== uf) {
       this.populacao.set(null);

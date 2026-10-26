@@ -23,6 +23,7 @@ export const Servidor = {
   cidade: (uf: string, cidade: string, lat: number, lng: number, forcar: boolean) =>
     chamar<any>('obterOuAtualizarCidadeNacional', uf, cidade, lat, lng, forcar === true),
   panorama: (uf: string) => chamar<Panorama>('obterPanoramaEstado', uf),
+  bairros: (ibge: string) => chamar<any[]>('obterBairrosCidade', ibge).then((l) => (Array.isArray(l) ? l : []), () => []),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),
 };
