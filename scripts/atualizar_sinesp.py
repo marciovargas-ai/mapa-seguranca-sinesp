@@ -4,8 +4,9 @@ resume por UF, município, evento e mês e grava um JSON pequeno por ano e UF:
 
   dados/sinesp_<ANO>_<UF>.json
   { v, ano, uf, importadoEm, fonte,
-    estado:     { evento: [12 meses] },
-    municipios: { nome_normalizado: { n: nome, e: { evento: [12 meses] } } } }
+    estado:     { evento: [12 meses] },                 (todos os órgãos)
+    orgaos:     { PRF|PF: { evento: [12 meses] } },     (registros dos órgãos federais)
+    municipios: { nome_normalizado: { n: nome, e: { evento: [12] }, o: { PRF|PF: { evento: [12] } } } } }
   dados/manifesto.json  { atualizadoEm, anos: { "<ANO>": { publicadoAte, ufs } } }
 
 O Apps Script do Mapa da Segurança lê esses arquivos pelo endereço "raw" do
@@ -40,6 +41,8 @@ UFS = {
     'RS': 'Rio Grande do Sul', 'RO': 'Rondônia', 'RR': 'Roraima', 'SC': 'Santa Catarina', 'SP': 'São Paulo',
     'SE': 'Sergipe', 'TO': 'Tocantins'
 }
+# Órgãos federais que aparecem na coluna "abrangencia" (cruzamento por fonte no painel)
+ORGAO_POR_ABRANGENCIA = {'policia rodoviaria federal': 'PRF', 'policia federal': 'PF'}
 MESES = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro',
          'outubro', 'novembro', 'dezembro']
 
@@ -132,7 +135,7 @@ def doze():
 def processar(conteudo, ano):
     """Devolve {uf: {estado, municipios, publicadoAte}} e o número de linhas lidas."""
     wb = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
-    est_estadual, est_municipal, municipios = {}, {}, {}
+    estado, municipios, orgaos_estado = {}, {}, {}
     ultimo_mes = {}
     lidas = 0
     diag = {'abas': [], 'descartes': {}, 'abrangencias': {}, 'exemplos': []}
@@ -177,28 +180,27 @@ def processar(conteudo, ano):
             ultimo_mes[uf] = max(ultimo_mes.get(uf, -1), mes)
 
             nome_mun = str(linha[col['mun']] or '').strip() if col['mun'] >= 0 else ''
-            abr = str(linha[col['abrangencia']] or '') if col['abrangencia'] >= 0 else ''
+            # "abrangencia" é o órgão que registrou (Estadual = polícias do estado, PRF, PF), não o nível geográfico
+            abr = str(linha[col['abrangencia']] or '').strip() if col['abrangencia'] >= 0 else ''
             diag['abrangencias'][abr] = diag['abrangencias'].get(abr, 0) + 1
-            estadual = bool(re.search(r'estad', abr, re.I)) or not nome_mun or re.search(r'n[aã]o informado', nome_mun, re.I)
-            if estadual:
-                est_estadual.setdefault(uf, {}).setdefault(evento, doze())[mes] += qtd
-            else:
-                est_municipal.setdefault(uf, {}).setdefault(evento, doze())[mes] += qtd
+            orgao = ORGAO_POR_ABRANGENCIA.get(normalizar(abr))
+            estado.setdefault(uf, {}).setdefault(evento, doze())[mes] += qtd
+            if orgao:
+                orgaos_estado.setdefault(uf, {}).setdefault(orgao, {}).setdefault(evento, doze())[mes] += qtd
+            if nome_mun and not re.search(r'n[aã]o informado', nome_mun, re.I):
                 chave = normalizar(nome_mun)
                 m = municipios.setdefault(uf, {}).setdefault(chave, {'n': nome_mun.title(), 'e': {}})
                 m['e'].setdefault(evento, doze())[mes] += qtd
+                if orgao:
+                    m.setdefault('o', {}).setdefault(orgao, {}).setdefault(evento, doze())[mes] += qtd
         if col is None:
             print(f'{ano}: aba "{aba.title}" sem as colunas esperadas')
     wb.close()
 
-    # Estado: a linha estadual quando existe; senão a soma dos municípios (evita contar duas vezes)
     saida = {}
-    for uf in set(est_estadual) | set(est_municipal):
-        eventos = {}
-        for ev in set(est_estadual.get(uf, {})) | set(est_municipal.get(uf, {})):
-            s = est_estadual.get(uf, {}).get(ev)
-            eventos[ev] = s if s and any(s) else est_municipal[uf][ev]
-        saida[uf] = {'estado': eventos, 'municipios': municipios.get(uf, {}), 'publicadoAte': ultimo_mes.get(uf, -1)}
+    for uf in estado:
+        saida[uf] = {'estado': estado[uf], 'orgaos': orgaos_estado.get(uf, {}), 'municipios': municipios.get(uf, {}),
+                     'publicadoAte': ultimo_mes.get(uf, -1)}
     return saida, lidas, diag
 
 
@@ -241,7 +243,7 @@ def main():
         for uf, a in resumo.items():
             gravar(os.path.join(PASTA_SAIDA, f'sinesp_{ano}_{uf}.json'), {
                 'v': 3, 'ano': ano, 'uf': uf, 'importadoEm': agora, 'fonte': f'Sinesp VDE {ano} (gov.br)',
-                'estado': a['estado'], 'municipios': a['municipios']
+                'estado': a['estado'], 'orgaos': a['orgaos'], 'municipios': a['municipios']
             })
         manifesto['anos'][str(ano)] = {
             'publicadoAte': max(a['publicadoAte'] for a in resumo.values()) + 1,
