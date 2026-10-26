@@ -212,6 +212,9 @@ URLS_POPULACAO_IBGE = [
 ]
 
 
+ERROS_IBGE = []
+
+
 def baixar_json(url, tentativas=3):
     for i in range(tentativas):
         try:
@@ -220,6 +223,7 @@ def baixar_json(url, tentativas=3):
                 return json.loads(resp.read().decode('utf-8'))
         except Exception as e:  # noqa: BLE001 - rede instável: tenta de novo
             print(f'IBGE: {e}, nova tentativa')
+            ERROS_IBGE.append(f'{url[:90]}: {type(e).__name__}: {e}'[:300])
             time.sleep(5 * (i + 1))
     return None
 
@@ -228,6 +232,8 @@ def atualizar_populacao():
     """dados/populacao.json: { ano, fonte, ufs: { UF: { nome_normalizado: [ibge, populacao] } } } para taxas por 100 mil."""
     municipios = baixar_json(URL_MUNICIPIOS_IBGE)
     if not municipios:
+        gravar(os.path.join(PASTA_SAIDA, 'diagnostico_populacao.json'), {'erros': ERROS_IBGE})
+        print('População: lista de municípios do IBGE indisponível')
         return
     for url in URLS_POPULACAO_IBGE:
         dados = baixar_json(url)
@@ -254,6 +260,7 @@ def atualizar_populacao():
         gravar(os.path.join(PASTA_SAIDA, 'populacao.json'), {'ano': ano, 'fonte': 'IBGE ' + url.split('/agregados/')[1].split('/')[0], 'ufs': ufs})
         print(f'População: {len(pop)} municípios ({ano})')
         return
+    gravar(os.path.join(PASTA_SAIDA, 'diagnostico_populacao.json'), {'erros': ERROS_IBGE})
     print('População: não foi possível obter do IBGE')
 
 
