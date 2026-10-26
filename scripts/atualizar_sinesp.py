@@ -135,18 +135,32 @@ def processar(conteudo, ano):
     est_estadual, est_municipal, municipios = {}, {}, {}
     ultimo_mes = {}
     lidas = 0
+    diag = {'abas': [], 'descartes': {}, 'abrangencias': {}, 'exemplos': []}
+
+    def descartar(motivo):
+        diag['descartes'][motivo] = diag['descartes'].get(motivo, 0) + 1
+
     for aba in wb.worksheets:
         col = None
+        info = {'nome': aba.title, 'linhas': 0, 'cabecalho': None}
+        diag['abas'].append(info)
         for linha in aba.iter_rows(values_only=True):
+            info['linhas'] += 1
             if col is None:
                 col = achar_colunas(linha)
+                if col:
+                    info['cabecalho'] = [str(v) for v in linha]
                 continue
+            if len(diag['exemplos']) < 8 and info['linhas'] % 50000 == 0:
+                diag['exemplos'].append([str(v) for v in linha])
             uf = UF_POR_NOME.get(normalizar(linha[col['uf']]))
             evento = str(linha[col['evento']] or '').strip()
             if not uf or not evento:
+                descartar('sem uf/evento')
                 continue
             mes = indice_mes(linha[col['data']], ano)
             if mes < 0:
+                descartar('data fora do ano')
                 continue
             qtd = linha[col['total']] if col['total'] >= 0 else 0
             if not qtd and col['vitimas'] >= 0:
@@ -156,6 +170,7 @@ def processar(conteudo, ano):
             except (TypeError, ValueError):
                 qtd = 0
             if not qtd:
+                descartar('quantidade zero')
                 continue
             qtd = int(qtd) if qtd == int(qtd) else qtd
             lidas += 1
@@ -163,6 +178,7 @@ def processar(conteudo, ano):
 
             nome_mun = str(linha[col['mun']] or '').strip() if col['mun'] >= 0 else ''
             abr = str(linha[col['abrangencia']] or '') if col['abrangencia'] >= 0 else ''
+            diag['abrangencias'][abr] = diag['abrangencias'].get(abr, 0) + 1
             estadual = bool(re.search(r'estad', abr, re.I)) or not nome_mun or re.search(r'n[aã]o informado', nome_mun, re.I)
             if estadual:
                 est_estadual.setdefault(uf, {}).setdefault(evento, doze())[mes] += qtd
@@ -183,7 +199,7 @@ def processar(conteudo, ano):
             s = est_estadual.get(uf, {}).get(ev)
             eventos[ev] = s if s and any(s) else est_municipal[uf][ev]
         saida[uf] = {'estado': eventos, 'municipios': municipios.get(uf, {}), 'publicadoAte': ultimo_mes.get(uf, -1)}
-    return saida, lidas
+    return saida, lidas, diag
 
 
 def gravar(caminho, obj):
@@ -216,7 +232,9 @@ def main():
             conteudo = baixar(ano)
         if not conteudo:
             continue  # mantém o que já foi publicado
-        resumo, lidas = processar(conteudo, ano)
+        resumo, lidas, diag = processar(conteudo, ano)
+        gravar(os.path.join(PASTA_SAIDA, f'diagnostico_{ano}.json'), diag)
+        print(json.dumps(diag, ensure_ascii=False)[:3000])
         if not lidas:
             print(f'{ano}: nenhuma linha reconhecida; arquivos anteriores mantidos')
             continue
