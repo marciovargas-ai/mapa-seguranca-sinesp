@@ -21,8 +21,13 @@
   <app-root></app-root>
   <script>var BASE_MUNICIPIOS_BR = <?!= obterBaseMunicipiosJson() ?>;</script>
   <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
-  <script>(function () {
-<?!= incluir('Painel_App_1'); ?><?!= incluir('Painel_App_2'); ?><?!= incluir('Painel_App_3'); ?><?!= incluir('Painel_App_4'); ?><?!= incluir('Painel_App_5'); ?><?!= incluir('Painel_App_6'); ?>
-  })();</script>
+  <script>window.__PAINEL_APP = [];</script>
+  <?!= incluir('Painel_App_1'); ?>
+  <?!= incluir('Painel_App_2'); ?>
+  <?!= incluir('Painel_App_3'); ?>
+  <?!= incluir('Painel_App_4'); ?>
+  <?!= incluir('Painel_App_5'); ?>
+  <?!= incluir('Painel_App_6'); ?>
+  <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
 </body>
 </html>

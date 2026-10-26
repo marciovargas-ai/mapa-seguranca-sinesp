@@ -6,9 +6,12 @@ Gera os arquivos HTML do Apps Script a partir do build do painel Angular.
 Saída (cada arquivo vira um arquivo HTML no editor do Apps Script):
   Painel.html          modelo da página (fontes, Leaflet, Chart.js e os includes)
   Painel_Estilos.html  CSS global (tema Material)
-  Painel_App_N.html    o aplicativo, dividido em partes de até ~180 KB, juntadas
-                       dentro de um único <script> pelo modelo
+  Painel_App_N.html    o aplicativo, dividido em partes de até ~180 KB. O Apps Script
+                       só aceita HTML válido em cada arquivo, então cada parte é um
+                       <script> que guarda um pedaço do código como texto; a última
+                       linha do modelo junta os pedaços e executa o aplicativo
 """
+import json
 import os
 import sys
 
@@ -39,24 +42,19 @@ MODELO = """<!DOCTYPE html>
   <app-root></app-root>
   <script>var BASE_MUNICIPIOS_BR = <?!= obterBaseMunicipiosJson() ?>;</script>
   <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
-  <script>(function () {
-{INCLUDES}
-  })();</script>
+  <script>window.__PAINEL_APP = [];</script>
+  {INCLUDES}
+  <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
 </body>
 </html>
 """
-
-
-def proteger(js: str) -> str:
-    # Dentro de <script>, "</script" e "<!--" encerrariam ou confundiriam o bloco
-    return js.replace('</script', '<\\/script').replace('<!--', '<\\!--')
 
 
 def main():
     saida = sys.argv[1] if len(sys.argv) > 1 else os.path.join(RAIZ, 'apps-script')
     os.makedirs(saida, exist_ok=True)
     with open(os.path.join(DIST, 'main.js'), encoding='utf-8') as f:
-        js = proteger(f.read())
+        js = f.read()
     with open(os.path.join(DIST, 'styles.css'), encoding='utf-8') as f:
         css = f.read()
 
@@ -76,10 +74,12 @@ def main():
             os.remove(os.path.join(saida, nome))
     for i, parte in enumerate(partes, 1):
         with open(os.path.join(saida, f'Painel_App_{i}.html'), 'w', encoding='utf-8') as f:
-            f.write(parte)
+            # Texto JSON com "<" escrito como \\u003c: nada dentro dele fecha ou confunde o <script>
+            texto = json.dumps(parte, ensure_ascii=False).replace('<', '\\u003c')
+            f.write(f'<script>window.__PAINEL_APP.push({texto});</script>\n')
     with open(os.path.join(saida, 'Painel_Estilos.html'), 'w', encoding='utf-8') as f:
         f.write('<style>\n' + css + '\n</style>\n')
-    includes = ''.join(f"<?!= incluir('Painel_App_{i}'); ?>" for i in range(1, len(partes) + 1))
+    includes = '\n  '.join(f"<?!= incluir('Painel_App_{i}'); ?>" for i in range(1, len(partes) + 1))
     with open(os.path.join(saida, 'Painel.html'), 'w', encoding='utf-8') as f:
         f.write(MODELO.replace('{INCLUDES}', includes))
     print(f'{len(partes)} partes do aplicativo em {saida}')
