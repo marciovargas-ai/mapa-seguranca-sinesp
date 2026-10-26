@@ -28,7 +28,7 @@ export function normalizarPacote(res: any): Pacote {
     uf: res.uf, cidade: res.cidade, codigoIbge: res.codigoIbge || '', centroLat: Number(res.centroLat), centroLng: Number(res.centroLng),
     ocorrencias, totalNaBase: Number(res.totalNaBase) || ocorrencias.length, cidadesMonitoradas: res.cidadesMonitoradas || 0,
     oficial: res.oficial || { disponivel: false, eventos: [] }, atualizadoEm: res.atualizadoEm || '', ultimaColeta: res.ultimaColeta || '',
-    versaoLocal: Date.now(),
+    versaoLocal: Date.now(), bairros: Array.isArray(res.bairros) ? res.bairros : [],
   };
 }
 

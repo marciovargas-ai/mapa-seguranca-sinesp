@@ -1,6 +1,8 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
+import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
+import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
 import { Pacote, Panorama } from './modelos';
@@ -9,9 +11,9 @@ import { carregarPopulacao, enriquecerOficial, enriquecerPanorama, PopulacaoUf }
 import { Servidor } from './servidor';
 import { fetchComTimeout, gravarLocal, lerLocal, normalizar } from './util';
 
-export type Aba = 'GERAL' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
+export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
-export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean }
+export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean }
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
@@ -26,8 +28,8 @@ export class PainelStore {
   readonly periodoDias = signal(CFG.PERIODO_PADRAO_DIAS);
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
-  readonly aba = signal<Aba>('OFICIAL');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, satelite: false, mapaEscuro: false, coropletico: true });
+  readonly aba = signal<Aba>('PANORAMA');
+  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
@@ -46,6 +48,23 @@ export class PainelStore {
 
   readonly filtrados = computed(() =>
     filtrar(this.dados(), this.periodoDias(), this.categorias(), this.orgao(), this.escopo() === 'ESTADO'));
+  /** Notícias dos 12 meses, sem filtros: base do Panorama. */
+  readonly filtrados12 = computed(() => filtrar(this.dados(), CFG.DIAS_HISTORICO_SERVIDOR, [], '', this.escopo() === 'ESTADO'));
+
+  /** Código IBGE do município aberto ('' no estado). */
+  readonly ibgeCidade = computed(() => (this.escopo() === 'CIDADE' ? this.dados()?.codigoIbge || buscarMunicipio(this.uf(), this.cidade())?.ibge || '' : ''));
+
+  /** Bairros do OpenStreetMap da cidade aberta (com contorno quando o OSM tem). */
+  readonly bairrosOsm = signal<{ ibge: string; lista: Bairro[]; carregando: boolean } | null>(null);
+  private readonly listaBairros = computed(() => {
+    const b = this.bairrosOsm();
+    const d = this.dados();
+    if (this.escopo() !== 'CIDADE' || !d) return [] as Bairro[];
+    return b?.ibge === this.ibgeCidade() && b.lista.length ? b.lista : d.bairros || [];
+  });
+  /** Bairros com as notícias do filtro atual (mapa) e dos 12 meses (Panorama). */
+  readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas));
+  readonly bairros12 = computed(() => resumirBairros(this.listaBairros(), this.filtrados12().todas));
 
   /** Indicadores oficiais do local aberto (no estado, o panorama traz os mesmos números). */
   readonly oficial = computed(() => {
@@ -59,8 +78,21 @@ export class PainelStore {
     gerarInsights({
       ehEstado: this.escopo() === 'ESTADO', nomeLocal: this.nomeLocal(), cidade: this.cidade(),
       oficial: this.oficial(), panorama: this.panorama()?.uf === this.uf() ? this.panorama() : null,
-      f: this.filtrados(), periodoDias: this.periodoDias(),
+      f: this.filtrados12(), periodoDias: CFG.DIAS_HISTORICO_SERVIDOR,
     }));
+
+  /** Panorama compilado de todas as fontes (aba inicial). */
+  readonly compilado = computed(() => {
+    const d = this.dados();
+    const ehEstado = this.escopo() === 'ESTADO';
+    const b = this.bairrosOsm();
+    return compilar({
+      ehEstado, nomeLocal: this.nomeLocal(), cidade: this.cidade(), uf: this.uf(), ibge: this.ibgeCidade() || null,
+      oficial: this.oficial(), panorama: this.panorama()?.uf === this.uf() ? this.panorama() : null, pop: this.populacao(),
+      f12: this.filtrados12(), bairros: this.bairros12().lista, bairrosOsm: ehEstado ? 0 : (b?.lista.length || d?.bairros?.length || 0),
+      bairrosCarregando: !!b?.carregando, ultimaColeta: d?.ultimaColeta || '',
+    });
+  });
 
   private tokenAbertura = 0;
   private memoria = new Map<string, { em: number; res: any }>();
@@ -113,7 +145,7 @@ export class PainelStore {
     this.escopo.set(ehEstado ? 'ESTADO' : 'CIDADE');
     this.cidade.set(ehEstado ? '' : mun!.nome);
     if (ehEstado && this.aba() === 'ZONAS') this.aba.set('ESTADO');
-    if (!ehEstado && this.aba() === 'ESTADO') this.aba.set('OFICIAL');
+    if (!ehEstado && this.aba() === 'ESTADO') this.aba.set('PANORAMA');
     if (ufMudou) this.eventoPanorama.set(0);
 
     const lat = ehEstado ? meta.lat : mun!.lat;
@@ -122,6 +154,11 @@ export class PainelStore {
     const chave = chaveLocal(uf, nomeServidor);
     this.dados.set(pacoteVazio(uf, nomeServidor, lat, lng, ehEstado ? meta.ibge : mun!.ibge));
     this.carregarPanorama(uf);
+    if (!ehEstado && this.bairrosOsm()?.ibge !== mun!.ibge) {
+      const ibge = mun!.ibge;
+      this.bairrosOsm.set({ ibge, lista: [], carregando: true });
+      carregarBairros(ibge).then((lista) => { if (this.bairrosOsm()?.ibge === ibge) this.bairrosOsm.set({ ibge, lista, carregando: false }); });
+    }
     if (this.populacao()?.uf !== uf) {
       this.populacao.set(null);
       carregarPopulacao(uf).then((p) => { if (p && this.uf() === uf) this.populacao.set(p); });

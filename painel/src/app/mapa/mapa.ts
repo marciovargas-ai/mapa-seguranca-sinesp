@@ -6,6 +6,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { CacheDisco } from '../core/cache-disco';
 import { CATEGORIA_POR_ID, CATEGORIAS, CFG, COR_NIVEL, ESTADOS, NOME_NIVEL, ROTULOS_PRECISAO } from '../core/dados';
+import { BairroResumo } from '../core/bairros';
 import { Ocorrencia } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
 import { Camadas, PainelStore } from '../core/painel.store';
@@ -16,6 +17,8 @@ declare const L: any;
 
 /** Escala sequencial (claro → vermelho escuro) do mapa por taxa municipal. */
 const ESCALA = ['#fde0c5', '#facba6', '#f59e74', '#e5604b', '#c42e3c', '#8a1538'];
+/** Bairros: amarelo → vermelho escuro (quantidade de ocorrências). */
+const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#b91c1c', '#7f1d1d'];
 
 @Component({
   selector: 'app-mapa',
@@ -104,6 +107,7 @@ export class MapaComponent implements OnDestroy {
     { id: 'pinos', nome: 'Ocorrências', icone: 'location_on' },
     { id: 'bairros', nome: 'Nomes dos bairros', icone: 'label' },
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
+    { id: 'vizinhos', nome: 'Municípios vizinhos (taxa oficial)', icone: 'grid_view' },
     { id: 'coropletico', nome: 'Taxa por município (aba Estado)', icone: 'map' },
     { id: 'satelite', nome: 'Satélite', icone: 'satellite_alt' },
     { id: 'mapaEscuro', nome: 'Mapa escuro', icone: 'dark_mode' },
@@ -134,6 +138,11 @@ export class MapaComponent implements OnDestroy {
     const p = this.store.panorama();
     return this.store.aba() === 'ESTADO' && this.camadas().coropletico && !!p?.disponivel && p.uf === this.store.uf() && !!p.rankings?.length;
   });
+  /** Na cidade, os municípios em volta aparecem coloridos pela taxa oficial, bem claros, para dar contexto. */
+  private readonly vizinhosAtivo = computed(() => {
+    const p = this.store.panorama();
+    return !this.coropleticoAtivo() && this.store.escopo() === 'CIDADE' && this.camadas().vizinhos && !!p?.disponivel && p.uf === this.store.uf() && !!p.rankings?.length;
+  });
 
   protected readonly legendaCoropletico = computed(() => {
     if (!this.coropleticoAtivo() || !this.malhaEstado()) return null;
@@ -158,7 +167,10 @@ export class MapaComponent implements OnDestroy {
   constructor() {
     effect(() => { if (this.map) return; this.iniciar(this.alvo().nativeElement); });
     effect(() => { const c = this.camadas(); c.satelite; c.mapaEscuro; untracked(() => this.aplicarBase()); });
-    effect(() => { const f = this.store.filtrados(); const c = this.camadas(); const cor = this.coropleticoAtivo(); untracked(() => this.renderizar(f, c, cor)); });
+    effect(() => {
+      const f = this.store.filtrados(); const c = this.camadas(); const cor = this.coropleticoAtivo(); const b = this.store.bairrosMapa();
+      untracked(() => this.renderizar(f, c, cor, b));
+    });
     effect(() => {
       const d = this.store.dados(); const ver = this.camadas().fronteira; const esc = this.store.escopo();
       untracked(() => this.desenharFronteira(d?.codigoIbge || '', ver, esc === 'ESTADO'));
@@ -169,8 +181,9 @@ export class MapaComponent implements OnDestroy {
       untracked(() => this.enquadrar());
     });
     effect(() => {
-      const ativo = this.coropleticoAtivo(); const uf = this.store.uf(); const ev = this.store.eventoPanorama(); const malha = this.malhaEstado();
-      untracked(() => this.desenharCoropletico(ativo, uf, ev, malha));
+      const ativo = this.coropleticoAtivo(); const viz = this.vizinhosAtivo(); const uf = this.store.uf(); const ev = this.store.eventoPanorama(); const malha = this.malhaEstado();
+      this.store.populacao(); this.store.cidade();
+      untracked(() => this.desenharCoropletico(ativo, uf, ev, malha, viz));
     });
     effect(() => {
       const f = this.store.foco();
@@ -196,7 +209,9 @@ export class MapaComponent implements OnDestroy {
     this.renderer = L.canvas({ padding: 0.4 });
     const pC = map.createPane('paneCoropletico'); pC.style.zIndex = 340;
     const pF = map.createPane('paneFronteira'); pF.style.zIndex = 350; pF.style.pointerEvents = 'none';
+    const pB = map.createPane('paneBairros'); pB.style.zIndex = 360;
     const pZ = map.createPane('paneZonas'); pZ.style.zIndex = 450;
+    const pR = map.createPane('paneRotulos'); pR.style.zIndex = 640;
 
     // Mapas base da Esri: não exigem chave de API
     const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
@@ -282,16 +297,63 @@ export class MapaComponent implements OnDestroy {
       `<a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener"><b>Abrir notícia</b> (${esc(o.veiculo || 'fonte')})</a></div>`;
   }
 
-  /** Resumo do bairro: quantidade por tipo e as notícias mais recentes. */
-  private popupBairro(nome: string, cidade: string, todas: Ocorrencia[]): string {
-    const lista = todas.filter((o) => o.bairro === nome && o.cidade === cidade).sort((a, b) => b.ts - a.ts);
-    const cats: Record<string, number> = {};
-    lista.forEach((o) => (cats[o.cat] = (cats[o.cat] || 0) + 1));
-    const tipos = Object.keys(cats).sort((a, b) => cats[b] - cats[a])
-      .map((id) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[id].cor}">${esc(CATEGORIA_POR_ID[id].curto)} ${fmt(cats[id])}</span>`).join(' ');
-    return `<div class="popup"><b>${esc(nome)}</b> · ${fmt(lista.length)} ocorrências noticiadas<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
-      lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') +
-      '</ul><small>Fonte: notícias (complemento). A medida oficial está na aba Dados oficiais.</small></div>';
+  /** Resumo do bairro: quantidade por tipo, gravidade e as notícias mais recentes. */
+  private popupBairro(b: BairroResumo): string {
+    const lista = b.ocorrencias.slice().sort((x, y) => y.ts - x.ts);
+    const tipos = Object.keys(b.cats).sort((x, y) => b.cats[y] - b.cats[x])
+      .map((id) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[id].cor}">${esc(CATEGORIA_POR_ID[id].curto)} ${fmt(b.cats[id])}</span>`).join(' ');
+    const total = this.store.bairrosMapa().lista.reduce((a, x) => a + x.qtd, 0);
+    const corpo = b.qtd
+      ? `${fmt(b.qtd)} ocorrências noticiadas (${total ? Math.round((b.qtd / total) * 100) : 0}% da cidade) · ${fmt(b.graves)} graves · ${fmt(b.recentes)} nos últimos 30 dias` +
+        `<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
+        lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
+      : 'Nenhuma ocorrência noticiada no período escolhido.';
+    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · bairros do OpenStreetMap</small></div>`;
+  }
+
+  /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */
+  private corBairro(q: number, max: number): string {
+    if (!q) return 'transparent';
+    const i = Math.min(ESCALA_BAIRRO.length - 1, Math.floor((Math.sqrt(q) / Math.sqrt(max)) * ESCALA_BAIRRO.length));
+    return ESCALA_BAIRRO[i];
+  }
+
+  /**
+   * Bairros: com contorno do OSM, o bairro é pintado pela quantidade (mapa de calor por bairro);
+   * sem contorno, vira um círculo proporcional. Bairros com ocorrência ganham rótulo "Nome (N)".
+   */
+  private desenharBairros(lista: BairroResumo[], f: ReturnType<PainelStore['filtrados']>): void {
+    this.layerBairros.clearLayers();
+    if (!lista.length) return;
+    const max = Math.max(1, ...lista.map((b) => b.qtd));
+    const escuro = this.camadas().mapaEscuro || this.camadas().satelite;
+    lista.forEach((b) => {
+      const cor = this.corBairro(b.qtd, max);
+      let forma: any;
+      if (b.aneis) {
+        forma = L.polygon(b.aneis, { pane: 'paneBairros', renderer: this.renderer, color: b.qtd ? '#7c2d12' : escuro ? '#cbd5e1' : '#475569',
+          weight: b.qtd ? 1.2 : 0.8, opacity: b.qtd ? 0.8 : 0.45, dashArray: b.qtd ? null : '3 3', fillColor: cor, fillOpacity: b.qtd ? 0.42 : 0 });
+      } else if (b.qtd) {
+        forma = L.circle([b.lat, b.lng], { pane: 'paneBairros', renderer: this.renderer, radius: 150 + 450 * Math.sqrt(b.qtd / max),
+          color: '#7c2d12', weight: 1, fillColor: cor, fillOpacity: 0.4 });
+      }
+      if (forma) {
+        forma.bindTooltip(`<b>${esc(b.nome)}</b> · ${b.qtd ? fmt(b.qtd) + ' ocorrências' : 'sem ocorrência no período'}`, { sticky: true });
+        forma.bindPopup(() => this.popupBairro(b));
+        forma.on('mouseover', () => forma.setStyle({ weight: 2.5 }));
+        forma.on('mouseout', () => forma.setStyle({ weight: b.qtd ? 1.2 : 0.8 }));
+        this.layerBairros.addLayer(forma);
+      }
+    });
+    // Rótulos dos bairros com ocorrência (os 30 maiores)
+    lista.filter((b) => b.qtd).slice(0, 30).forEach((b) => {
+      const icone = L.divIcon({ className: 'rotulo-bairro', iconSize: null, iconAnchor: [-6, 12],
+        html: `<div><i style="background:${CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i>${esc(b.nome)} <b>(${fmt(b.qtd)})</b></div>` });
+      const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome, pane: 'paneRotulos' });
+      mk.bindPopup(() => this.popupBairro(b));
+      this.layerBairros.addLayer(mk);
+    });
+    void f;
   }
 
   /** Resumo oficial do município ao clicar no contorno. */
@@ -307,7 +369,7 @@ export class MapaComponent implements OnDestroy {
     return `<div class="popup"><b>${esc(nome)}</b>${corpo}</div>`;
   }
 
-  private renderizar(f: ReturnType<PainelStore['filtrados']>, c: Camadas, coropletico: boolean): void {
+  private renderizar(f: ReturnType<PainelStore['filtrados']>, c: Camadas, coropletico: boolean, bairros: ReturnType<PainelStore['bairrosMapa']>): void {
     if (!this.map) return;
     this.cluster.clearLayers();
     // Com o mapa por taxa ligado, as notícias saem da frente para a leitura do estado ficar limpa
@@ -331,19 +393,7 @@ export class MapaComponent implements OnDestroy {
       this.layerSemLocal.addLayer(mk);
     }
 
-    // Rótulos clicáveis "Bairro (N)" no ponto médio das ocorrências com local preciso
-    this.layerBairros.clearLayers();
-    if (c.bairros && mostrarNoticias) {
-      f.locais.filter((b) => b.lat != null && b.qtd >= 2).slice(0, 25).forEach((b) => {
-        const cor = CATEGORIA_POR_ID[b.catTop]?.cor || '#334155';
-        const icone = L.divIcon({ className: 'rotulo-bairro', iconSize: null, iconAnchor: [-10, 26],
-          html: `<div><i style="background:${cor}"></i>${esc(b.nome)} <b>(${fmt(b.qtd)})</b></div>` });
-        const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome });
-        mk.bindPopup(() => this.popupBairro(b.nome, b.cidade, f.todas));
-        mk.on('click', () => { if (this.map.getZoom() < 14) this.mover(() => this.map.flyTo([b.lat, b.lng], 15, { duration: 0.5 })); });
-        this.layerBairros.addLayer(mk);
-      });
-    }
+    this.desenharBairros(c.bairros && mostrarNoticias && this.store.escopo() === 'CIDADE' ? bairros.lista : [], f);
 
     this.layerZonas.clearLayers();
     if (c.zonas && mostrarNoticias) {
@@ -355,7 +405,10 @@ export class MapaComponent implements OnDestroy {
       });
     }
 
-    this.pontosCalor = mostrarNoticias ? f.precisas.map((o) => [o.lat!, o.lng!, CATEGORIA_POR_ID[o.cat].peso] as [number, number, number]) : [];
+    // Calor: pontos com local preciso + notícias que só citam o bairro (no centro do bairro)
+    this.pontosCalor = mostrarNoticias
+      ? [...f.precisas.map((o) => [o.lat!, o.lng!, CATEGORIA_POR_ID[o.cat].peso] as [number, number, number]), ...(this.store.escopo() === 'CIDADE' ? bairros.calorExtra : [])]
+      : [];
     this.atualizarCalor();
     this.enquadrar();
   }
@@ -450,28 +503,30 @@ export class MapaComponent implements OnDestroy {
     return r;
   }
 
-  private async desenharCoropletico(ativo: boolean, uf: string, ev: number, malha: { uf: string; geo: any } | null): Promise<void> {
+  private async desenharCoropletico(ativoEstado: boolean, uf: string, ev: number, malha: { uf: string; geo: any } | null, vizinhos: boolean): Promise<void> {
     const token = ++this.tokenCoropletico;
     this.layerCoropletico?.clearLayers();
     if (!this.map) return;
-    if (!ativo) {
+    const ativo = ativoEstado || vizinhos;
+    if (!ativoEstado && this.ufEnquadradaCoropletico) {
       // Saiu da aba Estado: volta para a cidade aberta
-      if (this.ufEnquadradaCoropletico && this.store.escopo() === 'CIDADE') {
+      if (this.store.escopo() === 'CIDADE') {
         this.usuarioMoveu = false;
         this.ultimoEnquadramento = '';
         this.voarParaLocal();
         this.enquadrar();
       }
       this.ufEnquadradaCoropletico = '';
-      return;
     }
+    if (!ativo) return;
     if (!malha || malha.uf !== uf) {
       const geo = await this.obterMalha(ESTADOS[uf].ibge, true);
       if (token === this.tokenCoropletico && geo?.features) this.malhaEstado.set({ uf, geo });
       return; // o efeito roda de novo com a malha carregada
     }
     const p = this.store.panorama()!;
-    const r = p.rankings![ev] || p.rankings![0];
+    const r = (vizinhos ? null : p.rankings![ev]) || p.rankings![0];
+    const codCidade = this.store.ibgeCidade();
     const limites = this.limites(Object.values(r.valoresTaxa));
     const corDe = (v: number | undefined) => {
       if (!v) return null;
@@ -485,6 +540,10 @@ export class MapaComponent implements OnDestroy {
       pane: 'paneCoropletico',
       style: (feat: any) => {
         const cor = corDe(r.valoresTaxa[feat.properties.codarea]);
+        if (vizinhos) {
+          const propria = String(feat.properties.codarea) === codCidade;
+          return { color: '#64748b', weight: 0.7, opacity: 0.6, fillColor: cor || 'transparent', fillOpacity: cor && !propria ? 0.22 : 0 };
+        }
         return { color: this.store.escuro() ? '#334155' : '#ffffff', weight: 0.6, fillColor: cor || 'transparent', fillOpacity: cor ? 0.78 : 0 };
       },
       onEachFeature: (feat: any, layer: any) => {
@@ -496,13 +555,14 @@ export class MapaComponent implements OnDestroy {
         layer.bindPopup(`<div class="popup"><b>${esc(mun?.nome || cod)}</b><br>${esc(r.evento)}: ${taxa ? fmt1(taxa) + ' por 100 mil habitantes' : 'sem taxa calculada'}` +
           (t ? `<br>${fmt(t.total)} registros nos últimos 12 meses (antes: ${fmt(t.anterior)})` : '') +
           (mun ? `<br><button class="popup-botao" data-abrir="${esc(uf + '|' + mun.nome)}">Abrir município</button>` : '') + '</div>');
+        if (vizinhos && cod === codCidade) { layer.options.interactive = false; return; }
         layer.on('mouseover', () => layer.setStyle({ weight: 2, color: '#0f172a' }));
         layer.on('mouseout', () => camada.resetStyle(layer));
       },
     });
     this.layerCoropletico.addLayer(camada);
     // Ao abrir a aba Estado, mostra o estado inteiro
-    if (this.ufEnquadradaCoropletico !== uf && camada.getBounds().isValid()) {
+    if (ativoEstado && this.ufEnquadradaCoropletico !== uf && camada.getBounds().isValid()) {
       this.ufEnquadradaCoropletico = uf;
       this.mover(() => this.map.flyToBounds(camada.getBounds(), { padding: [16, 16], duration: 0.6 }));
     }

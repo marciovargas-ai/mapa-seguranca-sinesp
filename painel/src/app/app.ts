@@ -23,12 +23,13 @@ import { EstadoComponent } from './painel/estado';
 import { GeralComponent } from './painel/geral';
 import { NoticiasComponent } from './painel/noticias';
 import { OficialComponent } from './painel/oficial';
+import { PanoramaComponent } from './painel/panorama';
 import { ZonasComponent } from './painel/zonas';
 
 const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
+  { id: 'PANORAMA', rotulo: 'Panorama', icone: 'space_dashboard' },
   { id: 'OFICIAL', rotulo: 'Dados oficiais', icone: 'account_balance' },
   { id: 'ESTADO', rotulo: 'Estado', icone: 'map' },
-  { id: 'GERAL', rotulo: 'Análise', icone: 'insights' },
   { id: 'ZONAS', rotulo: 'Zonas', icone: 'crisis_alert' },
   { id: 'NOTICIAS', rotulo: 'Notícias', icone: 'newspaper' },
 ];
@@ -39,7 +40,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, NoticiasComponent, DeltaComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, NoticiasComponent, DeltaComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()' },
   template: `
@@ -149,11 +150,11 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
               <ng-template matTabContent>
                 <div class="conteudo">
                   @switch (a.id) {
-                    @case ('GERAL') { <app-geral /> }
+                    @case ('PANORAMA') { <app-panorama /> }
                     @case ('OFICIAL') { <app-oficial /> }
                     @case ('ESTADO') { <app-estado /> }
                     @case ('ZONAS') { <app-zonas /> }
-                    @case ('NOTICIAS') { <app-noticias /> }
+                    @case ('NOTICIAS') { <app-geral /><app-noticias /> }
                   }
                 </div>
               </ng-template>
@@ -257,7 +258,7 @@ export class App {
   protected readonly larguraPainel = signal(this.larguraInicial());
 
   protected readonly indiceAba = computed(() => ABAS.findIndex((a) => a.id === this.store.aba()));
-  protected readonly filtrosNoticias = computed(() => ['GERAL', 'ZONAS', 'NOTICIAS'].includes(this.store.aba()));
+  protected readonly filtrosNoticias = computed(() => ['ZONAS', 'NOTICIAS'].includes(this.store.aba()));
   protected readonly orgaoAtivo = computed(() => ORGAO_POR_ID[this.store.orgao()] || null);
   protected readonly contagem = computed(() => {
     const f = this.store.filtrados();

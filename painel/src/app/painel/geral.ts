@@ -6,21 +6,15 @@ import { Local } from '../core/modelos';
 import { PainelStore } from '../core/painel.store';
 import { DIAS_SEMANA, fmt, pct, rotuloPeriodo } from '../core/util';
 import { DeltaComponent, GraficoComponent } from './comuns';
-import { InsightsComponent } from './insights';
 
 /** Visão geral: insights, situação, gráficos das notícias e cruzamento por fonte. */
 @Component({
   selector: 'app-geral',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatProgressBarModule, DeltaComponent, GraficoComponent, InsightsComponent],
+  imports: [MatIconModule, MatProgressBarModule, DeltaComponent, GraficoComponent],
   template: `
     @let f = store.filtrados();
-    <section class="bloco">
-      <div class="titulo-bloco"><h3><span class="material-symbols-outlined">auto_awesome</span> Insights</h3><span class="nota">Sinesp primeiro, depois as notícias</span></div>
-      @if (carregandoVazio()) { <mat-progress-bar mode="indeterminate" /> }
-      @else { <app-insights [itens]="store.insights()" /> }
-    </section>
-
+    <h3 class="titulo-aba"><span class="material-symbols-outlined">newspaper</span> Análise das notícias <small>complemento ao Sinesp</small></h3>
     <div class="colunas">
       <section class="cartao">
         <div class="titulo-bloco"><h3>Situação</h3><span class="nota">{{ coleta() }}</span></div>
@@ -95,10 +89,11 @@ import { InsightsComponent } from './insights';
         }
       </section>
     </div>
-    <p class="nota">Notícias policiais classificadas automaticamente; não equivalem ao total de boletins de ocorrência. Os registros oficiais estão nas abas Oficial e Estado.</p>
+    <p class="nota">Notícias policiais classificadas automaticamente; não equivalem ao total de boletins de ocorrência. Os registros oficiais estão nas abas Panorama, Dados oficiais e Estado.</p>
   `,
   styles: `
-    :host { display: grid; gap: 12px; }
+    :host { display: grid; gap: 12px; margin-bottom: 12px; }
+    .titulo-aba small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
     .bloco { display: grid; gap: 8px; }
     .colunas { display: grid; grid-template-columns: 1fr; gap: 12px; }
     @container painel (min-width: 720px) { .colunas { grid-template-columns: 1fr 1fr; } }

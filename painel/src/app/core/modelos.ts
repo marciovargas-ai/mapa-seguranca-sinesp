@@ -23,6 +23,7 @@ export interface Pacote {
   uf: string; cidade: string; codigoIbge: string; centroLat: number; centroLng: number;
   ocorrencias: Ocorrencia[]; totalNaBase: number; cidadesMonitoradas: number;
   oficial: Oficial | null; atualizadoEm: string; ultimaColeta: string; versaoLocal: number; vazio?: boolean;
+  bairros?: { n: string; lat: number; lng: number }[];
 }
 
 export interface LinhaRanking { n: string; ibge: string | null; pop: number | null; total: number; anterior: number; taxa: number | null }
