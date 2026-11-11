@@ -35,9 +35,13 @@ DADOS = 'dados'
 MIN_POP = 20000
 CVLI = ('homicidio doloso', 'roubo seguido de morte latrocinio', 'latrocinio', 'lesao corporal seguida de morte')
 FONTES_POP = [
-    'https://servicodados.ibge.gov.br/api/v3/agregados/6579/periodos/-1/variaveis/9324?localidades=N6[all]',
-    'https://servicodados.ibge.gov.br/api/v3/agregados/4709/periodos/-1/variaveis/93?localidades=N6[all]',
+    # Por estado (respostas pequenas; a consulta nacional inteira costuma estourar o tempo)
+    'https://servicodados.ibge.gov.br/api/v3/agregados/6579/periodos/-1/variaveis/9324?localidades=N6[N3[{uf}]]',
+    'https://servicodados.ibge.gov.br/api/v3/agregados/4709/periodos/-1/variaveis/93?localidades=N6[N3[{uf}]]',
 ]
+COD_UF = {'RO': 11, 'AC': 12, 'AM': 13, 'RR': 14, 'PA': 15, 'AP': 16, 'TO': 17, 'MA': 21, 'PI': 22, 'CE': 23, 'RN': 24, 'PB': 25,
+          'PE': 26, 'AL': 27, 'SE': 28, 'BA': 29, 'MG': 31, 'ES': 32, 'RJ': 33, 'SP': 35, 'PR': 41, 'SC': 42, 'RS': 43, 'MS': 50,
+          'MT': 51, 'GO': 52, 'DF': 53}
 UFS = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR',
        'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO']
 
@@ -46,28 +50,34 @@ def baixar_json(url):
     for tentativa in range(4):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'mapa-seguranca-robo'})
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=45) as r:
                 return json.load(r)
         except Exception as e:  # IBGE oscila: tenta de novo
-            print('Falha', url[:80], e)
-            time.sleep(10 * (tentativa + 1))
+            print('Falha', url[:90], e, flush=True)
+            time.sleep(5 * (tentativa + 1))
     return None
 
 
 def populacao():
-    for url in FONTES_POP:
-        j = baixar_json(url)
-        if not j:
-            continue
-        saida = {}
-        for s in j[0]['resultados'][0]['series']:
-            v = list(s['serie'].values())[0]
-            if str(v).isdigit():
-                nome, _, uf = s['localidade']['nome'].rpartition(' - ')
-                saida[(uf, normalizar(nome))] = (s['localidade']['id'], int(v))
-        if len(saida) > 5000:
-            return saida
-    raise SystemExit('População do IBGE indisponível')
+    saida = {}
+    for uf, cod in COD_UF.items():
+        for url in FONTES_POP:
+            j = baixar_json(url.format(uf=cod))
+            if not j:
+                continue
+            n = 0
+            for s in j[0]['resultados'][0]['series']:
+                v = list(s['serie'].values())[0]
+                if str(v).isdigit():
+                    nome, _, sigla = s['localidade']['nome'].rpartition(' - ')
+                    saida[(sigla, normalizar(nome))] = (s['localidade']['id'], int(v))
+                    n += 1
+            if n:
+                print(uf, n, 'municípios', flush=True)
+                break
+    if len(saida) < 5000:
+        raise SystemExit(f'População do IBGE incompleta ({len(saida)})')
+    return saida
 
 
 def eh_cvli(nome):
