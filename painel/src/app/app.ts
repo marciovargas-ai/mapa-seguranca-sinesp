@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { TourComponent } from './tour';
 import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
+import { ShopeeComponent } from './shopee';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -44,7 +45,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, NoticiasComponent, DeltaComponent, TourComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()' },
   template: `
@@ -75,6 +76,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       <div class="acoes">
         <button mat-icon-button matTooltip="Minha localização" aria-label="Minha localização" (click)="localizar()"><mat-icon>my_location</mat-icon></button>
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
+        <app-shopee />
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         </button>
@@ -175,7 +177,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
     :host.arrastando { cursor: col-resize; user-select: none; }
     .topo { gap: 12px; height: auto; min-height: 60px; padding: 6px 12px; background: var(--mat-sys-surface-container); border-bottom: 1px solid var(--mat-sys-outline-variant);
-      flex-wrap: nowrap; position: relative; z-index: 1000; }
+      flex-wrap: nowrap; position: relative; z-index: 1100; }
     .marca { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
     .marca-icone { width: 38px; height: 38px; border-radius: var(--raio-m); display: grid; place-items: center; background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); }
     .marca-texto { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }

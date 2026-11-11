@@ -10,6 +10,7 @@ const SUGESTOES = [
   'Quais são os bairros mais críticos e por quê?',
   'Como chegaram ao índice de criminalidade?',
   'Os números estão subindo ou caindo?',
+  'O que saiu nas notícias sobre a Shopee?',
 ];
 
 /** Cartões que ganham o botão "Resumir com IA" (os botões de zona e as notícias ficam de fora). */

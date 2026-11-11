@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { CATEGORIA_POR_ID } from './dados';
 import { PainelStore } from './painel.store';
+import { MonitorShopee } from './shopee';
 import { Servidor } from './servidor';
 import { rotuloPeriodo } from './util';
 
@@ -15,6 +16,7 @@ export interface MensagemIA {
 @Injectable({ providedIn: 'root' })
 export class AgenteIA {
   private readonly store = inject(PainelStore);
+  private readonly shopee = inject(MonitorShopee);
   readonly aberto = signal(false);
   readonly mensagens = signal<MensagemIA[]>([]);
   readonly pensando = signal(false);
@@ -96,6 +98,8 @@ export class AgenteIA {
     ctx['noticiasRecentes'] = f.todas.slice().sort((a, b) => b.ts - a.ts).slice(0, 30)
       .map((o) => ({ data: o.data, tipo: CATEGORIA_POR_ID[o.cat]?.nome || o.cat, bairro: o.bairro, titulo: o.titulo, veiculo: o.veiculo }));
     ctx['totalNoticiasNoPeriodo'] = f.todas.length;
+    const sh = this.shopee.paraContexto();
+    if (sh) ctx['shopeeNasNoticias'] = sh;
     return JSON.stringify(ctx);
   }
 }

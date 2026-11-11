@@ -31,6 +31,7 @@ export const Servidor = {
     chamar<{ ok: boolean; resposta?: string; conversaId?: string; erro?: string; configurado?: boolean }>('perguntarAgenteIA', pergunta, contexto, conversaId),
   exportar: (formato: 'pdf' | 'sheets', titulo: string, local: string, pergunta: string, resposta: string) =>
     chamar<{ ok: boolean; url: string; nome: string }>('exportarRespostaIA', formato, titulo, local, pergunta, resposta),
+  shopee: (desde: number) => chamar<any>('obterNoticiasShopee', desde || 0),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),
 };
