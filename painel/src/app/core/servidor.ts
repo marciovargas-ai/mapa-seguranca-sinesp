@@ -24,6 +24,8 @@ export const Servidor = {
     chamar<any>('obterOuAtualizarCidadeNacional', uf, cidade, lat, lng, forcar === true),
   panorama: (uf: string) => chamar<Panorama>('obterPanoramaEstado', uf),
   bairros: (ibge: string) => chamar<any[]>('obterBairrosCidade', ibge).then((l) => (Array.isArray(l) ? l : []), () => []),
+  fogoCruzado: (uf: string, cidade: string) =>
+    chamar<any>('obterFogoCruzado', uf, cidade).then((r) => r || null, (e) => ({ configurado: true, erro: String(e?.message || e), itens: [] })),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),
 };

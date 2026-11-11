@@ -1,0 +1,33 @@
+name: Atualizar bases por área (bairros IBGE e ISP-RJ)
+
+on:
+  schedule:
+    - cron: '0 11 * * 1'   # toda segunda-feira, 08:00 em Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install geopandas==1.2.0 pyogrio==0.13.0 shapely
+      - name: Bairros oficiais do IBGE (só refaz se ainda não existir ou uma vez por mês)
+        run: |
+          if [ ! -f dados/bairros/indice.json ] || [ "$(date -u +%d)" -le 07 ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python scripts/bairros_ibge.py
+          fi
+      - name: ISP-RJ por área de delegacia
+        run: python scripts/isp_rj.py || echo "ISP-RJ indisponível hoje; mantém o arquivo anterior"
+      - name: Publicar
+        run: |
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add dados
+          git diff --cached --quiet || (git commit -m "Bases por área: atualização $(date -u +%Y-%m-%d)" && git push)

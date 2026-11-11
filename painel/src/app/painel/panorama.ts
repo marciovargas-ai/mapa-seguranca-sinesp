@@ -12,7 +12,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
 
 /**
  * Panorama: retrato compilado do local com todas as fontes. Sinesp (polícias do
- * estado, PRF e PF) e IBGE na frente; notícias e bairros do OSM como complemento.
+ * estado, PRF e PF), ISP-RJ, Fogo Cruzado e IBGE na frente; notícias como complemento.
  */
 @Component({
   selector: 'app-panorama',
@@ -25,7 +25,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
     <section class="topo">
       <article class="cartao parecer">
         <header><mat-icon>summarize</mat-icon><h3>Parecer</h3>
-          <span class="selo" matTooltip="Texto gerado por regras a partir do Sinesp, IBGE, OpenStreetMap e notícias. Atualiza a cada consulta.">automático</span>
+          <span class="selo" matTooltip="Texto gerado por regras a partir do Sinesp, ISP-RJ, Fogo Cruzado, IBGE e notícias. Atualiza a cada consulta.">automático</span>
         </header>
         @for (p of c.parecer; track $index) { <p>{{ p }}</p> }
       </article>
@@ -79,9 +79,52 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
     }
 
     @if (store.escopo() === 'CIDADE') {
+      @if (isp(); as i) {
+        <section class="cartao">
+          <div class="titulo-bloco">
+            <h3 [matTooltip]="'Dado oficial do ' + i.fonte + '. Cada linha é a área de uma delegacia (CISP). Compara os 12 meses mais recentes publicados com os 12 anteriores.'">
+              <mat-icon>local_police</mat-icon> Por área de delegacia <span class="fonte">Oficial</span> <mat-icon class="info">info</mat-icon></h3>
+            <span class="nota">ISP-RJ · {{ i.periodo.de }} a {{ i.periodo.ate }}</span>
+          </div>
+          <div class="tabela" role="table" aria-label="Ocorrências por área de delegacia">
+            <div class="linha cabeca d" role="row"><span>Área</span><span>Letalidade violenta</span><span>Antes</span><span>Roubos de rua</span><span>Apreensão de drogas</span></div>
+            @for (a of i.linhas; track a.cisp) {
+              <div class="linha d" role="row">
+                <span class="b-nome">{{ a.cisp }}ª DP</span>
+                <span class="b-qtd"><span class="barra"><span [style.width.%]="a.largura"></span></span>{{ fmt(a.letal) }}</span>
+                <span [class.perigo]="a.letal > a.letalAntes">{{ fmt(a.letalAntes) }}</span>
+                <span>{{ fmt(a.roubos) }}</span>
+                <span>{{ fmt(a.drogas) }}</span>
+              </div>
+            }
+          </div>
+        </section>
+      }
+      @if (fogo(); as f) {
+        <section class="cartao">
+          <div class="titulo-bloco">
+            <h3 matTooltip="Tiroteios registrados e checados pelo Instituto Fogo Cruzado, com local exato, nos últimos 12 meses. Aparecem no mapa como pontos vermelhos com borda preta.">
+              <mat-icon>my_location</mat-icon> Tiroteios verificados <span class="fonte">Fogo Cruzado</span> <mat-icon class="info">info</mat-icon></h3>
+            <span class="nota">12 meses</span>
+          </div>
+          @if (f.texto) {
+            <div class="vazio pequeno"><mat-icon>info</mat-icon>{{ f.texto }}</div>
+          } @else {
+            <div class="fc">
+              <div><b>{{ fmt(f.total) }}</b><span>tiroteios</span></div>
+              <div><b class="perigo">{{ fmt(f.mortos) }}</b><span>mortos</span></div>
+              <div><b>{{ fmt(f.feridos) }}</b><span>feridos</span></div>
+              <div><b>{{ fmt(f.policia) }}</b><span>com ação policial</span></div>
+            </div>
+            @if (f.bairros.length) {
+              <div class="nota">Bairros com mais tiroteios: {{ f.bairros }}</div>
+            }
+          }
+        </section>
+      }
       <section class="cartao">
         <div class="titulo-bloco">
-          <h3 matTooltip="Ocorrências noticiadas nos últimos 12 meses ligadas a cada bairro (pelo contorno do OpenStreetMap ou pelo nome citado). Clique para ver no mapa.">
+          <h3 matTooltip="Ocorrências noticiadas nos últimos 12 meses ligadas a cada bairro (pelo contorno do bairro ou pelo nome citado). Contornos oficiais do IBGE (Censo 2022); onde o IBGE não tem, OpenStreetMap. Clique para ver no mapa.">
             Ocorrências por bairro <mat-icon class="info">info</mat-icon></h3>
           <span class="nota">{{ resumoBairros() }}</span>
         </div>
@@ -99,7 +142,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
             }
           </div>
         } @else {
-          <div class="vazio pequeno"><mat-icon>signpost</mat-icon>{{ store.bairrosOsm()?.carregando ? 'Carregando bairros do OpenStreetMap…' : 'Nenhuma notícia dos últimos 12 meses cita bairro ou tem local preciso.' }}</div>
+          <div class="vazio pequeno"><mat-icon>signpost</mat-icon>{{ store.bairrosOsm()?.carregando ? 'Carregando bairros…' : 'Nenhuma notícia dos últimos 12 meses cita bairro ou tem local preciso.' }}</div>
         }
       </section>
     } @else if (c.municipios.length) {
@@ -182,6 +225,12 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
       padding: 7px 6px; border: 0; border-bottom: 1px solid var(--mat-sys-outline-variant); background: none; color: inherit; font: var(--mat-sys-body-medium);
       text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
     .linha.m { grid-template-columns: minmax(0, 2fr) 70px 60px 60px; }
+    .linha.d { grid-template-columns: minmax(0, 1fr) minmax(90px, 1.4fr) 60px 80px 90px; cursor: default; }
+    .fc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+    .fc div { display: flex; flex-direction: column; }
+    .fc b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .fc span { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
+    h3 .fonte { margin-left: 4px; vertical-align: middle; }
     .linha:hover { background: var(--mat-sys-surface-container); }
     .linha.cabeca { cursor: default; font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
     .linha.cabeca:hover { background: none; }
@@ -215,6 +264,37 @@ export class PanoramaComponent {
     const r = this.store.bairros12();
     const total = this.store.filtrados12().todas.length;
     return total ? `${pct(r.ligadas, total)}% das notícias ligadas a um bairro · 12 meses` : '12 meses';
+  });
+
+  protected readonly isp = computed(() => {
+    const i = this.store.ispCidade();
+    if (!i) return null;
+    const linhas = i.areas.map((a) => ({
+      cisp: a.cisp, letal: a.u12['letalidade_violenta'] || 0, letalAntes: a.a12['letalidade_violenta'] || 0,
+      roubos: a.u12['roubo_rua'] ?? a.u12['roubo_transeunte'] ?? 0, drogas: a.u12['apreensao_drogas'] || 0, largura: 0,
+    })).sort((x, y) => y.letal - x.letal).slice(0, 15);
+    const max = linhas[0]?.letal || 1;
+    linhas.forEach((l) => { l.largura = Math.max(4, (l.letal / max) * 100); });
+    return { fonte: i.fonte, periodo: i.periodo, linhas };
+  });
+
+  protected readonly fogo = computed(() => {
+    const v = this.store.fogoCidade();
+    if (!v) return null;
+    const vazio = { total: 0, mortos: 0, feridos: 0, policia: 0, bairros: '' };
+    if (v.carregando) return { ...vazio, texto: 'Carregando tiroteios do Fogo Cruzado…' };
+    const d = v.dado;
+    if (!d) return null;
+    if (!d.configurado) return { ...vazio, texto: 'Fonte disponível para esta cidade. Falta gravar a conta do Fogo Cruzado nas propriedades do script (FOGO_CRUZADO_EMAIL e FOGO_CRUZADO_SENHA).' };
+    if (d.erro) return { ...vazio, texto: 'Fogo Cruzado não respondeu agora: ' + d.erro };
+    const porBairro: Record<string, number> = {};
+    d.itens.forEach((t) => { if (t.bairro) porBairro[t.bairro] = (porBairro[t.bairro] || 0) + 1; });
+    const top = Object.entries(porBairro).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, q]) => `${n} (${q})`).join(', ');
+    return {
+      texto: d.itens.length ? '' : 'Nenhum tiroteio registrado nos últimos 12 meses.',
+      total: d.itens.length, mortos: d.itens.reduce((a, t) => a + t.mortos, 0), feridos: d.itens.reduce((a, t) => a + t.feridos, 0),
+      policia: d.itens.filter((t) => t.policia).length, bairros: top,
+    };
   });
 
   protected arco(v: number): string {

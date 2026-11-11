@@ -11,6 +11,7 @@ import { Ocorrencia } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
 import { Camadas, PainelStore } from '../core/painel.store';
 import { Servidor } from '../core/servidor';
+import { Tiroteio } from '../core/areas';
 import { esc, fetchComTimeout, fmt, fmt1, urlSegura } from '../core/util';
 
 declare const L: any;
@@ -54,8 +55,19 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       </div>
     } @else if (legenda(); as leg) {
       <div class="legenda">
-        <div class="legenda-titulo">{{ leg.noMapa }} de {{ leg.total }} no mapa</div>
-        <div class="legenda-sub">{{ leg.aprox ? leg.aprox + ' pelo bairro citado (ponto vazado) · ' : '' }}{{ leg.semLocal ? leg.semLocal + ' sem local identificado' : 'todas no mapa' }}</div>
+        <div class="legenda-titulo">{{ leg.total }} notícias · {{ leg.noMapa }} com local exato</div>
+        <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
+        @if (leg.fogo) { <div class="legenda-fogo"><i></i>{{ leg.fogo }} tiroteios verificados (Fogo Cruzado)</div> }
+        @if (leg.semLocal) {
+          <details class="sem-bairro">
+            <summary>{{ leg.semLocal }} sem bairro identificado</summary>
+            <ul>
+              @for (o of leg.listaSem; track o.id) {
+                <li><a [href]="o.link" target="_blank" rel="noopener">{{ o.titulo }}</a> <small>{{ o.data }}</small></li>
+              }
+            </ul>
+          </details>
+        }
         <div class="cats">
           @for (c of leg.cats; track c.id) {
             <button type="button" class="cat" [class.ativa]="store.categorias().includes(c.id)" (click)="store.alternarCategoria(c.id)"
@@ -80,6 +92,13 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     }
     .legenda-titulo { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface); }
     .legenda-sub { color: var(--mat-sys-on-surface-variant); margin-bottom: 6px; }
+    .legenda-fogo { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .legenda-fogo i { width: 10px; height: 10px; border-radius: 50%; background: #dc2626; border: 2px solid #111827; }
+    .sem-bairro { margin: -2px 0 6px; color: var(--mat-sys-on-surface-variant); }
+    .sem-bairro summary { cursor: pointer; }
+    .sem-bairro ul { max-height: 160px; overflow: auto; margin: 4px 0 0; padding-left: 16px; }
+    .sem-bairro li { margin: 2px 0; }
+    .sem-bairro a { color: var(--mat-sys-primary); }
     .cats, .escala { display: flex; flex-wrap: wrap; gap: 4px 10px; }
     .escala span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
     .cat { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font: inherit; color: inherit; background: none; cursor: pointer;
@@ -119,6 +138,7 @@ export class MapaComponent implements OnDestroy {
   private layerFronteira: any;
   private layerZonas: any;
   private layerSemLocal: any;
+  private layerFogo: any;
   private layerBairros: any;
   private layerCoropletico: any;
   private cluster: any;
@@ -155,13 +175,25 @@ export class MapaComponent implements OnDestroy {
     return { titulo: r.evento, faixas };
   });
 
+  /**
+   * Pontos com local exato. Na cidade com contornos de bairro, a notícia geocodificada só até o
+   * bairro (centro do bairro) não vira ponto: entra na cor do bairro, para não empilhar no centro.
+   */
+  private exatas(f: { precisas: Ocorrencia[] }, b: { lista: BairroResumo[] }): Ocorrencia[] {
+    const comContorno = this.store.escopo() === 'CIDADE' && b.lista.some((x) => x.aneis?.length);
+    return comContorno ? f.precisas.filter((o) => o.precisao !== 'BAIRRO') : f.precisas;
+  }
+
   protected readonly legenda = computed(() => {
     const f = this.store.filtrados();
     if (!f.todas.length) return null;
-    const aprox = this.store.escopo() === 'CIDADE' ? this.store.bairrosMapa().aproximadas.length : 0;
-    const sem = f.semLocal.length - aprox;
+    const peloBairro = this.store.escopo() === 'CIDADE' ? this.store.bairrosMapa().peloBairro : [];
+    const noBairro = new Set(peloBairro.map((a) => a.o));
+    const sem = f.semLocal.filter((o) => !noBairro.has(o));
     return {
-      total: fmt(f.todas.length), noMapa: fmt(f.precisas.length + aprox), aprox: aprox ? fmt(aprox) : '', semLocal: sem > 0 ? fmt(sem) : '',
+      total: fmt(f.todas.length), noMapa: fmt(this.exatas(f, this.store.bairrosMapa()).length), bairro: peloBairro.length ? fmt(peloBairro.length) : '',
+      semLocal: sem.length ? fmt(sem.length) : '', listaSem: sem.slice(0, 30),
+      fogo: this.store.fogoCidade()?.dado?.itens.length ? fmt(this.store.fogoCidade()!.dado!.itens.length) : '',
       cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
     };
   });
@@ -196,6 +228,10 @@ export class MapaComponent implements OnDestroy {
       if (window.innerWidth <= 900) this.alvo().nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     // Mudou o local: volta a enquadrar automaticamente
+    effect(() => {
+      const f = this.store.fogoCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo();
+      untracked(() => this.desenharFogo(f?.dado?.itens || [], c.pinos && !cor));
+    });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
 
@@ -238,6 +274,7 @@ export class MapaComponent implements OnDestroy {
     this.layerFronteira = L.layerGroup().addTo(map);
     this.layerZonas = L.layerGroup().addTo(map);
     this.layerSemLocal = L.layerGroup().addTo(map);
+    this.layerFogo = L.layerGroup().addTo(map);
     this.layerBairros = L.layerGroup().addTo(map);
     this.cluster = typeof L.markerClusterGroup === 'function'
       ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 40, disableClusteringAtZoom: 16, showCoverageOnHover: false, spiderfyOnMaxZoom: true })
@@ -300,6 +337,22 @@ export class MapaComponent implements OnDestroy {
   }
 
   /** Resumo do bairro: quantidade por tipo, gravidade e as notícias mais recentes. */
+  /** Tiroteios do Fogo Cruzado: local exato, checado pelo instituto (ponto vermelho com borda preta). */
+  private desenharFogo(itens: Tiroteio[], visivel: boolean): void {
+    if (!this.map) return;
+    this.layerFogo.clearLayers();
+    if (!visivel) return;
+    for (const t of itens) {
+      const m = L.circleMarker([t.lat, t.lng], { renderer: this.renderer, radius: t.mortos ? 7 : 5, fillColor: '#dc2626', color: '#111827',
+        weight: 2, fillOpacity: 0.9 });
+      m.bindPopup(() => `<div class="popup"><span class="popup-cat" style="color:#dc2626">Tiroteio</span> · ${esc(t.d)}` +
+        `<div class="popup-titulo">${esc(t.bairro || 'Bairro não informado')}</div><div class="popup-meta">${esc(t.endereco)}</div>` +
+        `${fmt(t.mortos)} mortos · ${fmt(t.feridos)} feridos${t.policia ? ' · com ação policial' : ''}${t.motivo ? '<br>' + esc(t.motivo) : ''}` +
+        `<div class="popup-meta">Fonte: Instituto Fogo Cruzado (verificado, local exato)</div></div>`);
+      this.layerFogo.addLayer(m);
+    }
+  }
+
   private popupBairro(b: BairroResumo): string {
     const lista = b.ocorrencias.slice().sort((x, y) => y.ts - x.ts);
     const tipos = Object.keys(b.cats).sort((x, y) => b.cats[y] - b.cats[x])
@@ -310,7 +363,7 @@ export class MapaComponent implements OnDestroy {
         `<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
         lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
       : 'Nenhuma ocorrência noticiada no período escolhido.';
-    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · bairros do OpenStreetMap</small></div>`;
+    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : 'OpenStreetMap'}</small></div>`;
   }
 
   /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */
@@ -377,34 +430,16 @@ export class MapaComponent implements OnDestroy {
     // Com o mapa por taxa ligado, as notícias saem da frente para a leitura do estado ficar limpa
     const mostrarNoticias = !coropletico;
     if (c.pinos && mostrarNoticias) {
-      const pinos = f.precisas.map((o) => {
+      const pinos = this.exatas(f, bairros).map((o) => {
         const m = L.circleMarker([o.lat, o.lng], { renderer: this.renderer, radius: CFG.RAIO_PINO, fillColor: CATEGORIA_POR_ID[o.cat].cor, color: '#fff', weight: 1.5, fillOpacity: 0.95 });
         m.bindPopup(() => this.popup(o));
         return m;
       });
-      // Notícias sem coordenada que citam um bairro: ponto aproximado (vazado) em volta do centro do bairro
-      if (this.store.escopo() === 'CIDADE') {
-        for (const a of bairros.aproximadas) {
-          const m = L.circleMarker([a.lat, a.lng], { renderer: this.renderer, radius: CFG.RAIO_PINO, color: CATEGORIA_POR_ID[a.o.cat].cor, weight: 2.2,
-            fillColor: '#ffffff', fillOpacity: 0.85 });
-          m.bindPopup(() => this.popup(a.o) + `<div class="popup-meta">Posição aproximada: centro do bairro ${esc(a.bairro)}</div>`);
-          pinos.push(m);
-        }
-      }
       if (this.cluster.addLayers) this.cluster.addLayers(pinos); else pinos.forEach((p) => this.cluster.addLayer(p));
     }
 
+    // Notícias sem local não viram marcador no centro da cidade: ficam listadas na legenda
     this.layerSemLocal.clearLayers();
-    const d = this.store.dados();
-    const noBairro = new Set(bairros.aproximadas.map((a) => a.o));
-    const semLocal = f.semLocal.filter((o) => !noBairro.has(o));
-    if (this.store.escopo() === 'CIDADE' && c.pinos && mostrarNoticias && semLocal.length && d) {
-      const icone = L.divIcon({ className: 'marcador-sem-local', html: `<div>${semLocal.length} sem local</div>`, iconSize: null });
-      const mk = L.marker([d.centroLat, d.centroLng], { icon: icone, keyboard: false, zIndexOffset: -100 });
-      mk.bindPopup(() => `<div class="popup"><b>${semLocal.length} notícias sem rua nem bairro identificados</b><br><small>Aparecem aqui só como contador; ficam fora do calor e das zonas vermelhas.</small><ul class="lista-sem-local">` +
-        semLocal.slice(0, 15).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul></div>');
-      this.layerSemLocal.addLayer(mk);
-    }
 
     this.desenharBairros(c.bairros && mostrarNoticias && this.store.escopo() === 'CIDADE' ? bairros.lista : [], f);
 
@@ -418,9 +453,9 @@ export class MapaComponent implements OnDestroy {
       });
     }
 
-    // Calor: pontos com local preciso + notícias que só citam o bairro (no centro do bairro)
+    // Calor: só pontos com local exato (rua, endereço, rodovia). O bairro citado aparece na cor do bairro.
     this.pontosCalor = mostrarNoticias
-      ? [...f.precisas.map((o) => [o.lat!, o.lng!, CATEGORIA_POR_ID[o.cat].peso] as [number, number, number]), ...(this.store.escopo() === 'CIDADE' ? bairros.calorExtra : [])]
+      ? this.exatas(f, bairros).map((o) => [o.lat!, o.lng!, CATEGORIA_POR_ID[o.cat].peso] as [number, number, number])
       : [];
     this.atualizarCalor();
     this.enquadrar();

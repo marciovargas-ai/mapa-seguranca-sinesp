@@ -13,6 +13,9 @@ export const CFG = {
   DIAS_CACHE_FRONTEIRAS: 60, // contornos do IBGE guardados no navegador
   CACHE_PACOTES_MB: 40, // dados guardados no navegador (abre na hora; apaga os menos usados)
   MAX_NOTICIAS_POR_PAGINA: 40,
+  // Arquivos publicados pelo robô do GitHub (bairros do IBGE, ISP-RJ); o segundo endereço é reserva
+  BASES_DADOS: ['https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@main/dados/',
+    'https://raw.githubusercontent.com/marciovargas-ai/mapa-seguranca-sinesp/main/dados/'],
 
   RAIO_CALOR_METROS: 350,
   RAIO_CALOR_MIN_PX: 14,

@@ -1,19 +1,20 @@
 import { CacheDisco } from './cache-disco';
 import { Servidor } from './servidor';
-import { CATEGORIA_POR_ID } from './dados';
+import { CATEGORIA_POR_ID, CFG } from './dados';
 import { Ocorrencia } from './modelos';
 import { fetchComTimeout, idadeDias, normalizar } from './util';
 
 /**
- * Bairros do município pelo OpenStreetMap (Overpass), com o contorno quando o
- * OSM tem o limite do bairro (admin_level 9/10) e só o ponto central quando não tem.
- * Busca pelo navegador, guarda 90 dias no disco; o servidor manda a lista de
- * pontos que ele já tem como reserva.
+ * Bairros do município. Primeiro a malha oficial do IBGE (Censo 2022), publicada
+ * pelo robô do GitHub um arquivo por município. Onde o IBGE não tem bairros,
+ * o OpenStreetMap (Overpass), com o contorno quando o OSM tem o limite do bairro
+ * e só o ponto central quando não tem. Guarda 90 dias no disco; o servidor manda
+ * a lista de pontos que ele já tem como reserva.
  */
-export interface Bairro { n: string; lat: number; lng: number; aneis?: [number, number][][] }
+export interface Bairro { n: string; lat: number; lng: number; aneis?: [number, number][][]; fonte?: 'IBGE' | 'OSM' }
 
 export interface BairroResumo {
-  nome: string; lat: number; lng: number; aneis?: [number, number][][]; osm: boolean;
+  nome: string; lat: number; lng: number; aneis?: [number, number][][]; osm: boolean; fonte?: 'IBGE' | 'OSM';
   qtd: number; graves: number; recentes: number; cats: Record<string, number>; catTop: string;
   ocorrencias: Ocorrencia[];
 }
@@ -28,6 +29,8 @@ const LUGAR = '["place"~"^(suburb|neighbourhood|quarter)$"]';
  * navegador, pede ao servidor. `parcial` recebe a lista de pontos assim que chega.
  */
 export async function carregarBairros(ibge: string, parcial?: (lista: Bairro[]) => void): Promise<Bairro[]> {
+  const oficiais = await bairrosIbge(ibge);
+  if (oficiais.length) return oficiais;
   const chave = 'BAIRROS_OSM2_' + ibge;
   const guardado = await CacheDisco.obter<Bairro[]>(chave, DIAS_CACHE);
   if (guardado?.length) return guardado;
@@ -56,6 +59,26 @@ export async function carregarBairros(ibge: string, parcial?: (lista: Bairro[]) 
     return lista;
   }
   return pontos;
+}
+
+/** Malha oficial do IBGE: [] quando o município não tem bairros cadastrados (ou a rede falhou). */
+async function bairrosIbge(ibge: string): Promise<Bairro[]> {
+  const chave = 'BAIRROS_IBGE_' + ibge;
+  const guardado = await CacheDisco.obter<Bairro[]>(chave, DIAS_CACHE);
+  if (guardado?.length) return guardado;
+  // "Não tem no IBGE" vale só 7 dias, para pegar municípios que o robô publicar depois
+  if (await CacheDisco.obter<boolean>('BAIRROS_IBGE_SEM_' + ibge, 7)) return [];
+  for (const base of CFG.BASES_DADOS) {
+    try {
+      const r = await fetchComTimeout(base + 'bairros/' + ibge + '.json', 12000);
+      if (r.status === 404) { CacheDisco.salvar('BAIRROS_IBGE_SEM_' + ibge, true); return []; }
+      if (!r.ok) continue;
+      const lista = ((await r.json()) as Bairro[]).filter((b) => b && b.n && b.aneis?.length).map((b) => ({ ...b, fonte: 'IBGE' as const }));
+      CacheDisco.salvar(chave, lista);
+      return lista;
+    } catch { /* tenta o próximo endereço */ }
+  }
+  return [];
 }
 
 /** Consulta o Overpass nos dois servidores ao mesmo tempo e fica com o primeiro que responder. */
@@ -87,7 +110,7 @@ function montar(elementos: any[]): Bairro[] {
     if (lat == null || lng == null) continue;
     const atual = porNome.get(k);
     // Contorno vale mais que ponto; o ponto do OSM (place=*) é o melhor lugar para o rótulo
-    if (!atual) porNome.set(k, { n: nome, lat: r5(lat), lng: r5(lng), aneis });
+    if (!atual) porNome.set(k, { n: nome, lat: r5(lat), lng: r5(lng), aneis, fonte: 'OSM' });
     else if (!atual.aneis && aneis) porNome.set(k, { ...atual, aneis });
     else if (el.type === 'node' && atual.aneis) porNome.set(k, { ...atual, lat: r5(lat), lng: r5(lng) });
   }
@@ -146,22 +169,21 @@ function dentro(lat: number, lng: number, aneis: [number, number][][]): boolean 
 
 /**
  * Liga cada notícia a um bairro: pelo contorno (quando tem coordenada) ou pelo
- * nome citado. Devolve o resumo por bairro e os pontos extras do mapa de calor
- * (notícias que só citam o bairro entram no centro dele).
+ * nome citado. Devolve o resumo por bairro e as notícias que só entraram pelo
+ * nome do bairro (contam na cor do bairro, sem ponto inventado no mapa).
  */
-export interface Aproximada { o: Ocorrencia; lat: number; lng: number; bairro: string }
+export interface PeloBairro { o: Ocorrencia; bairro: string }
 
 export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
-  { lista: BairroResumo[]; calorExtra: [number, number, number][]; ligadas: number; aproximadas: Aproximada[] } {
+  { lista: BairroResumo[]; ligadas: number; peloBairro: PeloBairro[] } {
   const resumo = new Map<string, BairroResumo>();
   const porNome = new Map(bairros.map((b) => [normalizar(b.n), b]));
   const comContorno = bairros.filter((b) => b.aneis);
   const novo = (b: Bairro, osm: boolean): BairroResumo =>
-    ({ nome: b.n, lat: b.lat, lng: b.lng, aneis: b.aneis, osm, qtd: 0, graves: 0, recentes: 0, cats: {}, catTop: '', ocorrencias: [] });
+    ({ nome: b.n, lat: b.lat, lng: b.lng, aneis: b.aneis, osm, fonte: b.fonte, qtd: 0, graves: 0, recentes: 0, cats: {}, catTop: '', ocorrencias: [] });
   bairros.forEach((b) => resumo.set(normalizar(b.n), novo(b, true)));
 
-  const calorExtra: [number, number, number][] = [];
-  const aproximadas: Aproximada[] = [];
+  const peloBairro: PeloBairro[] = [];
   let ligadas = 0;
   // Nomes de bairro para procurar no título (os mais longos primeiro: "Vila Nova Cachoeirinha" antes de "Vila Nova")
   const procurar = bairros.map((b) => ({ b, n: ' ' + normalizar(b.n) + ' ' })).filter((x) => x.n.length >= 6).sort((a, b) => b.n.length - a.n.length);
@@ -189,22 +211,11 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
     if (o.cat === 'CVLI' || o.cat === 'CONFRONTO') r.graves++;
     if (idadeDias(o.ts) <= 30) r.recentes++;
     r.ocorrencias.push(o);
-    if (!o.precisa) {
-      calorExtra.push([r.lat, r.lng, CATEGORIA_POR_ID[o.cat]?.peso || 0.5]);
-      // Espalha os pontos aproximados num raio de ~300 m em volta do centro do bairro (posição fixa por notícia)
-      const h = hash(o.id || o.titulo);
-      const ang = (h % 360) * (Math.PI / 180), dist = 0.0008 + ((h >> 9) % 100) / 100 * 0.0022;
-      aproximadas.push({ o, lat: r.lat + Math.sin(ang) * dist, lng: r.lng + Math.cos(ang) * dist * 1.1, bairro: r.nome });
-    }
+    // Sem rua/endereço: conta no bairro (a área é pintada), mas não vira ponto no mapa
+    if (!o.precisa || o.precisao === 'BAIRRO') peloBairro.push({ o, bairro: r.nome });
   }
   const lista = [...resumo.values()];
   lista.forEach((r) => { r.catTop = Object.keys(r.cats).sort((a, b) => r.cats[b] - r.cats[a])[0] || ''; });
   lista.sort((a, b) => b.qtd - a.qtd || b.graves - a.graves || a.nome.localeCompare(b.nome));
-  return { lista, calorExtra, ligadas, aproximadas };
-}
-
-function hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
+  return { lista, ligadas, peloBairro };
 }

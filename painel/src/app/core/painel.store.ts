@@ -1,5 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
+import { carregarFogoCruzado, carregarIsp, FogoCruzado, IspMunicipio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
@@ -61,6 +62,14 @@ export class PainelStore {
     const d = this.dados();
     if (this.escopo() !== 'CIDADE' || !d) return [] as Bairro[];
     return b?.ibge === this.ibgeCidade() && b.lista.length ? b.lista : d.bairros || [];
+  });
+  /** Dados oficiais e verificados abaixo do município (ISP-RJ por delegacia, Fogo Cruzado). */
+  readonly isp = signal<{ ibge: string; dado: IspMunicipio | null } | null>(null);
+  readonly fogo = signal<{ chave: string; dado: FogoCruzado | null; carregando: boolean } | null>(null);
+  readonly ispCidade = computed(() => { const v = this.isp(); return v && v.ibge === this.ibgeCidade() ? v.dado : null; });
+  readonly fogoCidade = computed(() => {
+    const v = this.fogo();
+    return v && this.escopo() === 'CIDADE' && v.chave === this.uf() + '|' + this.cidade() ? v : null;
   });
   /** Bairros com as notícias do filtro atual (mapa) e dos 12 meses (Panorama). */
   readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas));
@@ -162,6 +171,7 @@ export class PainelStore {
         .then((lista) => { if (vale()) this.bairrosOsm.set({ ibge, lista: lista.length ? lista : this.bairrosOsm()!.lista, carregando: false }); })
         .catch(() => { if (vale()) this.bairrosOsm.set({ ...this.bairrosOsm()!, carregando: false }); });
     }
+    if (!ehEstado) this.carregarAreas(uf, mun!.nome, mun!.ibge);
     if (this.populacao()?.uf !== uf) {
       this.populacao.set(null);
       carregarPopulacao(uf).then((p) => { if (p && this.uf() === uf) this.populacao.set(p); });
@@ -267,6 +277,20 @@ export class PainelStore {
       if (mun) this.abrirLocal(mun.uf, mun.nome);
       else this.definirStatus('error', 'CEP não encontrado', 'erro');
     }).catch(() => this.definirStatus('error', 'Não foi possível consultar o CEP', 'erro'));
+  }
+
+  private carregarAreas(uf: string, cidade: string, ibge: string): void {
+    if (this.isp()?.ibge !== ibge) {
+      this.isp.set({ ibge, dado: null });
+      carregarIsp(uf, ibge).then((dado) => { if (this.isp()?.ibge === ibge) this.isp.set({ ibge, dado }); });
+    }
+    const chave = uf + '|' + cidade;
+    if (this.fogo()?.chave !== chave) {
+      this.fogo.set({ chave, dado: null, carregando: true });
+      carregarFogoCruzado(uf, cidade)
+        .then((dado) => { if (this.fogo()?.chave === chave) this.fogo.set({ chave, dado, carregando: false }); })
+        .catch(() => { if (this.fogo()?.chave === chave) this.fogo.set({ chave, dado: null, carregando: false }); });
+    }
   }
 
   /** GPS do aparelho; se falhar, localização aproximada pela rede. */
