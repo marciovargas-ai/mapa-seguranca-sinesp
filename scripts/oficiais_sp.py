@@ -56,10 +56,36 @@ def titulo(s):
     s = re.sub(r'\s+', ' ', str(s or '')).strip()
     return s.title() if s and s.upper() not in ('NULL', 'NAO INFORMADO', 'NÃO INFORMADO') else ''
 
-def baixar(url):
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (mapa-seguranca robo)'})
-    with urllib.request.urlopen(req, timeout=1200) as r:
-        return r.read()
+def baixar(url, tentativas=4):
+    import time
+    for i in range(tentativas):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (mapa-seguranca robo)'})
+            with urllib.request.urlopen(req, timeout=1200) as r:
+                return r.read()
+        except Exception as e:
+            if '404' in str(e) or i == tentativas - 1: raise
+            print('  nova tentativa', url, e, flush=True); time.sleep(20 * (i + 1))
+
+def norm(t):
+    s = unicodedata.normalize('NFD', str(t or '').lower())
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9\s]', ' ', s)).strip()
+
+def codigos_sp():
+    """Nome do município → código IBGE (7 dígitos), da base oficial do servidor."""
+    txt = open('servidor/6_Base_Municipios.gs', encoding='utf-8').read()
+    m = re.search(r"'SP': '((?:[^'\\]|\\.)*)'", txt)
+    out = {}
+    for it in (m.group(1).split(';') if m else []):
+        p = it.split('|')
+        if len(p) >= 2: out[norm(p[0].replace("\\'", "'"))] = '35' + p[1]
+    # grafias abreviadas usadas nos boletins (S.PAULO, S.BERNARDO DO CAMPO...)
+    for k in list(out):
+        if k.startswith('sao '): out.setdefault('s ' + k[4:], out[k])
+        if k.startswith('santo '): out.setdefault('sto ' + k[6:], out[k])
+        if k.startswith('santa '): out.setdefault('sta ' + k[6:], out[k])
+    return out
 
 def main():
     import openpyxl
@@ -67,6 +93,8 @@ def main():
     inicio = hoje - datetime.timedelta(days=372)
     mun = defaultdict(lambda: {'cats': Counter(), 'bairros': defaultdict(Counter), 'pontos': [], 'grade': defaultdict(Counter)})
     vistos, rubricas, minimo, maximo = set(), Counter(), None, None
+    por_nome = codigos_sp()
+    print('municípios na base:', len(por_nome), flush=True)
     for ano in (hoje.year, hoje.year - 1):
         try:
             b = baixar(BASE.format(ano))
@@ -96,7 +124,9 @@ def main():
                 if chave in vistos: continue
                 vistos.add(chave)
                 ibge = str(g(row, 'COD IBGE') or '').split('.')[0]
-                if not ibge.isdigit(): continue
+                if not ibge.isdigit() or len(ibge) != 7:
+                    ibge = por_nome.get(norm(g(row, 'NOME_MUNICIPIO_CIRCUNSCRICAO') or g(row, 'NOME_MUNICIPIO')), '')
+                if not ibge: continue
                 m = mun[ibge]
                 m['cats'][cat] += 1
                 bai = titulo(g(row, 'BAIRRO'))
