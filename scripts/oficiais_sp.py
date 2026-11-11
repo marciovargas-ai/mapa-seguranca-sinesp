@@ -14,8 +14,8 @@ SAIDA = 'dados/oficial'
 CELULA = 0.003  # graus (~330 m)
 
 CATS = [  # ordem importa
+    ('tentativa', re.compile(r'tentativa|tentad[oa]', re.I)),
     ('cvli', re.compile(r'homic[ií]dio (simples|qualificado|doloso)|feminic|latroc|roubo seguido de morte|les[aã]o corporal seguida de morte', re.I)),
-    ('tentativa', re.compile(r'tentativa de homic|homic[ií]dio.*tentad', re.I)),
     ('estupro', re.compile(r'estupro', re.I)),
     ('veiculo', re.compile(r'(roubo|furto).{0,20}ve[ií]culo|ve[ií]culo.{0,20}(roubo|furto)', re.I)),
     ('carga', re.compile(r'roubo.{0,10}carga', re.I)),
