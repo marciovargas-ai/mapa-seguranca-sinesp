@@ -13,6 +13,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TourComponent } from './tour';
+import { FaccoesComponent } from './painel/faccoes';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -32,6 +33,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   { id: 'OFICIAL', rotulo: 'Dados oficiais', icone: 'account_balance' },
   { id: 'ESTADO', rotulo: 'Estado', icone: 'map' },
   { id: 'ZONAS', rotulo: 'Zonas', icone: 'crisis_alert' },
+  { id: 'FACCOES', rotulo: 'Facções e disputas', icone: 'groups' },
   { id: 'NOTICIAS', rotulo: 'Notícias', icone: 'newspaper' },
 ];
 
@@ -41,7 +43,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, NoticiasComponent, DeltaComponent, TourComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()' },
   template: `
@@ -81,7 +83,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
 
     <main class="corpo" #corpo [style.--largura-painel.px]="larguraPainel()">
       <section class="area-mapa"><app-mapa /></section>
-      @if (tourAberto()) { <app-tour (fechar)="fecharTour()" /> }
+      @if (tourAberto()) { <app-tour (fechar)="fecharTour($event)" /> }
 
       <div class="divisor" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"
         (pointerdown)="iniciarArraste($event)" (keydown.arrowleft)="ajustar(40)" (keydown.arrowright)="ajustar(-40)" (dblclick)="larguraPadrao()">
@@ -156,6 +158,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
                     @case ('OFICIAL') { <app-oficial /> }
                     @case ('ESTADO') { <app-estado /> }
                     @case ('ZONAS') { <app-zonas /> }
+                    @case ('FACCOES') { <app-faccoes /> }
                     @case ('NOTICIAS') { <app-geral /><app-noticias /> }
                   }
                 </div>
@@ -355,9 +358,9 @@ export class App {
   /** Como ler o painel: tour que passa por cada parte da tela. */
   protected readonly tourAberto = signal(false);
   protected ajuda(): void { this.tourAberto.set(true); }
-  protected fecharTour(): void {
+  protected fecharTour(naoMostrar: boolean): void {
     this.tourAberto.set(false);
-    gravarLocal(CFG.CHAVE_AJUDA_VISTA, '1');
+    if (naoMostrar) gravarLocal(CFG.CHAVE_AJUDA_VISTA, '1');
   }
 
   // --------------------------------------------------------------------------

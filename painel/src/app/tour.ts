@@ -16,6 +16,7 @@ const PASSOS: Passo[] = [
   { alvo: '.abas', titulo: 'Abas', texto: 'Panorama junta todas as fontes; Dados oficiais detalha o Sinesp ano a ano; Estado compara os municípios; Zonas lista as áreas mais violentas; Notícias traz cada ocorrência com link.' },
   { alvo: '.cartao.parecer', aba: 'PANORAMA', titulo: 'Parecer', texto: 'Resumo em texto escrito automaticamente a partir dos dados: quantas mortes, a tendência, a taxa por 100 mil comparada ao estado e os bairros mais citados.' },
   { alvo: '.cartao.risco', aba: 'PANORAMA', titulo: 'Índice de criminalidade', texto: 'De 0 a 100, comparando a cidade com os municípios do Brasil: mortes violentas, roubos (onde o estado publica), tentativas de homicídio e tendência, por 100 mil habitantes. Em cidades pequenas, o selo avisa quando há poucos casos. Abra "Ver os números de cada parte" para conferir.' },
+  { alvo: '.abas', aba: 'FACCOES', titulo: 'Facções e disputas', texto: 'Bairros com mais sinais de atuação de facções: tiroteios em disputa entre grupos armados (Fogo Cruzado, em Rio, Recife, Salvador e Belém), notícias que citam facção ou tráfico e registros oficiais de tráfico. Só entra o que foi registrado, com a fonte.' },
   { alvo: '.cartao.trafico', aba: 'PANORAMA', titulo: 'Tráfico e facções', texto: 'Notícias de tráfico e de facções ou milícias citadas, o tráfico no estado (o Sinesp não publica por cidade), apreensões do ISP no RJ e disputas entre grupos armados do Fogo Cruzado.' },
   { alvo: '.abas', aba: 'ZONAS', titulo: 'Zonas vermelhas', texto: 'As áreas onde as ocorrências graves e recentes se concentram, com índice (100 = a mais intensa), tendência dos últimos 30 dias e botão para ver no mapa.' },
   { alvo: '.abas', aba: 'NOTICIAS', titulo: 'Notícias', texto: 'Cada notícia com veículo, data, bairro e órgãos citados. Notícias são complemento: servem para localizar e acompanhar, não substituem a estatística oficial.' },
@@ -29,19 +30,22 @@ const PASSOS: Passo[] = [
     @let c = caixa();
     <div class="foco" [style.top.px]="c.top" [style.left.px]="c.left" [style.width.px]="c.width" [style.height.px]="c.height"></div>
     <div class="balao" role="dialog" aria-live="polite" [style.top.px]="balao().top" [style.left.px]="balao().left">
+      <button type="button" class="x" aria-label="Fechar o tour" (click)="fechar.emit(false)"><span class="material-symbols-outlined">close</span></button>
       <div class="contador">{{ i() + 1 }} de {{ total }}</div>
       <h3>{{ passo().titulo }}</h3>
       <p>{{ passo().texto }}</p>
       <div class="acoes">
-        <button mat-button (click)="fechar.emit()">Sair</button>
+        <button mat-button (click)="fechar.emit(true)">Não mostrar novamente</button>
         <span class="esp"></span>
         @if (i() > 0) { <button mat-stroked-button (click)="ir(i() - 1)">Anterior</button> }
-        <button mat-flat-button (click)="i() + 1 < total ? ir(i() + 1) : fechar.emit()">{{ i() + 1 < total ? 'Próximo' : 'Concluir' }}</button>
+        <button mat-flat-button (click)="i() + 1 < total ? ir(i() + 1) : fechar.emit(false)">{{ i() + 1 < total ? 'Próximo' : 'Concluir' }}</button>
       </div>
     </div>
   `,
   styles: `
     :host { position: fixed; inset: 0; z-index: 2000; }
+    .x { position: absolute; top: 6px; right: 6px; border: 0; background: none; color: inherit; cursor: pointer; padding: 4px; border-radius: 50%; display: grid; place-items: center; }
+    .x:hover { background: var(--mat-sys-surface-container-high); }
     .foco { position: fixed; border-radius: var(--raio-m); box-shadow: 0 0 0 9999px rgba(10, 20, 40, .6); outline: 3px solid var(--mat-sys-primary);
       transition: all .25s ease; pointer-events: none; }
     .balao { position: fixed; width: min(360px, calc(100vw - 32px)); background: var(--mat-sys-surface-container-lowest); color: var(--mat-sys-on-surface);
@@ -55,7 +59,8 @@ const PASSOS: Passo[] = [
 })
 export class TourComponent {
   private readonly store = inject(PainelStore);
-  readonly fechar = output<void>();
+  /** true = "Não mostrar novamente" */
+  readonly fechar = output<boolean>();
   protected readonly total = PASSOS.length;
   protected readonly i = signal(0);
   protected readonly passo = computed(() => PASSOS[this.i()]);
@@ -102,7 +107,7 @@ export class TourComponent {
 
   @HostListener('window:resize') protected redimensionar(): void { this.tick.update((v) => v + 1); }
   @HostListener('document:keydown', ['$event']) protected tecla(e: KeyboardEvent): void {
-    if (e.key === 'Escape') this.fechar.emit();
+    if (e.key === 'Escape') this.fechar.emit(false);
     else if (e.key === 'ArrowRight' && this.i() + 1 < this.total) this.ir(this.i() + 1);
     else if (e.key === 'ArrowLeft' && this.i() > 0) this.ir(this.i() - 1);
   }

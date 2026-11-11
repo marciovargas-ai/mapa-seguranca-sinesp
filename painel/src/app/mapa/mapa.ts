@@ -83,7 +83,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
         @if (leg.oficial; as of) {
           <div class="legenda-oficial"><b>Dados oficiais · {{ of.orgao }}</b>
-            <span>{{ of.total }} ocorrências registradas ({{ of.cats }}), {{ of.periodo }}. Bairros pintados pelo número oficial; quadrados = local do crime contra a vida.</span></div>
+            <span>{{ of.total }} ocorrências registradas ({{ of.cats }}), {{ of.periodo }}. Bairros pintados pelo número oficial; aproxime o mapa para ver os quadrados com o local de cada crime contra a vida.</span></div>
         }
         @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
         @if (leg.fogo; as fc) {
@@ -347,7 +347,10 @@ export class MapaComponent implements OnDestroy {
       : L.layerGroup();
     this.cluster.addTo(map);
 
-    map.on('zoomend', () => this.atualizarCalor());
+    // Mapa limpo de longe: pontos oficiais e rótulos extras só aparecem ao aproximar
+    const marcarZoom = () => { const z = map.getZoom(); map.getContainer().classList.toggle('zoom-longe', z < 13); map.getContainer().classList.toggle('zoom-perto', z >= 14); };
+    map.on('zoomend', () => { this.atualizarCalor(); marcarZoom(); });
+    marcarZoom();
     map.on('dragstart', () => (this.usuarioMoveu = true));
     map.on('zoomstart', () => { if (!this.movimentoProgramatico) this.usuarioMoveu = true; });
     map.on('moveend', () => (this.movimentoProgramatico = false));
@@ -513,9 +516,9 @@ export class MapaComponent implements OnDestroy {
         this.layerBairros.addLayer(forma);
       }
     });
-    // Rótulos dos bairros com mais registros (os 30 maiores)
-    lista.filter((b) => valor(b)).sort((a, b) => valor(b) - valor(a)).slice(0, 30).forEach((b) => {
-      const icone = L.divIcon({ className: 'rotulo-bairro', iconSize: null, iconAnchor: [-6, 12],
+    // Rótulos: os 8 bairros com mais registros sempre; até 30 só quando o mapa está aproximado
+    lista.filter((b) => valor(b)).sort((a, b) => valor(b) - valor(a)).slice(0, 30).forEach((b, i) => {
+      const icone = L.divIcon({ className: 'rotulo-bairro' + (i >= 8 ? ' rotulo-extra' : ''), iconSize: null, iconAnchor: [-6, 12],
         html: `<div><i style="background:${ob ? '#113366' : CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i>${esc(b.nome)} <b>(${fmt(valor(b))})</b></div>` });
       const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome, pane: 'paneRotulos' });
       mk.bindPopup(() => this.popupBairro(b));

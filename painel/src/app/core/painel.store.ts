@@ -14,7 +14,7 @@ import { aplicarPeriodo, mesesDoPeriodo } from './periodo';
 import { Servidor } from './servidor';
 import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsParaData } from './util';
 
-export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
+export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'FACCOES' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
 export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean }
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
@@ -32,7 +32,7 @@ export class PainelStore {
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
   readonly aba = signal<Aba>('PANORAMA');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true });
+  readonly camadas = signal<Camadas>({ zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
@@ -72,7 +72,7 @@ export class PainelStore {
 
   /** Bairros do OpenStreetMap da cidade aberta (com contorno quando o OSM tem). */
   readonly bairrosOsm = signal<{ ibge: string; lista: Bairro[]; carregando: boolean } | null>(null);
-  private readonly listaBairros = computed(() => {
+  readonly listaBairros = computed(() => {
     const b = this.bairrosOsm();
     const d = this.dados();
     if (this.escopo() !== 'CIDADE' || !d) return [] as Bairro[];
@@ -208,7 +208,7 @@ export class PainelStore {
     this.uf.set(uf);
     this.escopo.set(ehEstado ? 'ESTADO' : 'CIDADE');
     this.cidade.set(ehEstado ? '' : mun!.nome);
-    if (ehEstado && this.aba() === 'ZONAS') this.aba.set('ESTADO');
+    if (ehEstado && (this.aba() === 'ZONAS' || this.aba() === 'FACCOES')) this.aba.set('ESTADO');
     if (!ehEstado && this.aba() === 'ESTADO') this.aba.set('PANORAMA');
     if (ufMudou) this.eventoPanorama.set(0);
 

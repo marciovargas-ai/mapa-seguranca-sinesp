@@ -9,6 +9,7 @@ import { PainelStore } from '../core/painel.store';
 import { fmt, fmt1, normalizar, pct, variacao } from '../core/util';
 import { DeltaComponent, GraficoComponent } from './comuns';
 import { InsightsComponent } from './insights';
+import { FACCOES } from '../core/faccoes';
 
 const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
@@ -471,20 +472,4 @@ function resumoFaccoes(itens: Tiroteio[]) {
   };
 }
 
-/** Facções e grupos citados nas manchetes (texto já normalizado: minúsculas, sem acento). */
-const FACCOES: { nome: string; re: RegExp }[] = [
-  { nome: 'PCC', re: /\bpcc\b|primeiro comando da capital/ },
-  { nome: 'Comando Vermelho', re: /comando vermelho|\bcv\b/ },
-  { nome: 'Terceiro Comando Puro', re: /terceiro comando|\btcp\b/ },
-  { nome: 'Amigos dos Amigos', re: /amigos dos amigos/ },
-  { nome: 'Milícia', re: /\bmilicia|\bmilicianos?\b/ },
-  { nome: 'Os Manos', re: /\bos manos\b/ },
-  { nome: 'Bala na Cara', re: /bala na cara/ },
-  { nome: 'Guardiões do Estado (GDE)', re: /guardioes do estado|\bgde\b/ },
-  { nome: 'Sindicato do Crime', re: /sindicato do crime/ },
-  { nome: 'Família do Norte', re: /familia do norte|\bfdn\b/ },
-  { nome: 'Bonde do Maluco', re: /bonde do maluco|\bbdm\b/ },
-  { nome: 'PGC', re: /primeiro grupo catarinense|\bpgc\b/ },
-  { nome: 'Comando Classe A', re: /comando classe a/ },
-  { nome: 'Facção (sem nome)', re: /\bfac(c|ç)(ao|oes)\b/ },
-];
+

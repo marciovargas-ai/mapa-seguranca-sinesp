@@ -101,6 +101,8 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
   padding: 2px 7px; font: 600 11.5px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
 .rotulo-bairro div:hover { background: #fcd34d; }
 .rotulo-bairro i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; }
+.leaflet-container:not(.zoom-perto) .rotulo-extra { display: none; }
+.leaflet-container:not(.zoom-perto) .ponto-oficial { display: none; }
 .popup-tags { margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .popup-tag { font-weight: 600; }
 .rotulo-zona div { width: 24px; height: 24px; border-radius: 50%; color: #fff; font: 700 12px/24px Roboto, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
