@@ -9,7 +9,7 @@ import { fetchComTimeout } from './util';
  *  - Fogo Cruzado: tiroteios com coordenada exata (Grande Rio, Recife, Salvador, Belém),
  *    buscado pelo servidor com a conta gravada nas propriedades do script.
  */
-export interface AreaIsp { cisp: number; aisp: number; u12: Record<string, number>; a12: Record<string, number> }
+export interface AreaIsp { cisp: number; aisp: number; u12: Record<string, number>; a12: Record<string, number>; aneis?: [number, number][][]; lat?: number; lng?: number }
 export interface IspMunicipio { fonte: string; periodo: { de: string; ate: string }; campos: Record<string, string>; areas: AreaIsp[] }
 
 export interface Tiroteio {
@@ -21,27 +21,36 @@ export interface FogoCruzado { configurado: boolean; erro?: string; atualizadoEm
 export const UFS_FOGO_CRUZADO = ['RJ', 'PE', 'BA', 'PA'];
 
 let arquivoIsp: Promise<any | null> | null = null;
+let arquivoContornos: Promise<any | null> | null = null;
+
+async function baixarDados(nome: string, chave: string, dias: number): Promise<any | null> {
+  const guardado = await CacheDisco.obter<any>(chave, dias);
+  if (guardado) return guardado;
+  for (const base of CFG.BASES_DADOS) {
+    try {
+      const r = await fetchComTimeout(base + nome, 20000);
+      if (!r.ok) continue;
+      const j = await r.json();
+      CacheDisco.salvar(chave, j);
+      return j;
+    } catch { /* próximo endereço */ }
+  }
+  return null;
+}
 
 /** Áreas de delegacia do município (só RJ). null quando não há. */
 export async function carregarIsp(uf: string, ibge: string): Promise<IspMunicipio | null> {
   if (uf !== 'RJ' || !ibge) return null;
-  arquivoIsp ??= (async () => {
-    const guardado = await CacheDisco.obter<any>('ISP_RJ_CISP', 3);
-    if (guardado) return guardado;
-    for (const base of CFG.BASES_DADOS) {
-      try {
-        const r = await fetchComTimeout(base + 'isp_rj_cisp.json', 15000);
-        if (!r.ok) continue;
-        const j = await r.json();
-        CacheDisco.salvar('ISP_RJ_CISP', j);
-        return j;
-      } catch { /* próximo endereço */ }
-    }
-    return null;
-  })();
+  arquivoIsp ??= baixarDados('isp_rj_cisp.json', 'ISP_RJ_CISP', 3);
+  arquivoContornos ??= baixarDados('cisp_rj_contornos.json', 'ISP_RJ_CONTORNOS', 30);
   const j = await arquivoIsp;
   if (!j) { arquivoIsp = null; return null; }
-  const areas: AreaIsp[] = j.municipios?.[ibge.slice(0, 6)] || [];
+  const contornos = (await arquivoContornos)?.cisps || {};
+  if (!contornos || !Object.keys(contornos).length) arquivoContornos = null;
+  const areas: AreaIsp[] = (j.municipios?.[ibge.slice(0, 6)] || []).map((a: AreaIsp) => {
+    const c = contornos[String(a.cisp)];
+    return c ? { ...a, aneis: c.aneis, lat: c.lat, lng: c.lng } : a;
+  });
   return areas.length ? { fonte: j.fonte, periodo: j.periodo, campos: j.campos, areas } : null;
 }
 

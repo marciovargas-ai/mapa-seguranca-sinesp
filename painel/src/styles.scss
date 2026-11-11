@@ -77,3 +77,5 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .rotulo-zona div { width: 24px; height: 24px; border-radius: 50%; color: #fff; font: 700 12px/24px Roboto, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 html.tema-escuro .leaflet-popup-content-wrapper, html.tema-escuro .leaflet-popup-tip { background: #1e2530; color: #e2e8f0; }
 html.tema-escuro .popup-meta { color: #94a3b8; }
+
+.rotulo-delegacia div { background: rgba(127, 29, 29, .88); color: #fff; font: 600 11px/1.2 Roboto, sans-serif; padding: 2px 6px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -50%); }

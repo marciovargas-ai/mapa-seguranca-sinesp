@@ -14,7 +14,7 @@ import { fetchComTimeout, gravarLocal, lerLocal, normalizar } from './util';
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
-export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean }
+export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean }
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
@@ -30,7 +30,7 @@ export class PainelStore {
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
   readonly aba = signal<Aba>('PANORAMA');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true });
+  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);

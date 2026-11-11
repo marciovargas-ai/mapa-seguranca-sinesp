@@ -72,6 +72,9 @@ export function agregar(o: Oficial, g: Grupo): Agregado | null {
 }
 
 /** Linhas municipais de um grupo, somando os rankings do panorama (um por indicador). */
+/** Taxa de mortes violentas intencionais do Brasil em 2025, por 100 mil (Anuário Brasileiro de Segurança Pública 2026). */
+const MVI_BRASIL_100MIL = 19.1;
+
 function municipiosDoGrupo(p: Panorama | null, g: Grupo, pop: PopulacaoUf | null): Municipal[] {
   if (!p?.uf) return [];
   const rks = (p?.rankings || []).filter((r) => GRUPOS[g].re.test(r.evento) && r.todas);
@@ -208,15 +211,29 @@ export function compilar(c: Entrada): Compilado {
     indicadores.push({
       id: 'bairros', titulo: 'Bairros com ocorrência', valor: fmt(comBairro.length), unidade: c.bairrosOsm ? `de ${fmt(c.bairrosOsm)}` : '',
       sub: (comBairro[0] ? `mais citado: ${comBairro[0].nome} (${fmt(comBairro[0].qtd)})` : 'nenhum bairro citado') + ` · ${fmt(z.length)} zonas vermelhas`,
-      tom: z.some((x) => x.nivel === 'critica') ? 'alerta' : 'neutro', fonte: 'Notícias + OpenStreetMap',
-      dica: 'Cada notícia é ligada ao bairro pelo contorno do OpenStreetMap (quando tem coordenada) ou pelo nome citado. Zonas vermelhas = concentrações de ocorrências graves e recentes.',
+      tom: z.some((x) => x.nivel === 'critica') ? 'alerta' : 'neutro', fonte: 'Notícias + IBGE',
+      dica: 'Cada notícia é ligada ao bairro pelo contorno oficial do IBGE (OpenStreetMap onde o IBGE não tem) ou pelo nome citado. Zonas vermelhas = concentrações de ocorrências graves e recentes.',
     });
   }
 
   // Índice de risco (só para município: compara com o próprio estado)
   if (!c.ehEstado && o) {
     const comps: Componente[] = [];
-    if (posMvi.percentil != null) comps.push({ nome: 'Letalidade (MVI por 100 mil)', peso: 40, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis` });
+    if (posMvi.percentil != null) comps.push({ nome: 'Letalidade no estado (MVI por 100 mil)', peso: 30, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis do estado` });
+    // Referência absoluta: taxa de MVI do Brasil em 2025 (Anuário Brasileiro de Segurança Pública 2026). 50 = média nacional.
+    if (posMvi.pos?.taxa != null) {
+      const vBr = Math.round(Math.max(0, Math.min(100, (posMvi.pos.taxa / (2 * MVI_BRASIL_100MIL)) * 100)));
+      comps.push({ nome: 'Letalidade frente ao Brasil', peso: 25, valor: vBr,
+        texto: `${fmt1(posMvi.pos.taxa)} por 100 mil; média nacional ≈ ${fmt1(MVI_BRASIL_100MIL)} (Anuário FBSP 2026, dado de 2025)` });
+    }
+    // Volume: quantas mortes o município concentra (capitais grandes têm taxa média, mas muitos casos)
+    const meu = linhasMvi.find((l) => l.ibge === c.ibge)?.total || 0;
+    const totais = linhasMvi.filter((l) => (l.pop || 0) >= MIN_POP || l.ibge === c.ibge).map((l) => l.total);
+    if (totais.length >= 5 && meu > 0) {
+      const pv = Math.round((totais.filter((t) => t < meu).length / totais.length) * 100);
+      const totEst = soma(linhasMvi.map((l) => l.total));
+      comps.push({ nome: 'Volume de mortes', peso: 15, valor: pv, texto: `${fmt(meu)} mortes violentas, ${pct(meu, totEst)}% do estado` });
+    }
     const ten = posicionar(municipiosDoGrupo(c.panorama, 'tentativas', c.pop), c.pop, c.ibge);
     if (ten.percentil != null) comps.push({ nome: 'Tentativas de homicídio', peso: 15, valor: ten.percentil, texto: `acima de ${ten.percentil}% dos municípios comparáveis` });
     const fem = posicionar(municipiosDoGrupo(c.panorama, 'feminicidio', c.pop), c.pop, c.ibge);
@@ -235,8 +252,8 @@ export function compilar(c: Entrada): Compilado {
       const [nivel, cor] = valor >= 75 ? ['Muito alto', '#b91c1c'] : valor >= 55 ? ['Alto', '#ea580c'] : valor >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a'];
       risco = {
         valor, nivel, cor, componentes: comps,
-        dica: 'Índice de 0 a 100 que compara o município com os demais do estado (20 mil hab. ou mais). Média ponderada dos componentes: ' +
-          comps.map((x) => `${x.nome} (${Math.round((x.peso / pesoTotal) * 100)}%)`).join(', ') + '. 50 = no meio do estado.',
+        dica: 'Índice de 0 a 100. Compara o município com os demais do estado (20 mil hab. ou mais) e com a média do Brasil, e considera o volume de mortes. Média ponderada dos componentes: ' +
+          comps.map((x) => `${x.nome} (${Math.round((x.peso / pesoTotal) * 100)}%)`).join(', ') + '.',
       };
     }
   }

@@ -32,7 +32,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
 
       @if (c.risco; as r) {
         <article class="cartao risco" [matTooltip]="r.dica" matTooltipClass="dica-larga">
-          <header><mat-icon>speed</mat-icon><h3>Índice de risco local</h3><mat-icon class="info">info</mat-icon></header>
+          <header><mat-icon>speed</mat-icon><h3>Índice de risco</h3><mat-icon class="info">info</mat-icon></header>
           <div class="medidor">
             <svg viewBox="0 0 120 68" aria-hidden="true">
               <path d="M10 62 A50 50 0 0 1 110 62" class="trilho" />

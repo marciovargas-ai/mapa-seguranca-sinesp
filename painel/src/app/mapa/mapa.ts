@@ -11,7 +11,7 @@ import { Ocorrencia } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
 import { Camadas, PainelStore } from '../core/painel.store';
 import { Servidor } from '../core/servidor';
-import { Tiroteio } from '../core/areas';
+import { AreaIsp, IspMunicipio, Tiroteio } from '../core/areas';
 import { esc, fetchComTimeout, fmt, fmt1, urlSegura } from '../core/util';
 
 declare const L: any;
@@ -57,6 +57,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       <div class="legenda">
         <div class="legenda-titulo">{{ leg.total }} notícias · {{ leg.noMapa }} com local exato</div>
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
+        @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
         @if (leg.fogo) { <div class="legenda-fogo"><i></i>{{ leg.fogo }} tiroteios verificados (Fogo Cruzado)</div> }
         @if (leg.semLocal) {
           <details class="sem-bairro">
@@ -94,6 +95,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .legenda-sub { color: var(--mat-sys-on-surface-variant); margin-bottom: 6px; }
     .legenda-fogo { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .legenda-fogo i { width: 10px; height: 10px; border-radius: 50%; background: #dc2626; border: 2px solid #111827; }
+    .legenda-fogo i.area { border-radius: 2px; background: linear-gradient(90deg, #fde0c5, #8a1538); border: 1px solid #7f1d1d; flex: none; }
     .sem-bairro { margin: -2px 0 6px; color: var(--mat-sys-on-surface-variant); }
     .sem-bairro summary { cursor: pointer; }
     .sem-bairro ul { max-height: 160px; overflow: auto; margin: 4px 0 0; padding-left: 16px; }
@@ -124,6 +126,7 @@ export class MapaComponent implements OnDestroy {
     { id: 'zonas', nome: 'Zonas vermelhas', icone: 'crisis_alert' },
     { id: 'calor', nome: 'Mapa de calor', icone: 'local_fire_department' },
     { id: 'pinos', nome: 'Ocorrências', icone: 'location_on' },
+    { id: 'delegacias', nome: 'Áreas de delegacia (oficial, RJ)', icone: 'local_police' },
     { id: 'bairros', nome: 'Nomes dos bairros', icone: 'label' },
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
     { id: 'vizinhos', nome: 'Municípios vizinhos (taxa oficial)', icone: 'grid_view' },
@@ -139,6 +142,7 @@ export class MapaComponent implements OnDestroy {
   private layerZonas: any;
   private layerSemLocal: any;
   private layerFogo: any;
+  private layerDelegacias: any;
   private layerBairros: any;
   private layerCoropletico: any;
   private cluster: any;
@@ -193,6 +197,7 @@ export class MapaComponent implements OnDestroy {
     return {
       total: fmt(f.todas.length), noMapa: fmt(this.exatas(f, this.store.bairrosMapa()).length), bairro: peloBairro.length ? fmt(peloBairro.length) : '',
       semLocal: sem.length ? fmt(sem.length) : '', listaSem: sem.slice(0, 30),
+      delegacias: this.camadas().delegacias && !!this.store.ispCidade()?.areas.some((a) => a.aneis?.length),
       fogo: this.store.fogoCidade()?.dado?.itens.length ? fmt(this.store.fogoCidade()!.dado!.itens.length) : '',
       cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
     };
@@ -228,6 +233,10 @@ export class MapaComponent implements OnDestroy {
       if (window.innerWidth <= 900) this.alvo().nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     // Mudou o local: volta a enquadrar automaticamente
+    effect(() => {
+      const i = this.store.ispCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo();
+      untracked(() => this.desenharDelegacias(i, c.delegacias && !cor && this.store.escopo() === 'CIDADE'));
+    });
     effect(() => {
       const f = this.store.fogoCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo();
       untracked(() => this.desenharFogo(f?.dado?.itens || [], c.pinos && !cor));
@@ -275,6 +284,7 @@ export class MapaComponent implements OnDestroy {
     this.layerZonas = L.layerGroup().addTo(map);
     this.layerSemLocal = L.layerGroup().addTo(map);
     this.layerFogo = L.layerGroup().addTo(map);
+    this.layerDelegacias = L.layerGroup().addTo(map);
     this.layerBairros = L.layerGroup().addTo(map);
     this.cluster = typeof L.markerClusterGroup === 'function'
       ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 40, disableClusteringAtZoom: 16, showCoverageOnHover: false, spiderfyOnMaxZoom: true })
@@ -337,6 +347,35 @@ export class MapaComponent implements OnDestroy {
   }
 
   /** Resumo do bairro: quantidade por tipo, gravidade e as notícias mais recentes. */
+  /**
+   * Áreas de delegacia (CISP) do ISP-RJ pintadas pela letalidade violenta dos últimos 12 meses
+   * publicados: dado oficial, por baixo dos bairros.
+   */
+  private desenharDelegacias(isp: IspMunicipio | null, visivel: boolean): void {
+    if (!this.map) return;
+    this.layerDelegacias.clearLayers();
+    const areas = (isp?.areas || []).filter((a) => a.aneis?.length);
+    if (!visivel || !areas.length) return;
+    const val = (a: AreaIsp) => a.u12['letalidade_violenta'] || 0;
+    const max = Math.max(1, ...areas.map(val));
+    for (const a of areas) {
+      const v = val(a), antes = a.a12['letalidade_violenta'] || 0;
+      const cor = ESCALA[Math.min(ESCALA.length - 1, Math.floor((Math.sqrt(v) / Math.sqrt(max)) * ESCALA.length))];
+      const forma = L.polygon(a.aneis, { pane: 'paneCoropletico', renderer: this.renderer, color: '#7f1d1d', weight: 1, opacity: 0.7,
+        fillColor: cor, fillOpacity: 0.5 });
+      const linhas = Object.entries(isp!.campos).filter(([k]) => a.u12[k] != null)
+        .map(([k, n]) => `<li>${esc(n)}: <b>${fmt(a.u12[k])}</b> <small>(antes ${fmt(a.a12[k] || 0)})</small></li>`).join('');
+      forma.bindTooltip(`<b>${a.cisp}ª DP</b> · ${fmt(v)} mortes violentas (ISP, 12 meses)`, { sticky: true });
+      forma.bindPopup(`<div class="popup"><b>Área da ${a.cisp}ª DP</b><br>Letalidade violenta: <b>${fmt(v)}</b> nos 12 meses (antes: ${fmt(antes)})` +
+        `<ul class="lista-sem-local">${linhas}</ul><div class="popup-meta">Fonte oficial: ${esc(isp!.fonte)} · ${esc(isp!.periodo.de)} a ${esc(isp!.periodo.ate)}</div></div>`);
+      this.layerDelegacias.addLayer(forma);
+      if (a.lat != null && v > 0) {
+        this.layerDelegacias.addLayer(L.marker([a.lat, a.lng], { pane: 'paneRotulos', keyboard: false, interactive: false,
+          icon: L.divIcon({ className: 'rotulo-delegacia', iconSize: null, html: `<div>${a.cisp}ª DP · ${fmt(v)}</div>` }) }));
+      }
+    }
+  }
+
   /** Tiroteios do Fogo Cruzado: local exato, checado pelo instituto (ponto vermelho com borda preta). */
   private desenharFogo(itens: Tiroteio[], visivel: boolean): void {
     if (!this.map) return;
