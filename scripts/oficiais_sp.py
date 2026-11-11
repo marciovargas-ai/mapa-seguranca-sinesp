@@ -44,8 +44,11 @@ def data(v):
     if isinstance(v, datetime.datetime): return v.date()
     if isinstance(v, datetime.date): return v
     s = str(v or '').strip()
-    for f in ('%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S'):
-        try: return datetime.datetime.strptime(s[:19] if ' ' in s else s[:10], f).date()
+    if isinstance(v, (int, float)) and 20000 < v < 80000:  # número de série do Excel
+        return datetime.date(1899, 12, 30) + datetime.timedelta(days=int(v))
+    s = s.split(' ')[0].split('T')[0]
+    for f in ('%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y', '%d-%m-%Y', '%Y/%m/%d'):
+        try: return datetime.datetime.strptime(s, f).date()
         except ValueError: pass
     return None
 
@@ -75,11 +78,15 @@ def main():
             it = ws.iter_rows(values_only=True)
             cab = next(it, None)
             if not cab or 'RUBRICA' not in cab: continue
-            ix = {c: i for i, c in enumerate(cab) if c}
+            ix = {str(c).strip().upper(): i for i, c in enumerate(cab) if c}
             g = lambda row, c: row[ix[c]] if c in ix and ix[c] < len(row) else None
-            n = 0
+            col_data = next((c for c in ('DATA_OCORRENCIA_BO', 'DATA_OCORRENCIA', 'DATA_FATO', 'DATA_REGISTRO') if c in ix), None)
+            print('  colunas', ws.title, list(ix)[:32], '| data em', col_data, flush=True)
+            n, amostra = 0, 0
             for row in it:
-                d = data(g(row, 'DATA_OCORRENCIA_BO'))
+                bruto = g(row, col_data)
+                d = data(bruto)
+                if amostra < 3: print('    exemplo de data:', repr(bruto), '->', d, flush=True); amostra += 1
                 if not d or d < inicio or d > hoje: continue
                 rub, nat = g(row, 'RUBRICA'), g(row, 'NATUREZA_APURADA')
                 rubricas[str(rub)] += 1
