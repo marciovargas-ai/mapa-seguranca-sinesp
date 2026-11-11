@@ -20,14 +20,30 @@
 <body>
   <app-root></app-root>
   <script>var BASE_MUNICIPIOS_BR = <?!= obterBaseMunicipiosJson() ?>;</script>
-  <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
-  <script>window.__PAINEL_APP = [];</script>
-  <?!= incluir('Painel_App_1'); ?>
-  <?!= incluir('Painel_App_2'); ?>
-  <?!= incluir('Painel_App_3'); ?>
-  <?!= incluir('Painel_App_4'); ?>
-  <?!= incluir('Painel_App_5'); ?>
-  <?!= incluir('Painel_App_6'); ?>
-  <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
+  <!-- Aplicativo Angular pela CDN (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
+  <script>
+  (function () {
+    var URL_APP = 'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@ce1aa5280032ae6f4ea71dd65c3f8d4d4d0133e5/publicado/painel.js';
+    var PARTES = 6;
+    var feito = false;
+    function reserva() {
+      if (feito) return; feito = true;
+      var partes = [], recebidas = 0;
+      var run = (window.google && google.script && google.script.run) || window.__servidorTeste;
+      for (var i = 1; i <= PARTES; i++) (function (i) {
+        run.withSuccessHandler(function (t) {
+          partes[i - 1] = t;
+          if (++recebidas === PARTES) (new Function(partes.join('')))();
+        }).obterParteApp(i);
+      })(i);
+    }
+    var s = document.createElement('script');
+    s.src = URL_APP;
+    s.onload = function () { feito = true; };
+    s.onerror = reserva;
+    document.body.appendChild(s);
+    setTimeout(function () { if (!feito && !window.__PAINEL_INICIADO) reserva(); }, 15000);
+  })();
+  </script>
 </body>
 </html>
