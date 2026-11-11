@@ -378,6 +378,21 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
     `("bairro" OR "rua" OR "avenida") ("polícia" OR "crime" OR "baleado" OR "assaltado") "${nome}" ${uf} when:${janela}`,
     `("PRF" OR "Polícia Rodoviária Federal" OR "Guarda Municipal" OR "GCM" OR "COPOM" OR "Polícia Civil" OR "SSP") "${nome}" ${uf} when:${janela}`
   ];
+  // Histórico (12 meses): o Google Notícias devolve no máximo ~100 itens por busca, os mais recentes.
+  // Em cidade grande isso cobre poucas semanas; por isso a busca principal é repetida mês a mês e a de
+  // polícia trimestre a trimestre. Em cidade pequena as fatias voltam quase vazias, sem custo real.
+  if (janela === CONFIG.DIAS_JANELA_NOTICIAS + 'd') {
+    const dia = d => Utilities.formatDate(d, CONFIG.FUSO, 'yyyy-MM-dd');
+    const agora = Date.now();
+    for (let m = 0; m < 12; m++) {
+      const fim = new Date(agora - m * 30.4 * 86400000), ini = new Date(agora - (m + 1) * 30.4 * 86400000);
+      queries.push(`("assalto" OR "roubo" OR "homicídio" OR "tiroteio" OR "latrocínio" OR "morto a tiros" OR "baleado" OR "preso") "${nome}" ${uf} after:${dia(ini)} before:${dia(fim)}`);
+    }
+    for (let t = 0; t < 4; t++) {
+      const fim = new Date(agora - t * 91.3 * 86400000), ini = new Date(agora - (t + 1) * 91.3 * 86400000);
+      queries.push(`("Polícia Militar" OR "Polícia Civil" OR "operação policial" OR "tráfico" OR "facção" OR "milícia") "${nome}" ${uf} after:${dia(ini)} before:${dia(fim)}`);
+    }
+  }
   const dominios = ['g1.globo.com'].concat(IMPRENSA_LOCAL_UF[uf] || []);
   for (let i = 0; i < dominios.length && i / DOMINIOS_POR_BUSCA_ < MAX_BUSCAS_IMPRENSA_LOCAL_; i += DOMINIOS_POR_BUSCA_) {
     const sites = dominios.slice(i, i + DOMINIOS_POR_BUSCA_).map(d => 'site:' + d).join(' OR ');
