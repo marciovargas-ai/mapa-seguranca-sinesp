@@ -1,0 +1,24 @@
+name: Homicídios por município (SIM/DATASUS)
+on:
+  schedule:
+    - cron: '0 12 1 * *'   # todo dia 1, 09:00 em Brasília
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyreaddbc dbfread pandas xlrd openpyxl
+      - run: python -u scripts/sim_homicidios.py
+      - name: Publicar
+        run: |
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add dados/sim_homicidios.json
+          git diff --cached --quiet || (git commit -m "SIM/DATASUS: homicídios por município $(date -u +%Y-%m-%d)" && git pull --rebase && git push)
