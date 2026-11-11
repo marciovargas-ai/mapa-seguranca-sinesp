@@ -326,6 +326,15 @@ export class App {
   }
 
   constructor() {
+    // No computador o painel ocupa a tela inteira e só as caixas internas rolam. Se algo deslocar a página
+    // (rolagem automática dentro do Google Sites), ela volta ao lugar, para o topo nunca ficar escondido.
+    const fixas = new Set(['HTML', 'BODY', 'APP-ROOT']);
+    document.addEventListener('scroll', (e) => {
+      if (window.innerWidth <= 900) return;
+      const alvo = (e.target === document ? document.documentElement : e.target) as HTMLElement;
+      if (alvo && (fixas.has(alvo.tagName) || alvo.classList?.contains('corpo')) && (alvo.scrollTop || alvo.scrollLeft)) { alvo.scrollTop = 0; alvo.scrollLeft = 0; }
+      if (window.scrollY) window.scrollTo(0, 0);
+    }, { passive: true, capture: true });
     queueMicrotask(() => {
       this.store.localizar(() => this.store.abrirLocal(CFG.UF_PADRAO, CFG.CIDADE_PADRAO));
       if (lerLocal(CFG.CHAVE_AJUDA_VISTA) !== '1') setTimeout(() => this.ajuda(), 900);
