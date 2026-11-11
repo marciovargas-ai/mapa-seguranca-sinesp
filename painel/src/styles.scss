@@ -167,3 +167,5 @@ html.tema-escuro .popup-meta { color: #a9b6cf; }
 .cartao:hover > .ia-resumo, .kpi:hover > .ia-resumo, .ia-resumo:focus-visible { opacity: 1; }
 .ia-resumo:hover { background: var(--shopee-laranja); color: #fff; }
 @media (hover: none) { .ia-resumo { opacity: .9; } }
+.kpi > .ia-resumo { top: 8px; right: 8px; bottom: auto; }
+.kpi:has(> .ia-resumo) .kpi-rotulo { padding-right: 32px; }
