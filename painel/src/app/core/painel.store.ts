@@ -433,32 +433,39 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
   // População: a do arquivo do SIM (IBGE, todos os municípios) e, se faltar, a API do IBGE por estado
   const popSim = sim?.populacao?.municipios;
   const pops = popSim ? [] : await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
-  const municipios: Record<string, [number, number, number, number, number]> = {};
+  const municipios: Record<string, number[]> = {};
+  const taxas: number[] = [], taxasTent: number[] = [], totais: number[] = [];
   let mortes = 0, pop = 0, ufsOk = 0;
   ufs.forEach((uf, k) => {
     const p = pops[k];
     if (!popSim && !p) return;
     ufsOk++;
-    const nomes = bruta.ufs[uf].municipios;
+    const nomes = bruta.ufs[uf].municipios, det = bruta.ufs[uf].detalhe || {};
     for (const m of municipiosUf(uf)) {
       const c6 = String(m.ibge).slice(0, 6);
       const hab = popSim ? popSim[c6] : p!.porCodigo[m.ibge];
       if (!hab) continue;
-      const cvli = nomes[m.norm] || 0;
+      const d = det[m.norm] || [nomes[m.norm] || 0, 0, 0, 0, 0];
       const s = sim?.municipios[c6];
       const dSim = s ? s[0] + s[1] : 0;
+      // Cidade pequena (< 20 mil hab.): média de 3 anos do Sinesp, para um caso isolado não distorcer a taxa
+      const pequena = hab < 20000 && d[2] > 0;
+      const cvli = pequena ? d[2] / 3 : d[0];
       // Cada fonte deixa de contar casos em lugares diferentes (o Sinesp depende do envio de cada estado; o SIM
       // tem óbitos ainda sem causa definida). A maior das duas é a contagem mais completa, sem somar o mesmo caso.
       const usado = Math.max(cvli, dSim);
-      mortes += usado; pop += hab;
-      if (hab >= 20000) municipios[m.ibge] = [usado, hab, Math.round((usado / hab) * 1e6) / 10, cvli, dSim];
+      const tent = pequena ? d[4] / 3 : d[3];
+      mortes += Math.max(d[0], dSim); pop += hab;
+      const linha = [Math.round(usado * 10) / 10, hab, Math.round((usado / hab) * 1e6) / 10, d[0], dSim, Math.round((tent / hab) * 1e6) / 10, d[1], pequena ? 1 : 0];
+      municipios[m.ibge] = linha;
+      if (hab >= 20000) { taxas.push(linha[2]); taxasTent.push(linha[5]); totais.push(linha[0]); }
     }
   });
   if (ufsOk < 20) return null;  // sem população da maior parte do país, não compara
-  const linhas = Object.values(municipios);
+  const ord = (l: number[]) => l.sort((x, y) => x - y);
   return {
     periodo: bruta.periodo, brasil: { cvli: mortes, pop, taxa: Math.round((mortes / pop) * 1e6) / 10 },
-    taxas: linhas.map((l) => l[2]).sort((a, b) => a - b), totais: linhas.map((l) => l[0]).sort((a, b) => a - b), municipios,
+    taxas: ord(taxas), taxasTent: ord(taxasTent), totais: ord(totais), municipios,
     sim: sim ? { ano: sim.ano, preliminar: !!sim.preliminar } : null,
   };
 }

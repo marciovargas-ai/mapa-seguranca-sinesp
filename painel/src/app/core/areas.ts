@@ -72,12 +72,13 @@ export async function carregarFogoCruzado(uf: string, cidade: string, ignorarCac
 }
 
 /** Referência nacional (robô): mortes violentas (CVLI) de 12 meses de cada município, por estado. */
-export interface ReferenciaBruta { periodo: string; ufs: Record<string, { cvli: number; municipios: Record<string, number> }> }
+export interface ReferenciaBruta { periodo: string; ufs: Record<string, { cvli: number; municipios: Record<string, number>; detalhe?: Record<string, [number, number, number, number, number]> }> }
 /** Montada no painel com a população do IBGE: taxas de todos os municípios com 20 mil hab. ou mais. */
 export interface ReferenciaNacional {
   periodo: string; brasil: { cvli: number; pop: number; taxa: number };
-  /** ibge → [mortes usadas, habitantes, taxa por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano] */
-  taxas: number[]; totais: number[]; municipios: Record<string, [number, number, number, number, number]>;
+  /** ibge → [mortes usadas, habitantes, taxa por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano,
+   *  tentativas por 100 mil, CVLI 12 meses anteriores, média de 3 anos usada (1) ou não (0)] */
+  taxas: number[]; totais: number[]; taxasTent: number[]; municipios: Record<string, number[]>;
   sim: { ano: number; preliminar: boolean } | null;
 }
 /** SIM/DATASUS: ibge6 → [agressão, intervenção legal, intenção indeterminada]; população do IBGE junto. */
@@ -88,5 +89,5 @@ export function carregarSim(): Promise<SimBruto | null> {
 }
 let referencia: Promise<ReferenciaBruta | null> | null = null;
 export function carregarReferencia(): Promise<ReferenciaBruta | null> {
-  return referencia || (referencia = baixarDados('referencia_nacional.json', 'REF_NACIONAL2', 3));
+  return referencia || (referencia = baixarDados('referencia_nacional.json', 'REF_NACIONAL3', 3));
 }

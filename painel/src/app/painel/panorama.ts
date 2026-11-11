@@ -34,13 +34,15 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
       @if (c.risco; as r) {
         <article class="cartao risco" [matTooltip]="r.dica" matTooltipClass="dica-larga">
-          <header><mat-icon>speed</mat-icon><h3>Índice de risco</h3><mat-icon class="info">info</mat-icon></header>
+          <header><mat-icon>speed</mat-icon><h3>Índice de violência letal</h3><mat-icon class="info">info</mat-icon></header>
           <div class="medidor">
             <svg viewBox="0 0 120 68" aria-hidden="true">
               <path d="M10 62 A50 50 0 0 1 110 62" class="trilho" />
               <path d="M10 62 A50 50 0 0 1 110 62" class="arco" [style.stroke]="r.cor" [attr.stroke-dasharray]="arco(r.valor)" />
             </svg>
-            <div class="valor"><b [style.color]="r.cor">{{ r.valor }}</b><span>de 100 · {{ r.nivel }}</span></div>
+            <div class="valor"><b [style.color]="r.cor">{{ r.valor }}</b><span>de 100 · {{ r.nivel }}</span>
+              @if (r.confianca; as cf) { <span class="confianca" [class.media]="cf.nivel === 'média'" [matTooltip]="cf.texto">Confiança {{ cf.nivel }}</span> }
+            </div>
           </div>
           <ul class="componentes">
             @for (k of r.componentes; track k.nome) {
@@ -238,6 +240,8 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       border-radius: 6px; padding: 2px 8px; cursor: help; }
     .parecer p { margin: 0 0 6px; font: var(--mat-sys-body-medium); line-height: 1.55; }
     .risco { cursor: help; }
+    .confianca { margin-top: 6px; align-self: flex-start; font: var(--mat-sys-label-small); font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
+    .confianca.media { background: #fef3c7; color: #92400e; }
     .metodo { margin-top: 10px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); cursor: auto; }
     .metodo summary { cursor: pointer; color: var(--mat-sys-primary); font-weight: 600; }
     .metodo ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }

@@ -15,6 +15,7 @@ import re
 import unicodedata
 
 DADOS = 'dados'
+TENT = ('tentativa de homicidio', 'tentativa de feminicidio')
 CVLI = ('homicidio doloso', 'roubo seguido de morte latrocinio', 'latrocinio', 'lesao corporal seguida de morte')
 UFS = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR',
        'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO']
@@ -33,6 +34,11 @@ def eh_cvli(nome):
     return any(n.startswith(c) for c in CVLI)
 
 
+def eh_tent(nome):
+    n = normalizar(nome)
+    return any(n.startswith(c) for c in TENT)
+
+
 def main():
     manifesto = json.load(open(os.path.join(DADOS, 'manifesto.json')))
     ult = max(int(a) for a in manifesto['anos'])
@@ -42,22 +48,48 @@ def main():
     for a, m in janela:
         meses_ano.setdefault(a, []).append(m - 1)
 
+    # janelas: 12 meses atuais, 12 anteriores e 36 meses (média de 3 anos para cidades pequenas)
+    def janela_de(inicio_ano, inicio_mes_exclusivo, meses):
+        out, a, m = [], ult, ate
+        for _ in range(meses):
+            out.append((a, m)); m -= 1
+            if m == 0: a, m = a - 1, 12
+        return out
+    j12 = janela_de(ult, ate, 12)
+    j24 = janela_de(ult, ate, 24)[12:]
+    j36 = janela_de(ult, ate, 36)
+    cache = {}
+    def arq(a, uf):
+        k = (a, uf)
+        if k not in cache:
+            c = os.path.join(DADOS, f'sinesp_{a}_{uf}.json')
+            cache[k] = json.load(open(c, encoding='utf-8')) if os.path.exists(c) else None
+        return cache[k]
+    def soma_mun(uf, jan, filtro):
+        tot = {}
+        for a, m in jan:
+            d = arq(a, uf)
+            if not d: continue
+            for chave, mun in (d.get('municipios') or {}).items():
+                nome = normalizar(mun.get('n') or chave)
+                s_ = sum((v[m - 1] or 0) for k, v in (mun.get('e') or {}).items() if filtro(k) and m - 1 < len(v))
+                tot[nome] = tot.get(nome, 0) + s_
+        return tot
     ufs = {}
     for uf in UFS:
-        tot, porNome = 0, {}
-        for a, idx in meses_ano.items():
-            caminho = os.path.join(DADOS, f'sinesp_{a}_{uf}.json')
-            if not os.path.exists(caminho):
-                continue
-            d = json.load(open(caminho, encoding='utf-8'))
-            for k, v in (d.get('estado') or {}).items():
-                if eh_cvli(k):
-                    tot += sum(v[i] or 0 for i in idx if i < len(v))
-            for chave, mun in (d.get('municipios') or {}).items():
-                s = sum(sum(v[i] or 0 for i in idx if i < len(v)) for k, v in (mun.get('e') or {}).items() if eh_cvli(k))
-                porNome[normalizar(mun.get('n') or chave)] = porNome.get(normalizar(mun.get('n') or chave), 0) + s
-        ufs[uf] = {'cvli': tot, 'municipios': porNome}
-        print(uf, tot, len(porNome), flush=True)
+        tot = 0
+        for a, m in j12:
+            d = arq(a, uf)
+            if d:
+                tot += sum((v[m - 1] or 0) for k, v in (d.get('estado') or {}).items() if eh_cvli(k) and m - 1 < len(v))
+        c12, c_ant, c36 = soma_mun(uf, j12, eh_cvli), soma_mun(uf, j24, eh_cvli), soma_mun(uf, j36, eh_cvli)
+        t12, t36 = soma_mun(uf, j12, eh_tent), soma_mun(uf, j36, eh_tent)
+        ufs[uf] = {'cvli': tot, 'municipios': c12,
+                   # nome -> [cvli 12m, cvli 12m anteriores, cvli 36m, tentativas 12m, tentativas 36m]
+                   'detalhe': {n: [c12.get(n, 0), c_ant.get(n, 0), c36.get(n, 0), t12.get(n, 0), t36.get(n, 0)] for n in c12}}
+        print(uf, tot, len(c12), flush=True)
+        for k in list(cache):
+            if k[1] == uf: cache.pop(k)
 
     saida = {
         'periodo': f'{ate + 1:02d}/{ult - 1} a {ate:02d}/{ult}' if ate < 12 else f'01/{ult} a 12/{ult}',
