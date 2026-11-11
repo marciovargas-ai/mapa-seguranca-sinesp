@@ -24,6 +24,8 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  * um veículo, acrescente o domínio dele na lista do estado.
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
+/** Sobe quando o filtro de cidade passa a aceitar mais notícias: cada cidade refaz os 12 meses uma vez. */
+const VERSAO_FILTRO_CIDADE_ = 3;
 const SEGUNDOS_ORCAMENTO_COLETA_ = 60;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
@@ -160,13 +162,34 @@ function ehImprensaDeOutraUf_(url, uf) {
  * texto = manchete + resumo; veiculo = nome do jornal; imprensaLocal = domínio da imprensa da UF;
  * urlFonte = site do jornal (opcional); bairros = bairros do OSM da cidade (opcional).
  */
+/**
+ * Como a imprensa chama as capitais sem o nome completo: "na capital gaúcha", "BH", "Floripa" e,
+ * no caso do Rio, "no Rio", "Zona Norte do Rio". Vale para as 27 capitais (texto já normalizado).
+ */
+const GENTILICO_CAPITAL_ = { AC: 'acreana', AL: 'alagoana', AP: 'amapaense', AM: 'amazonense', BA: 'baiana', CE: 'cearense', DF: 'federal',
+  ES: 'capixaba', GO: 'goiana', MA: 'maranhense', MT: 'mato grossense', MS: 'sul mato grossense', MG: 'mineira', PA: 'paraense',
+  PB: 'paraibana', PR: 'paranaense', PE: 'pernambucana', PI: 'piauiense', RJ: 'fluminense', RN: 'potiguar', RS: 'gaucha',
+  RO: 'rondoniense', RR: 'roraimense', SC: 'catarinense', SP: 'paulista', SE: 'sergipana', TO: 'tocantinense' };
+const APELIDO_CAPITAL_ = {
+  RJ: /(^|\s)(no|do|ao|pelo|o|zona (norte|sul|oeste) do|centro do|regiao metropolitana do|grande) rio(?!\s(grande|branco|claro|verde|preto|negro|bonito|novo|pardo|doce|largo|das|dos|de|do|da|sao|tiete|paraiba|madeira|amazonas|jacui|guaiba|capibaribe|pomba|piracicaba|parana|uruguai|xingu|tocantins|araguaia|sapucai|itajai|cuiaba|iguacu|mearim|acre))(\s|$)/,
+  MG: /(^|\s)bh(\s|$)/, SC: /(^|\s)floripa(\s|$)/, SP: /(^|\s)sampa(\s|$)/, PA: /(^|\s)capital paraense(\s|$)/
+};
+function citaApelidoCapital_(mun, norm) {
+  const meta = ESTADOS_BRASIL_METADATA[mun.uf] || {};
+  if (normalizarTexto_(meta.capital) !== normalizarTexto_(mun.nome)) return false;
+  const gent = GENTILICO_CAPITAL_[mun.uf];
+  if (gent && contemTermoInteiro_(norm, 'capital ' + gent)) return true;
+  const re = APELIDO_CAPITAL_[mun.uf];
+  return !!(re && re.test(norm));
+}
+
 function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros) {
   const h = homonimosCidade_(mun);
   const original = String(texto || '') + ' | ' + String(veiculo || '');
   let norm = normalizarTexto_(original);
   h.maiores.forEach(n => { norm = norm.split(n).join(' '); });
   norm = norm.replace(h.logradouro, ' ');
-  if (!contemTermoInteiro_(norm, h.cidNorm)) return false;
+  if (!contemTermoInteiro_(norm, h.cidNorm) && !citaApelidoCapital_(mun, norm)) return false;
 
   const ufs = ufsCitadas_(original, norm);
   const outraUf = Object.keys(ufs).some(u => u !== mun.uf) || (urlFonte && ehImprensaDeOutraUf_(urlFonte, mun.uf));
@@ -200,7 +223,7 @@ function coletarNoticiasCidade_(mun) {
     const atual = lerJson_(nomeArquivo) || novoRegistroCidade_(mun);
     // Histórico completo (12 meses) na primeira coleta e também, uma vez por dia, enquanto a cidade
     // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
-    const primeiraColeta = !atual.coletadoEm ||
+    const primeiraColeta = !atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_ ||
       ((atual.ocorrencias || []).length < MIN_NOTICIAS_HISTORICO_ && Date.now() - (atual.historicoEm || 0) > 86400000);
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
@@ -305,7 +328,7 @@ function coletarNoticiasCidade_(mun) {
       if (reg.filtroHomonimos !== 2) reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
       reg.coletadoEm = agora;
-      if (primeiraColeta) reg.historicoEm = agora;
+      if (primeiraColeta) { reg.historicoEm = agora; reg.versaoFiltro = VERSAO_FILTRO_CIDADE_; }
       return podarRegistroCidade_(reg);
     });
 
