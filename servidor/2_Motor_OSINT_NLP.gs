@@ -171,7 +171,7 @@ const GENTILICO_CAPITAL_ = { AC: 'acreana', AL: 'alagoana', AP: 'amapaense', AM:
   PB: 'paraibana', PR: 'paranaense', PE: 'pernambucana', PI: 'piauiense', RJ: 'fluminense', RN: 'potiguar', RS: 'gaucha',
   RO: 'rondoniense', RR: 'roraimense', SC: 'catarinense', SP: 'paulista', SE: 'sergipana', TO: 'tocantinense' };
 const APELIDO_CAPITAL_ = {
-  RJ: /(^|\s)(no|do|ao|pelo|o|zona (norte|sul|oeste) do|centro do|regiao metropolitana do|grande) rio(?!\s(grande|branco|claro|verde|preto|negro|bonito|novo|pardo|doce|largo|das|dos|de|do|da|sao|tiete|paraiba|madeira|amazonas|jacui|guaiba|capibaribe|pomba|piracicaba|parana|uruguai|xingu|tocantins|araguaia|sapucai|itajai|cuiaba|iguacu|mearim|acre))(\s|$)/,
+  RJ: /(^|\s)(no|do|ao|pelo|o|zona (norte|sul|oeste) do|centro do) rio(?!\s(grande|branco|claro|verde|preto|negro|bonito|novo|pardo|doce|largo|das|dos|de|do|da|sao|tiete|paraiba|madeira|amazonas|jacui|guaiba|capibaribe|pomba|piracicaba|parana|uruguai|xingu|tocantins|araguaia|sapucai|itajai|cuiaba|iguacu|mearim|acre))(\s|$)/,
   MG: /(^|\s)bh(\s|$)/, SC: /(^|\s)floripa(\s|$)/, SP: /(^|\s)sampa(\s|$)/, PA: /(^|\s)capital paraense(\s|$)/
 };
 function citaApelidoCapital_(mun, norm) {
