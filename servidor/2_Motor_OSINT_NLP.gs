@@ -24,7 +24,7 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  * um veículo, acrescente o domínio dele na lista do estado.
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
-const SEGUNDOS_ORCAMENTO_COLETA_ = 20;
+const SEGUNDOS_ORCAMENTO_COLETA_ = 60;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
   AL: ['gazetaweb.com', 'tnh1.com.br', 'cadaminuto.com.br', 'alagoas24horas.com.br', '7segundos.com.br'],
