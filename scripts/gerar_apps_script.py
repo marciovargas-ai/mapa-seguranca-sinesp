@@ -1,7 +1,16 @@
 """
 Gera os arquivos HTML do Apps Script a partir do build do painel Angular.
 
-  cd painel && npx ng build && cd .. && python3 scripts/gerar_apps_script.py [pasta_saida]
+  cd painel && npx ng build && cd .. && python3 scripts/gerar_apps_script.py [pasta_saida] [--sha COMMIT]
+
+Com --sha, o Painel.html carrega o aplicativo pela CDN do jsDelivr a partir do
+commit indicado (publicado/painel.js): o navegador guarda o arquivo e as
+aberturas seguintes não baixam o aplicativo de novo. Se a CDN falhar, o painel
+pede as partes ao Apps Script (função obterParteApp). Sem --sha, o aplicativo
+vai embutido na página, como antes.
+
+Fluxo de publicação: gerar, commitar publicado/painel.js, gerar de novo com
+--sha <commit> e copiar os HTML para o editor do Apps Script.
 
 Saída (cada arquivo vira um arquivo HTML no editor do Apps Script):
   Painel.html          modelo da página (fontes, Leaflet, Chart.js e os includes)
@@ -49,9 +58,36 @@ MODELO = """<!DOCTYPE html>
 </html>
 """
 
+CARREGADOR_CDN = """<!-- Aplicativo Angular pela CDN (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
+  <script>
+  (function () {
+    var URL_APP = 'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@{SHA}/publicado/painel.js';
+    var PARTES = {N};
+    var feito = false;
+    function reserva() {
+      if (feito) return; feito = true;
+      var partes = [], recebidas = 0;
+      var run = (window.google && google.script && google.script.run) || window.__servidorTeste;
+      for (var i = 1; i <= PARTES; i++) (function (i) {
+        run.withSuccessHandler(function (t) {
+          partes[i - 1] = t;
+          if (++recebidas === PARTES) (new Function(partes.join('')))();
+        }).obterParteApp(i);
+      })(i);
+    }
+    var s = document.createElement('script');
+    s.src = URL_APP;
+    s.onload = function () { feito = true; };
+    s.onerror = reserva;
+    document.body.appendChild(s);
+    setTimeout(function () { if (!feito && !window.__PAINEL_INICIADO) reserva(); }, 15000);
+  })();
+  </script>"""
+
 
 def main():
-    saida = sys.argv[1] if len(sys.argv) > 1 else os.path.join(RAIZ, 'apps-script')
+    args = [a for i, a in enumerate(sys.argv[1:], 1) if a != '--sha' and sys.argv[i - 1] != '--sha']
+    saida = args[0] if args else os.path.join(RAIZ, 'apps-script')
     os.makedirs(saida, exist_ok=True)
     with open(os.path.join(DIST, 'main.js'), encoding='utf-8') as f:
         js = f.read()
@@ -79,9 +115,22 @@ def main():
             f.write(f'<script>window.__PAINEL_APP.push({texto});</script>\n')
     with open(os.path.join(saida, 'Painel_Estilos.html'), 'w', encoding='utf-8') as f:
         f.write('<style>\n' + css + '\n</style>\n')
-    includes = '\n  '.join(f"<?!= incluir('Painel_App_{i}'); ?>" for i in range(1, len(partes) + 1))
+    os.makedirs(os.path.join(RAIZ, 'publicado'), exist_ok=True)
+    with open(os.path.join(RAIZ, 'publicado', 'painel.js'), 'w', encoding='utf-8') as f:
+        f.write(js)
+
+    sha = sys.argv[sys.argv.index('--sha') + 1] if '--sha' in sys.argv else ''
+    if sha:
+        pagina = MODELO.replace("""  <script>window.__PAINEL_APP = [];</script>
+  {INCLUDES}
+  <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
+""", '  ' + CARREGADOR_CDN.replace('{SHA}', sha).replace('{N}', str(len(partes))) + '\n')
+        pagina = pagina.replace('  <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->\n', '')
+    else:
+        includes = '\n  '.join(f"<?!= incluir('Painel_App_{i}'); ?>" for i in range(1, len(partes) + 1))
+        pagina = MODELO.replace('{INCLUDES}', includes)
     with open(os.path.join(saida, 'Painel.html'), 'w', encoding='utf-8') as f:
-        f.write(MODELO.replace('{INCLUDES}', includes))
+        f.write(pagina)
     print(f'{len(partes)} partes do aplicativo em {saida}')
 
 
