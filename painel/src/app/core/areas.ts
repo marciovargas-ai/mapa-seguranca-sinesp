@@ -67,3 +67,15 @@ export async function carregarFogoCruzado(uf: string, cidade: string, ignorarCac
   if (r?.configurado && !r.erro) CacheDisco.salvar(chave, r);
   return r;
 }
+
+/** Referência nacional (robô): mortes violentas (CVLI) de 12 meses de cada município, por estado. */
+export interface ReferenciaBruta { periodo: string; ufs: Record<string, { cvli: number; municipios: Record<string, number> }> }
+/** Montada no painel com a população do IBGE: taxas de todos os municípios com 20 mil hab. ou mais. */
+export interface ReferenciaNacional {
+  periodo: string; brasil: { cvli: number; pop: number; taxa: number };
+  taxas: number[]; totais: number[]; municipios: Record<string, [number, number, number]>;
+}
+let referencia: Promise<ReferenciaBruta | null> | null = null;
+export function carregarReferencia(): Promise<ReferenciaBruta | null> {
+  return referencia || (referencia = baixarDados('referencia_nacional.json', 'REF_NACIONAL2', 3));
+}

@@ -67,11 +67,14 @@ async function bairrosIbge(ibge: string): Promise<Bairro[]> {
   const guardado = await CacheDisco.obter<Bairro[]>(chave, DIAS_CACHE);
   if (guardado?.length) return guardado;
   // "Não tem no IBGE" vale só 7 dias, para pegar municípios que o robô publicar depois
-  if (await CacheDisco.obter<boolean>('BAIRROS_IBGE_SEM2_' + ibge, 7)) return [];
+  if (await CacheDisco.obter<boolean>('BAIRROS_IBGE_SEM3_' + ibge, 7)) return [];
+  // A CDN guarda por horas um "não existe" de arquivos que o robô publicou depois: só conclui
+  // que não há malha quando todos os endereços disserem 404
+  let ausentes = 0;
   for (const base of CFG.BASES_DADOS) {
     try {
       const r = await fetchComTimeout(base + 'bairros/' + ibge + '.json', 12000);
-      if (r.status === 404) { CacheDisco.salvar('BAIRROS_IBGE_SEM2_' + ibge, true); return []; }
+      if (r.status === 404) { if (++ausentes === CFG.BASES_DADOS.length) CacheDisco.salvar('BAIRROS_IBGE_SEM3_' + ibge, true); continue; }
       if (!r.ok) continue;
       const lista = ((await r.json()) as Bairro[]).filter((b) => b && b.n && b.aneis?.length).map((b) => ({ ...b, fonte: (b.f ? 'OSM' : 'IBGE') as 'IBGE' | 'OSM', aprox: b.f === 'OSM~' }));
       CacheDisco.salvar(chave, lista);

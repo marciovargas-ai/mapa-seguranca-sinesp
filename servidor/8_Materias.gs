@@ -6,7 +6,7 @@
  * Tudo em lotes paralelos (UrlFetchApp.fetchAll), com limite por coleta e
  * falhas silenciosas: se o site não responder, a notícia fica como estava.
  */
-const MAX_MATERIAS_POR_COLETA_ = 25;
+const MAX_MATERIAS_POR_COLETA_ = 15;  // cada coleta lê até 15; as demais nas próximas
 const MAX_CARACTERES_MATERIA_ = 4000;
 
 /** Devolve, na mesma ordem dos links, o texto da matéria ('' quando não deu). */

@@ -107,8 +107,8 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
     .cabecalho p { margin: 2px 0 0; color: var(--mat-sys-on-surface-variant); }
     h3 { font: var(--mat-sys-title-medium); margin: 0 0 8px; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
-    .kpi { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 12px; background: var(--mat-sys-surface-container-low);
-      border: 1px solid var(--mat-sys-outline-variant); min-width: 0; }
+    .kpi { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: var(--raio-m); background: var(--mat-sys-surface-container-low);
+      border: 1px solid var(--borda-suave); min-width: 0; }
     .kpi-rotulo { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .kpi b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .kpi-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }

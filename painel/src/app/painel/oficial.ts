@@ -8,7 +8,7 @@ import { PainelStore } from '../core/painel.store';
 import { fmt, fmt1, MESES, urlSegura } from '../core/util';
 import { DeltaComponent, GraficoComponent, SparklineComponent } from './comuns';
 
-const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
+const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
 /**
  * Aba Oficial: um cartão por indicador do Sinesp, com os três anos lado a lado
@@ -89,12 +89,15 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
               }
             </div>
             <div class="ind-valor">
-              <b>{{ n(e.porAno[2]) }}</b>
-              <app-delta [atual]="e.porAno[2]" [anterior]="e.parcialAnterior" />
+              <b>{{ n(e.sel ?? e.porAno[2]) }}</b>
+              <app-delta [atual]="e.sel ?? e.porAno[2]" [anterior]="e.selAnterior ?? e.parcialAnterior" />
             </div>
             <div class="ind-sub">
-              {{ parcial() ? 'jan–' + o.ultimoMes + '/' + o.anos![2] : o.anos![2] }}
-              @if (e.parcialAnterior !== null) { · {{ n(e.parcialAnterior) }} no mesmo período de {{ o.anos![1] }} }
+              @if (o.rotuloSel) { {{ o.rotuloSel }} · {{ n(e.selAnterior ?? null) }} em {{ o.rotuloAnt }} }
+              @else {
+                {{ parcial() ? 'jan–' + o.ultimoMes + '/' + o.anos![2] : o.anos![2] }}
+                @if (e.parcialAnterior !== null) { · {{ n(e.parcialAnterior) }} no mesmo período de {{ o.anos![1] }} }
+              }
             </div>
             <div class="anos">
               @for (v of e.porAno; track $index; let j = $index) {
@@ -119,7 +122,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
           </button>
         }
       </div>
-      @if (parcial()) { <p class="nota">* {{ o.anos![2] }} vai de janeiro a {{ o.ultimoMes }}, último mês publicado. A variação compara com janeiro a {{ o.ultimoMes }} de {{ o.anos![1] }}.</p> }
+      @if (o.rotuloSel) { <p class="nota">O número grande de cada cartão segue o filtro de período: {{ o.rotuloSel }} (últimos meses publicados) contra {{ o.rotuloAnt }}. As barras mostram os anos completos (* {{ o.anos![2] }} vai até {{ o.ultimoMes }}).</p> } @else if (parcial()) { <p class="nota">* {{ o.anos![2] }} vai de janeiro a {{ o.ultimoMes }}, último mês publicado. A variação compara com janeiro a {{ o.ultimoMes }} de {{ o.anos![1] }}.</p> }
       <p class="nota">Fonte: {{ o.fonte }} · importado em {{ o.importadoEm }}. PRF e PF mostram a parte registrada pelas polícias federais; o restante vem das polícias e secretarias do estado.
         @if (o.urlPainel) { <a [href]="url(o.urlPainel)" target="_blank" rel="noopener">Painel oficial</a> }</p>
     }
@@ -137,7 +140,7 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
     .orgaos { margin-bottom: 12px; }
     .orgaos h3 small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-left: 4px; }
     .orgaos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
-    .orgao { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--mat-sys-outline-variant);
+    .orgao { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--raio-m); border: 1px solid var(--borda-suave);
       border-left: 4px solid var(--cor-orgao); background: var(--mat-sys-surface-container-low); }
     .orgao.sem-base { opacity: .75; border-left-style: dashed; }
     .orgao-topo { display: flex; align-items: center; gap: 6px; font: var(--mat-sys-label-large); }

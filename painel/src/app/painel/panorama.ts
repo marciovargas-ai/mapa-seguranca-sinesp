@@ -3,13 +3,14 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { corCategoria, nomeCategoria } from '../core/compilado';
-import { Tiroteio } from '../core/areas';
+import { Tiroteio, UFS_FOGO_CRUZADO } from '../core/areas';
+import { aplicarPeriodo, mesesDoPeriodo } from '../core/periodo';
 import { PainelStore } from '../core/painel.store';
-import { fmt, fmt1, pct } from '../core/util';
+import { fmt, fmt1, normalizar, pct, variacao } from '../core/util';
 import { DeltaComponent, GraficoComponent } from './comuns';
 import { InsightsComponent } from './insights';
 
-const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
+const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
 /**
  * Panorama: retrato compilado do local com todas as fontes. Sinesp (polícias do
@@ -101,6 +102,29 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
           </div>
         </section>
       }
+      <section class="cartao trafico">
+        <div class="titulo-bloco">
+          <h3 matTooltip="Junta tudo o que existe sobre drogas e grupos criminosos para o local escolhido: notícias (todas as cidades), Sinesp (só por estado), ISP (RJ, por delegacia) e Fogo Cruzado (Rio, Recife, Salvador e Belém).">
+            <mat-icon>local_police</mat-icon> Tráfico de drogas e facções <mat-icon class="info">info</mat-icon></h3>
+          <span class="nota">{{ tf().periodo }}</span>
+        </div>
+        <div class="fc">
+          <div><b>{{ fmt(tf().noticiasTrafico) }}</b><span>notícias de tráfico</span></div>
+          <div><b class="perigo">{{ fmt(tf().noticiasFaccao) }}</b><span>notícias que citam facção ou milícia</span></div>
+          @if (tf().sinespUf; as sx) {
+            <div><b>{{ fmt(sx.valor) }}</b><span>ocorrências de tráfico no estado (Sinesp, {{ sx.rotulo }})@if (sx.delta !== null) { · {{ sx.delta > 0 ? '+' : '' }}{{ sx.delta }}% }</span></div>
+          }
+          @if (tf().isp; as ix) {
+            <div><b>{{ fmt(ix.apreensoes) }}</b><span>apreensões de drogas na cidade (ISP-RJ, 12 meses)</span></div>
+          }
+          @if (tf().disputas !== null) {
+            <div><b class="perigo">{{ fmt(tf().disputas) }}</b><span>tiroteios em disputa entre grupos armados (Fogo Cruzado)</span></div>
+          }
+        </div>
+        @if (tf().faccoes) { <div class="nota">Grupos citados nas notícias: {{ tf().faccoes }}</div> }
+        @if (tf().bairros) { <div class="nota">Bairros com mais notícias de tráfico: {{ tf().bairros }}</div> }
+        <div class="nota">{{ tf().aviso }}</div>
+      </section>
       @if (fogo(); as f) {
         <section class="cartao">
           <div class="titulo-bloco">
@@ -302,6 +326,44 @@ export class PanoramaComponent {
     return { fonte: i.fonte, periodo: i.periodo, linhas };
   });
 
+  /** Tráfico e facções: notícias (todas as cidades), Sinesp por estado, ISP-RJ e Fogo Cruzado, respeitando os filtros. */
+  protected readonly tf = computed(() => {
+    const f = this.store.filtrados();
+    const dias = this.store.periodoDias();
+    const traf = f.todas.filter((o) => o.cat === 'TRAFICO');
+    const contagem: Record<string, number> = {};
+    let comFaccao = 0;
+    for (const o of f.todas) {
+      const t = normalizar(o.titulo);
+      const achados = FACCOES.filter((x) => x.re.test(t)).map((x) => x.nome);
+      if (achados.length) { comFaccao++; achados.forEach((n) => (contagem[n] = (contagem[n] || 0) + 1)); }
+    }
+    const porBairro: Record<string, number> = {};
+    traf.forEach((o) => { if (o.bairro && o.bairro !== 'Local não informado') porBairro[o.bairro] = (porBairro[o.bairro] || 0) + 1; });
+    const top = (m: Record<string, number>, n: number) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, q]) => `${k} (${q})`).join(', ');
+    const pan = this.store.panorama();
+    const ofUf = pan?.uf === this.store.uf() ? aplicarPeriodo(pan.oficial || null, mesesDoPeriodo(dias)) : null;
+    const evT = ofUf?.eventos.find((e) => /^tr[aá]fico de drogas/i.test(e.nome));
+    const valT = evT ? (evT.sel ?? evT.porAno[2]) : null;
+    const antT = evT ? (evT.selAnterior ?? evT.parcialAnterior) : null;
+    const isp = this.store.ispCidade();
+    const fogo = this.store.fogoCidade()?.dado;
+    const temDetalhe = !!fogo?.itens.some((t) => t.gp !== undefined);
+    const ufFogo = UFS_FOGO_CRUZADO.includes(this.store.uf());
+    return {
+      periodo: dias >= 365 ? '12 meses' : dias >= 180 ? '6 meses' : dias + ' dias',
+      noticiasTrafico: traf.length, noticiasFaccao: comFaccao, faccoes: top(contagem, 8), bairros: top(porBairro, 6),
+      sinespUf: evT && valT != null ? { valor: valT, rotulo: ofUf?.rotuloSel || 'ano', delta: variacao(valT, antT) } : null,
+      isp: isp?.areas?.length ? { apreensoes: isp.areas.reduce((a, x) => a + (x.u12['apreensao_drogas'] || 0), 0) } : null,
+      disputas: temDetalhe ? fogo!.itens.filter((t) => t.gp).length : null,
+      aviso: 'O Sinesp não publica tráfico por município, só por estado. ' +
+        (isp ? 'No RJ, o ISP publica apreensões de drogas por delegacia. ' : '') +
+        (temDetalhe ? 'Disputas entre facções/milícia vêm do Fogo Cruzado (motivo "Disputa"). ' :
+          ufFogo ? 'Disputas entre facções aparecem aqui depois de recopiar 7_Fontes_Area no Apps Script. ' : 'O Fogo Cruzado cobre só Rio, Recife, Salvador e Belém (regiões metropolitanas). ') +
+        'Os grupos citados vêm das manchetes das notícias.',
+    };
+  });
+
   protected readonly fogo = computed(() => {
     const v = this.store.fogoCidade();
     if (!v) return null;
@@ -390,3 +452,21 @@ function resumoFaccoes(itens: Tiroteio[]) {
     motivos: contar(itens.map((t) => t.motivo)).slice(0, 6).map(([n, q]) => `${n} (${q})`).join(', '),
   };
 }
+
+/** Facções e grupos citados nas manchetes (texto já normalizado: minúsculas, sem acento). */
+const FACCOES: { nome: string; re: RegExp }[] = [
+  { nome: 'PCC', re: /\bpcc\b|primeiro comando da capital/ },
+  { nome: 'Comando Vermelho', re: /comando vermelho|\bcv\b/ },
+  { nome: 'Terceiro Comando Puro', re: /terceiro comando|\btcp\b/ },
+  { nome: 'Amigos dos Amigos', re: /amigos dos amigos/ },
+  { nome: 'Milícia', re: /\bmilicia|\bmilicianos?\b/ },
+  { nome: 'Os Manos', re: /\bos manos\b/ },
+  { nome: 'Bala na Cara', re: /bala na cara/ },
+  { nome: 'Guardiões do Estado (GDE)', re: /guardioes do estado|\bgde\b/ },
+  { nome: 'Sindicato do Crime', re: /sindicato do crime/ },
+  { nome: 'Família do Norte', re: /familia do norte|\bfdn\b/ },
+  { nome: 'Bonde do Maluco', re: /bonde do maluco|\bbdm\b/ },
+  { nome: 'PGC', re: /primeiro grupo catarinense|\bpgc\b/ },
+  { nome: 'Comando Classe A', re: /comando classe a/ },
+  { nome: 'Facção (sem nome)', re: /\bfac(c|ç)(ao|oes)\b/ },
+];

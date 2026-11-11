@@ -32,14 +32,15 @@ export function gerarInsights(c: Contexto): Insight[] {
 
     // Ano corrente × mesmo período do ano anterior (os indicadores com maior variação)
     const variacoes = o.eventos
-      .map((e) => ({ e, v: variacao(e.porAno[2], e.parcialAnterior) }))
-      .filter((x) => x.v !== null && Math.abs(x.v) >= 10 && Math.max(x.e.porAno[2] || 0, x.e.parcialAnterior || 0) >= 10);
-    variacoes.slice(0, 3).forEach(({ e, v }) => {
+      .map((e) => ({ e, a: e.sel !== undefined ? e.sel : e.porAno[2], b: e.selAnterior !== undefined ? e.selAnterior : e.parcialAnterior }))
+      .map((x) => ({ ...x, v: variacao(x.a, x.b) }))
+      .filter((x) => x.v !== null && Math.abs(x.v) >= 10 && Math.max(x.a || 0, x.b || 0) >= 10);
+    variacoes.slice(0, 3).forEach(({ e, v, a, b }) => {
       const sobe = v! > 0;
       oficiais.push({
         icone: sobe ? 'trending_up' : 'trending_down', tom: sobe ? 'alerta' : 'positivo', fonte: 'Sinesp',
-        titulo: `${e.nome}: ${sobe ? '+' : ''}${v}% em ${a2}`,
-        texto: `${fmt(e.porAno[2])} registros de jan a ${ult}/${a2}, contra ${fmt(e.parcialAnterior)} no mesmo período de ${a1}.`,
+        titulo: `${e.nome}: ${sobe ? '+' : ''}${v}% em ${o.rotuloSel || a2}`,
+        texto: `${fmt(a)} registros em ${o.rotuloSel || 'jan a ' + ult + '/' + a2}, contra ${fmt(b)} em ${o.rotuloAnt || 'igual período de ' + a1}.`,
       });
     });
 

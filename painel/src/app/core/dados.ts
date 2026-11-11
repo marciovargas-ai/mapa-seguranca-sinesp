@@ -4,7 +4,7 @@
  * Sinesp importado pelo servidor.
  */
 export const CFG = {
-  PERIODO_PADRAO_DIAS: 90,
+  PERIODO_PADRAO_DIAS: 365,
   UF_PADRAO: 'SP', // só se GPS e rede não indicarem a cidade do usuário
   CIDADE_PADRAO: 'São Paulo',
   TEMPO_LIMITE_LOCALIZACAO_MS: 3000,
@@ -33,7 +33,7 @@ export const CFG = {
   DIAS_HISTORICO_SERVIDOR: 365,
 
   ZOOM_CIDADE: 13,
-  COR_FRONTEIRA_CIDADE: '#2563eb',
+  COR_FRONTEIRA_CIDADE: '#113366',
   COR_FRONTEIRA_ESTADO: '#d97706',
   CHAVE_AJUDA_VISTA: 'MAPA_SEG_V4_AJUDA',
   CHAVE_TEMA: 'MAPA_SEG_V4_TEMA',

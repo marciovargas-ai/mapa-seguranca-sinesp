@@ -102,7 +102,7 @@ import { DeltaComponent, GraficoComponent } from './comuns';
     h3 .material-symbols-outlined { color: var(--mat-sys-primary); font-size: 20px; }
     .texto { font: var(--mat-sys-body-large); margin: 0 0 10px; line-height: 1.55; }
     .comparacao { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .comparacao div { background: var(--mat-sys-surface-container); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+    .comparacao div { background: var(--mat-sys-surface-container); border-radius: var(--raio-m); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
     .comparacao small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-small); }
     .comparacao b { font: var(--mat-sys-title-medium); }
     app-grafico.alto { height: 240px; }

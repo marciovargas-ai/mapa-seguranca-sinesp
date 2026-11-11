@@ -1,14 +1,15 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
-import { carregarFogoCruzado, carregarIsp, FogoCruzado, IspMunicipio, Tiroteio } from './areas';
+import { carregarFogoCruzado, carregarIsp, carregarReferencia, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
 import { Filtrados, Ocorrencia, Pacote, Panorama } from './modelos';
-import { buscarMunicipio, municipioMaisProximo, municipioPorCodigo } from './municipios';
+import { buscarMunicipio, municipioMaisProximo, municipioPorCodigo, municipiosUf } from './municipios';
 import { carregarPopulacao, enriquecerOficial, enriquecerPanorama, PopulacaoUf } from './populacao';
+import { aplicarPeriodo, mesesDoPeriodo } from './periodo';
 import { Servidor } from './servidor';
 import { fetchComTimeout, gravarLocal, lerLocal, normalizar } from './util';
 
@@ -73,6 +74,7 @@ export class PainelStore {
   /** Dados oficiais e verificados abaixo do município (ISP-RJ por delegacia, Fogo Cruzado). */
   readonly isp = signal<{ ibge: string; dado: IspMunicipio | null } | null>(null);
   readonly fogo = signal<{ chave: string; dado: FogoCruzado | null; carregando: boolean } | null>(null);
+  readonly referencia = signal<ReferenciaNacional | null>(null);
   readonly ispCidade = computed(() => { const v = this.isp(); return v && v.ibge === this.ibgeCidade() ? v.dado : null; });
   readonly fogoCidade = computed(() => {
     const v = this.fogo();
@@ -87,14 +89,14 @@ export class PainelStore {
     const d = this.dados();
     const ehEstado = this.escopo() === 'ESTADO';
     const o = d?.oficial ? encurtarOficial(d.oficial) : ehEstado ? this.panorama()?.oficial || null : null;
-    return enriquecerOficial(o, this.uf(), this.cidade(), ehEstado, this.populacao(), this.panorama());
+    return aplicarPeriodo(enriquecerOficial(o, this.uf(), this.cidade(), ehEstado, this.populacao(), this.panorama()), mesesDoPeriodo(this.periodoDias()));
   });
 
   readonly insights = computed(() =>
     gerarInsights({
       ehEstado: this.escopo() === 'ESTADO', nomeLocal: this.nomeLocal(), cidade: this.cidade(),
       oficial: this.oficial(), panorama: this.panorama()?.uf === this.uf() ? this.panorama() : null,
-      f: this.filtrados12(), periodoDias: CFG.DIAS_HISTORICO_SERVIDOR,
+      f: this.filtrados(), periodoDias: this.periodoDias(),
     }));
 
   /** Panorama compilado de todas as fontes (aba inicial). */
@@ -105,8 +107,9 @@ export class PainelStore {
     return compilar({
       ehEstado, nomeLocal: this.nomeLocal(), cidade: this.cidade(), uf: this.uf(), ibge: this.ibgeCidade() || null,
       oficial: this.oficial(), panorama: this.panorama()?.uf === this.uf() ? this.panorama() : null, pop: this.populacao(),
-      f12: this.filtrados12(), bairros: this.bairros12().lista, bairrosOsm: ehEstado ? 0 : (b?.lista.length || d?.bairros?.length || 0),
+      f12: this.filtrados(), bairros: this.bairrosMapa().lista, periodoDias: this.periodoDias(), bairrosOsm: ehEstado ? 0 : (b?.lista.length || d?.bairros?.length || 0),
       bairrosCarregando: !!b?.carregando, ultimaColeta: d?.ultimaColeta || '',
+      referencia: this.referencia(), isp: this.ispCidade(), tiroteios: this.fogoCidade()?.dado?.itens || null,
     });
   });
 
@@ -117,6 +120,8 @@ export class PainelStore {
   constructor() {
     // Tempo real: com o painel aberto e visível, busca novidades a cada poucos minutos (só o que mudou)
     setInterval(() => this.buscarNovidades(), CFG.MINUTOS_ATUALIZACAO_AUTOMATICA * 60000);
+    // Referência nacional: totais do robô + população de cada estado (IBGE, guardada 180 dias no navegador)
+    setTimeout(() => montarReferencia().then((r) => this.referencia.set(r)), 1500);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.buscarNovidades(); });
     const tema = lerLocal(CFG.CHAVE_TEMA);
     this.definirTema(tema ? tema === 'escuro' : window.matchMedia?.('(prefers-color-scheme: dark)').matches, false);
@@ -399,4 +404,33 @@ function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string,
     });
   }
   return lista;
+}
+
+async function montarReferencia(): Promise<ReferenciaNacional | null> {
+  const bruta = await carregarReferencia();
+  if (!bruta?.ufs) return null;
+  const ufs = Object.keys(bruta.ufs);
+  const pops = await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
+  const municipios: Record<string, [number, number, number]> = {};
+  let cvli = 0, pop = 0, ufsOk = 0;
+  ufs.forEach((uf, k) => {
+    const p = pops[k];
+    if (!p) return;
+    ufsOk++;
+    cvli += bruta.ufs[uf].cvli;
+    pop += p.total;
+    const nomes = bruta.ufs[uf].municipios;
+    for (const m of municipiosUf(uf)) {
+      const hab = p.porCodigo[m.ibge];
+      if (!hab || hab < 20000) continue;
+      const c = nomes[m.norm] || 0;
+      municipios[m.ibge] = [c, hab, Math.round((c / hab) * 1e6) / 10];
+    }
+  });
+  if (ufsOk < 20) return null;  // sem população da maior parte do país, não compara
+  const linhas = Object.values(municipios);
+  return {
+    periodo: bruta.periodo, brasil: { cvli, pop, taxa: Math.round((cvli / pop) * 1e6) / 10 },
+    taxas: linhas.map((l) => l[2]).sort((a, b) => a - b), totais: linhas.map((l) => l[0]).sort((a, b) => a - b), municipios,
+  };
 }

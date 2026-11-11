@@ -4,19 +4,48 @@ html {
   height: 100%;
   color-scheme: light;
   @include mat.theme((
-    color: (primary: mat.$azure-palette, tertiary: mat.$blue-palette),
+    color: (primary: mat.$orange-palette, tertiary: mat.$blue-palette),
     typography: Roboto,
     density: 0,
   ));
-  --cor-perigo: #c62828;
+  /* Paleta: laranja #EE4D2D (principal), vermelho #D0011B (perigo), azul-marinho #113366 (apoio) */
+  --mat-sys-primary: #ee4d2d;
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: #ffe3dc;
+  --mat-sys-on-primary-container: #5c1405;
+  --mat-sys-secondary: #113366;
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-secondary-container: #dfe7f5;
+  --mat-sys-on-secondary-container: #0b2347;
+  --mat-sys-tertiary: #113366;
+  --mat-sys-error: #d0011b;
+  --mat-sys-surface: #fbf8f7;
+  --cor-perigo: #d0011b;
   --cor-sucesso: #2e7d32;
-  --cor-alerta: #e65100;
+  --cor-alerta: #ee4d2d;
+  --cor-marinho: #113366;
+  --borda-suave: color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent);
+  --sombra-suave: 0 1px 2px rgba(17, 51, 102, .05), 0 4px 14px rgba(17, 51, 102, .06);
+  --raio: 18px;
+  --raio-m: 14px;
 }
 html.tema-escuro {
   color-scheme: dark;
-  --cor-perigo: #ff8a80;
+  --mat-sys-primary: #ff7a5c;
+  --mat-sys-on-primary: #3a0b02;
+  --mat-sys-primary-container: #7a2412;
+  --mat-sys-on-primary-container: #ffdcd3;
+  --mat-sys-secondary: #a9c1ea;
+  --mat-sys-on-secondary: #0b2347;
+  --mat-sys-secondary-container: #1d3b6e;
+  --mat-sys-on-secondary-container: #dfe7f5;
+  --mat-sys-tertiary: #a9c1ea;
+  --mat-sys-error: #ff6b7d;
+  --cor-perigo: #ff6b7d;
   --cor-sucesso: #81c995;
-  --cor-alerta: #ffb74d;
+  --cor-alerta: #ff7a5c;
+  --cor-marinho: #a9c1ea;
+  --sombra-suave: 0 1px 2px rgba(0, 0, 0, .25), 0 4px 14px rgba(0, 0, 0, .22);
 }
 
 body {
@@ -35,8 +64,8 @@ a { color: var(--mat-sys-primary); }
 mat-icon.mat-icon { font-family: 'Material Symbols Outlined'; }
 
 /* Blocos comuns às abas */
-.cartao { display: block; width: 100%; background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px; padding: 14px 16px; min-width: 0; }
+.cartao { display: block; width: 100%; background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--borda-suave);
+  border-radius: var(--raio); padding: 14px 16px; min-width: 0; box-shadow: var(--sombra-suave); }
 html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .nota { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin: 6px 0 0; }
 .tag { display: inline-flex; align-items: center; font: var(--mat-sys-label-small); font-weight: 600; border: 1px solid currentColor; border-radius: 6px;
@@ -60,12 +89,12 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 
 /* Leaflet */
 .leaflet-container { font: var(--mat-sys-body-small); }
-.leaflet-popup-content-wrapper { border-radius: 12px; }
+.leaflet-popup-content-wrapper { border-radius: var(--raio-m); }
 .popup { max-width: 290px; }
 .popup-cat { font-weight: 700; }
 .popup-titulo { font-weight: 600; margin: 4px 0; font-size: 13px; line-height: 1.35; }
 .popup-meta { color: #475569; font-size: 11.5px; margin-bottom: 6px; }
-.popup-botao { margin-top: 8px; border: 0; border-radius: 999px; padding: 6px 12px; background: #1d4ed8; color: #fff; font: 600 12px Roboto, sans-serif; cursor: pointer; }
+.popup-botao { margin-top: 8px; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--mat-sys-primary); color: #fff; font: 600 12px Roboto, sans-serif; cursor: pointer; }
 .lista-sem-local { padding-left: 16px; margin: 6px 0 0; max-height: 220px; overflow: auto; }
 .marcador-sem-local div { background: #334155; color: #fff; border-radius: 999px; padding: 3px 9px; font: 600 11px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
 .rotulo-bairro div { display: inline-flex; align-items: center; gap: 5px; background: #fde68a; color: #1c1917; border: 1.5px solid #1c1917; border-radius: 6px;
@@ -79,3 +108,10 @@ html.tema-escuro .leaflet-popup-content-wrapper, html.tema-escuro .leaflet-popup
 html.tema-escuro .popup-meta { color: #94a3b8; }
 
 .rotulo-delegacia div { background: rgba(127, 29, 29, .88); color: #fff; font: 600 11px/1.2 Roboto, sans-serif; padding: 2px 6px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -50%); }
+
+/* Bordas suaves e harmônicas em todos os painéis */
+.mat-mdc-button-toggle-group, .mat-button-toggle-group { border-radius: 999px !important; border-color: var(--borda-suave) !important; }
+.mat-mdc-chip { --mdc-chip-container-shape-radius: 999px; }
+.mat-mdc-form-field .mdc-text-field--outlined { --mdc-outlined-text-field-container-shape: var(--raio-m); }
+.mat-mdc-dialog-surface { border-radius: var(--raio) !important; }
+.leaflet-container .leaflet-control-zoom, .leaflet-bar { border-radius: var(--raio-m) !important; overflow: hidden; border-color: var(--borda-suave) !important; }

@@ -10,6 +10,8 @@ export interface EventoOficial {
   nome: string; total: number; anterior: number | null; serie: number[];
   porAno: (number | null)[]; parcialAnterior: number | null; serie36: number[];
   federais: Record<string, number> | null; taxa: number | null; taxaEstado?: number | null;
+  /** Período escolhido no filtro (últimos N meses publicados) e os mesmos meses do ano anterior. */
+  sel?: number | null; selAnterior?: number | null;
 }
 
 export interface Oficial {
@@ -17,6 +19,7 @@ export interface Oficial {
   periodo?: string; meses?: string[]; anos?: number[]; ultimoMes?: string; periodoTresAnos?: string;
   anoUltimoDado?: number; fimMesIdx?: number; populacao?: number | null; codigoIbge?: string | null;
   anoPopulacao?: number | null; importadoEm?: string; eventos: EventoOficial[];
+  mesesSel?: number; rotuloSel?: string; rotuloAnt?: string;
 }
 
 export interface Pacote {

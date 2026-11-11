@@ -78,7 +78,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       </div>
     } @else if (legenda(); as leg) {
       <div class="legenda">
-        <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo }} dias · {{ leg.noMapa }} com local exato</div>
+        <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo >= 365 ? '12 meses' : leg.periodo >= 180 ? '6 meses' : leg.periodo + ' dias' }} · {{ leg.noMapa }} com local exato</div>
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
         @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
         @if (leg.fogo; as fc) {
@@ -119,7 +119,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .legenda {
       position: absolute; left: 12px; bottom: 12px; z-index: 800; max-width: min(300px, calc(100% - 80px));
       background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent); backdrop-filter: blur(6px);
-      border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; padding: 10px 12px; font: var(--mat-sys-body-small);
+      border: 1px solid var(--borda-suave); border-radius: var(--raio-m); padding: 10px 12px; font: var(--mat-sys-body-small);
       box-shadow: var(--mat-sys-level1);
     }
     .legenda-titulo { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface); }

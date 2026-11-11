@@ -26,8 +26,8 @@ import { Insight } from '../core/modelos';
   `,
   styles: `
     .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-    .insight { display: flex; gap: 10px; padding: 12px; border-radius: 12px; background: var(--mat-sys-surface-container-low);
-      border: 1px solid var(--mat-sys-outline-variant); border-left: 4px solid var(--tom); --tom: var(--mat-sys-outline); }
+    .insight { display: flex; gap: 10px; padding: 12px; border-radius: var(--raio-m); background: var(--mat-sys-surface-container-low);
+      border: 1px solid var(--borda-suave); border-left: 4px solid var(--tom); --tom: var(--mat-sys-outline); }
     .insight.alerta { --tom: var(--cor-perigo); }
     .insight.positivo { --tom: var(--cor-sucesso); }
     .insight.neutro { --tom: var(--mat-sys-primary); }

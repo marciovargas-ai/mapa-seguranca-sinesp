@@ -1,3 +1,4 @@
+import { IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { BairroResumo } from './bairros';
 import { CATEGORIA_POR_ID } from './dados';
 import { Filtrados, Oficial, Panorama } from './modelos';
@@ -66,7 +67,8 @@ export function agregar(o: Oficial, g: Grupo): Agregado | null {
   const federais: Record<string, number> = {};
   evs.forEach((e) => Object.entries(e.federais || {}).forEach(([k, v]) => (federais[k] = (federais[k] || 0) + v)));
   return {
-    ano: somaNull(evs.map((e) => e.porAno[2])), anterior: somaNull(evs.map((e) => e.parcialAnterior)),
+    ano: somaNull(evs.map((e) => (e.sel !== undefined ? e.sel : e.porAno[2]))),
+    anterior: somaNull(evs.map((e) => (e.selAnterior !== undefined ? e.selAnterior : e.parcialAnterior))),
     total12: soma(evs.map((e) => e.total)), serie36, federais, eventos: evs.map((e) => e.nome),
   };
 }
@@ -74,6 +76,8 @@ export function agregar(o: Oficial, g: Grupo): Agregado | null {
 /** Linhas municipais de um grupo, somando os rankings do panorama (um por indicador). */
 /** Taxa de mortes violentas intencionais do Brasil em 2025, por 100 mil (Anuário Brasileiro de Segurança Pública 2026). */
 const MVI_BRASIL_100MIL = 19.1;
+/** Mortes por intervenção de agentes do Estado no Brasil (Anuário FBSP 2025, dado de 2024: 6.243 mortes) por 100 mil. */
+const MIAE_BRASIL_100MIL = 2.9;
 
 function municipiosDoGrupo(p: Panorama | null, g: Grupo, pop: PopulacaoUf | null): Municipal[] {
   if (!p?.uf) return [];
@@ -117,7 +121,8 @@ function posicionar(linhas: Municipal[], pop: PopulacaoUf | null, ibgeCidade: st
 interface Entrada {
   ehEstado: boolean; nomeLocal: string; cidade: string; uf: string; ibge: string | null;
   oficial: Oficial | null; panorama: Panorama | null; pop: PopulacaoUf | null;
-  f12: Filtrados; bairros: BairroResumo[]; bairrosOsm: number; bairrosCarregando: boolean; ultimaColeta: string;
+  f12: Filtrados; periodoDias: number; bairros: BairroResumo[]; bairrosOsm: number; bairrosCarregando: boolean; ultimaColeta: string;
+  referencia: ReferenciaNacional | null; isp: IspMunicipio | null; tiroteios: Tiroteio[] | null;
 }
 
 export function compilar(c: Entrada): Compilado {
@@ -127,7 +132,9 @@ export function compilar(c: Entrada): Compilado {
   const popEstado = c.pop?.total || null;
   const anos = o?.anos || [];
   const ult = o?.ultimoMes || 'dez';
-  const periodoAno = anos.length ? (ult === 'dez' ? String(anos[2]) : `jan–${ult}/${anos[2]}`) : '';
+  const periodoAno = o?.rotuloSel || (anos.length ? (ult === 'dez' ? String(anos[2]) : `jan–${ult}/${anos[2]}`) : '');
+  const periodoAnt = o?.rotuloAnt || (anos.length ? String(anos[1]) : '');
+  const rotNoticias = c.periodoDias >= 365 ? 'dos últimos 12 meses' : c.periodoDias >= 180 ? 'dos últimos 6 meses' : `dos últimos ${c.periodoDias} dias`;
   const ag = (g: Grupo) => (o ? agregar(o, g) : null);
   const agEstado = (g: Grupo) => (estadoOf ? agregar(estadoOf, g) : null);
 
@@ -155,7 +162,7 @@ export function compilar(c: Entrada): Compilado {
     indicadores.push({
       id: g, titulo: GRUPOS[g].nome, valor: fmt(a.ano), sub: `${periodoAno}` + (tx != null ? ` · ${fmt1(tx)}/100 mil em 12 meses` : '') + comparacao,
       delta: [a.ano, a.anterior], instavel, tom: v == null ? 'neutro' : v > 5 ? 'alerta' : v < -5 ? 'positivo' : 'neutro', fonte: 'Sinesp',
-      dica: `Soma de: ${a.eventos.join(', ')}. ${periodoAno} comparado ao mesmo período de ${anos[1]}.` +
+      dica: `Soma de: ${a.eventos.join(', ')}. ${periodoAno} comparado a ${periodoAnt}.` +
         (tx != null ? ` Taxa = registros dos últimos 12 meses ÷ população (IBGE) × 100 mil.` : '') +
         (txE != null ? ` Estado: ${fmt1(txE)} por 100 mil.` : '') + (instavel ? ' Poucos casos: a variação percentual oscila muito.' : '') + nota,
       ...extra,
@@ -202,7 +209,7 @@ export function compilar(c: Entrada): Compilado {
   const graves = (f.porCat['CVLI'] || 0) + (f.porCat['CONFRONTO'] || 0);
   const comBairro = c.bairros.filter((b) => b.qtd > 0);
   indicadores.push({
-    id: 'noticias', titulo: 'Ocorrências noticiadas (12 meses)', valor: fmt(f.todas.length),
+    id: 'noticias', titulo: `Ocorrências noticiadas (${rotNoticias.replace('dos últimos ', '')})`, valor: fmt(f.todas.length),
     sub: `${fmt(graves)} homicídios ou tiroteios · ${fmt(f.porCat['TRAFICO'] || 0)} tráfico · ${pct(f.precisas.length, f.todas.length)}% com local preciso`, tom: 'neutro', fonte: 'Notícias',
     dica: 'Google Notícias e imprensa local, classificadas automaticamente. Complementam o Sinesp com o onde e o quando, mas não medem o total de crimes.',
   });
@@ -216,35 +223,54 @@ export function compilar(c: Entrada): Compilado {
     });
   }
 
-  // Índice de risco (só para município: compara com o próprio estado)
+  // Índice de risco (só para município). Base nacional: o mesmo município é comparado com todos os
+  // municípios do Brasil com 20 mil hab. ou mais (referência do robô), depois com o próprio estado.
   if (!c.ehEstado && o) {
     const comps: Componente[] = [];
-    if (posMvi.percentil != null) comps.push({ nome: 'Letalidade no estado (MVI por 100 mil)', peso: 30, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis do estado` });
-    // Referência absoluta: taxa de MVI do Brasil em 2025 (Anuário Brasileiro de Segurança Pública 2026). 50 = média nacional.
-    if (posMvi.pos?.taxa != null) {
-      const vBr = Math.round(Math.max(0, Math.min(100, (posMvi.pos.taxa / (2 * MVI_BRASIL_100MIL)) * 100)));
-      comps.push({ nome: 'Letalidade frente ao Brasil', peso: 25, valor: vBr,
-        texto: `${fmt1(posMvi.pos.taxa)} por 100 mil; média nacional ≈ ${fmt1(MVI_BRASIL_100MIL)} (Anuário FBSP 2026, dado de 2025)` });
+    const ref = c.referencia;
+    const percentil = (lista: number[], v: number) => {
+      if (!lista.length) return null;
+      let abaixo = 0, iguais = 0;
+      for (const x of lista) { if (x < v) abaixo++; else if (x === v) iguais++; }
+      return Math.round(((abaixo + iguais / 2) / lista.length) * 100);
+    };
+    const linhaRef = c.ibge ? ref?.municipios[c.ibge] : undefined;
+    const minhaTaxa: number | null = linhaRef?.[2] ?? posMvi.pos?.taxa ?? (mvi ? taxa(mvi.total12, popLocal) : null);
+    if (ref && minhaTaxa != null) {
+      const p = percentil(ref.taxas, minhaTaxa)!;
+      comps.push({ nome: 'Letalidade no Brasil (mortes violentas por 100 mil)', peso: 35, valor: p,
+        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
     }
-    // Volume: quantas mortes o município concentra (capitais grandes têm taxa média, mas muitos casos)
-    const meu = linhasMvi.find((l) => l.ibge === c.ibge)?.total || 0;
-    const totais = linhasMvi.filter((l) => (l.pop || 0) >= MIN_POP || l.ibge === c.ibge).map((l) => l.total);
-    if (totais.length >= 5 && meu > 0) {
-      const pv = Math.round((totais.filter((t) => t < meu).length / totais.length) * 100);
-      const totEst = soma(linhasMvi.map((l) => l.total));
-      comps.push({ nome: 'Volume de mortes', peso: 15, valor: pv, texto: `${fmt(meu)} mortes violentas, ${pct(meu, totEst)}% do estado` });
+    if (posMvi.percentil != null) comps.push({ nome: 'Letalidade no estado', peso: 15, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis do estado` });
+    const meu: number = linhaRef?.[0] ?? linhasMvi.find((l) => l.ibge === c.ibge)?.total ?? 0;
+    if (ref && meu > 0) {
+      const pv = percentil(ref.totais, meu)!;
+      comps.push({ nome: 'Volume de mortes', peso: 15, valor: pv, texto: `${fmt(meu)} mortes violentas em 12 meses; mais que ${pv}% dos municípios comparáveis do país` });
+    }
+    // Mortes por intervenção policial: o Sinesp não publica por município; no RJ, o ISP publica por delegacia
+    if (c.isp?.areas?.length && popLocal) {
+      const mortes = soma(c.isp.areas.map((a: { u12: Record<string, number> }) => a.u12['hom_por_interv_policial'] || 0));
+      const tx = (mortes / popLocal) * 1e5;
+      comps.push({ nome: 'Mortes por intervenção policial', peso: 15, valor: Math.round(Math.min(100, (tx / (2 * MIAE_BRASIL_100MIL)) * 100)),
+        texto: `${fmt(mortes)} em 12 meses (ISP-RJ), ${fmt1(tx)} por 100 mil; média do Brasil ≈ ${fmt1(MIAE_BRASIL_100MIL)}` });
+    }
+    // Violência armada verificada (Fogo Cruzado), onde existe
+    if (c.tiroteios && popLocal) {
+      const tx = (c.tiroteios.length / popLocal) * 1e5;
+      comps.push({ nome: 'Tiroteios verificados', peso: 15, valor: Math.round(Math.min(100, (tx / 40) * 100)),
+        texto: `${fmt(c.tiroteios.length)} tiroteios em 12 meses (Fogo Cruzado), ${fmt1(tx)} por 100 mil (40 ou mais = 100)` });
     }
     const ten = posicionar(municipiosDoGrupo(c.panorama, 'tentativas', c.pop), c.pop, c.ibge);
-    if (ten.percentil != null) comps.push({ nome: 'Tentativas de homicídio', peso: 15, valor: ten.percentil, texto: `acima de ${ten.percentil}% dos municípios comparáveis` });
+    if (ten.percentil != null) comps.push({ nome: 'Tentativas de homicídio', peso: 10, valor: ten.percentil, texto: `acima de ${ten.percentil}% dos municípios comparáveis do estado` });
     const fem = posicionar(municipiosDoGrupo(c.panorama, 'feminicidio', c.pop), c.pop, c.ibge);
-    if (fem.percentil != null) comps.push({ nome: 'Feminicídio', peso: 15, valor: fem.percentil, texto: `acima de ${fem.percentil}% dos municípios comparáveis` });
+    if (fem.percentil != null) comps.push({ nome: 'Feminicídio', peso: 10, valor: fem.percentil, texto: `acima de ${fem.percentil}% dos municípios comparáveis do estado` });
     if (mvi && mvi.anterior != null && Math.max(mvi.ano || 0, mvi.anterior) >= 5) {
       const v = variacao(mvi.ano, mvi.anterior) || 0;
-      comps.push({ nome: 'Tendência no ano', peso: 15, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de MVI em ${periodoAno}` });
+      comps.push({ nome: 'Tendência', peso: 10, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de mortes violentas em ${periodoAno}` });
     }
     if (f.todas.length >= 10) {
       const p = pct(graves, f.todas.length);
-      comps.push({ nome: 'Gravidade noticiada', peso: 15, valor: Math.round(Math.min(100, p * 1.5)), texto: `${p}% das notícias são homicídio ou tiroteio` });
+      comps.push({ nome: 'Gravidade noticiada', peso: 10, valor: Math.round(Math.min(100, p * 1.5)), texto: `${p}% das notícias são homicídio ou tiroteio` });
     }
     const pesoTotal = soma(comps.map((x) => x.peso));
     if (pesoTotal >= 40) {
@@ -252,7 +278,7 @@ export function compilar(c: Entrada): Compilado {
       const [nivel, cor] = valor >= 75 ? ['Muito alto', '#b91c1c'] : valor >= 55 ? ['Alto', '#ea580c'] : valor >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a'];
       risco = {
         valor, nivel, cor, componentes: comps,
-        dica: 'Índice de 0 a 100. Compara o município com os demais do estado (20 mil hab. ou mais) e com a média do Brasil, e considera o volume de mortes. Média ponderada dos componentes: ' +
+        dica: 'Índice de 0 a 100, comparável entre quaisquer municípios do Brasil: a maior parte do peso vem da posição do município entre todos os municípios do país com 20 mil hab. ou mais (mesma fonte, Sinesp, e mesmo período). Média ponderada: ' +
           comps.map((x) => `${x.nome} (${Math.round((x.peso / pesoTotal) * 100)}%)`).join(', ') + '.',
       };
     }
@@ -263,7 +289,7 @@ export function compilar(c: Entrada): Compilado {
     const v = variacao(mvi.ano, mvi.anterior);
     const inst = Math.max(mvi.ano || 0, mvi.anterior || 0) < 10;
     parecer.push(`${c.nomeLocal} registrou ${fmt(mvi.ano)} mortes violentas intencionais em ${periodoAno}` +
-      (v != null ? `, ${v > 0 ? 'alta de ' + v : v < 0 ? 'queda de ' + Math.abs(v) : 'mesmo número que'}${v ? '%' : ''} em relação ao mesmo período de ${anos[1]}` : '') +
+      (v != null ? `, ${v > 0 ? 'alta de ' + v : v < 0 ? 'queda de ' + Math.abs(v) : 'mesmo número que'}${v ? '%' : ''} em relação a ${periodoAnt}` : '') +
       (inst ? ' (base pequena, a variação percentual oscila muito)' : '') + '.');
     const tx = taxa(mvi.total12, popLocal);
     if (posicao && tx != null) {
@@ -285,11 +311,11 @@ export function compilar(c: Entrada): Compilado {
   }
   if (f.todas.length) {
     const top = comBairro.slice(0, 3);
-    parecer.push(`Nas notícias dos últimos 12 meses (complemento), ${fmt(f.todas.length)} ocorrências` +
+    parecer.push(`Nas notícias ${rotNoticias} (complemento), ${fmt(f.todas.length)} ocorrências` +
       (top.length ? `; os bairros mais citados são ${top.map((b) => `${b.nome} (${fmt(b.qtd)})`).join(', ')}` : '') +
       (f.zonas[0] ? ` e a principal zona vermelha fica em ${f.zonas[0].nome.split(',')[0]}` : '') + '.');
   }
-  if (risco) parecer.push(`Índice de risco local: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o estado.`);
+  if (risco) parecer.push(`Índice de risco local: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o Brasil e o estado.`);
 
   // Série: MVI mês a mês (36 meses) com as notícias dos últimos 12 meses no mesmo eixo de tempo
   let serie: Compilado['serie'] = null;

@@ -12,7 +12,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { AjudaComponent } from './ajuda';
+import { TourComponent } from './tour';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -41,7 +41,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, NoticiasComponent, DeltaComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()' },
   template: `
@@ -75,12 +75,13 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         </button>
-        <button mat-icon-button matTooltip="Como ler o painel" aria-label="Ajuda" (click)="ajuda()"><mat-icon>help_outline</mat-icon></button>
+        <button mat-icon-button matTooltip="Como ler o painel (tour guiado)" aria-label="Como ler o painel" (click)="ajuda()"><mat-icon>help_outline</mat-icon></button>
       </div>
     </mat-toolbar>
 
     <main class="corpo" #corpo [style.--largura-painel.px]="larguraPainel()">
       <section class="area-mapa"><app-mapa /></section>
+      @if (tourAberto()) { <app-tour (fechar)="fecharTour()" /> }
 
       <div class="divisor" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"
         (pointerdown)="iniciarArraste($event)" (keydown.arrowleft)="ajustar(40)" (keydown.arrowright)="ajustar(-40)" (dblclick)="larguraPadrao()">
@@ -118,7 +119,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
           }
           @if (filtrosNoticias()) {
             <div class="filtros">
-              <mat-button-toggle-group [value]="store.periodoDias()" (change)="store.periodoDias.set($event.value)" aria-label="Período das notícias" hideSingleSelectionIndicator matTooltip="Filtra só as notícias (complemento)">
+              <mat-button-toggle-group [value]="store.periodoDias()" (change)="store.periodoDias.set($event.value)" aria-label="Período das notícias" hideSingleSelectionIndicator matTooltip="Vale para todas as abas, o mapa e os cartões (no Sinesp, os últimos meses publicados)">
                 @for (p of periodos; track p.dias) { <mat-button-toggle [value]="p.dias">{{ p.rotulo }}</mat-button-toggle> }
               </mat-button-toggle-group>
               <mat-chip-set class="categorias" aria-label="Tipos de crime">
@@ -171,7 +172,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .topo { gap: 12px; height: auto; min-height: 60px; padding: 6px 12px; background: var(--mat-sys-surface-container); border-bottom: 1px solid var(--mat-sys-outline-variant);
       flex-wrap: nowrap; position: relative; z-index: 1000; }
     .marca { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
-    .marca-icone { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); }
+    .marca-icone { width: 38px; height: 38px; border-radius: var(--raio-m); display: grid; place-items: center; background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); }
     .marca-texto { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
     .marca-texto b { font: var(--mat-sys-title-medium); }
     .marca-texto small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
@@ -201,14 +202,14 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
     .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
     @container painel (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    .kpi { background: var(--mat-sys-surface-container-low); border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; padding: 8px 10px; min-width: 0;
+    .kpi { background: var(--mat-sys-surface-container-low); border: 1px solid var(--borda-suave); border-radius: var(--raio-m); padding: 8px 10px; min-width: 0;
       display: flex; flex-direction: column; gap: 1px; }
     .kpi.oficial { border-color: color-mix(in srgb, var(--mat-sys-primary) 45%, var(--mat-sys-outline-variant)); }
     .kpi-rotulo { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 3px; }
     .kpi-rotulo mat-icon { font-size: 14px; width: 14px; height: 14px; color: var(--mat-sys-primary); flex: none; }
     .kpi b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .kpi-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; min-height: 20px; }
-    .aviso-oficial { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; margin-top: 10px;
+    .aviso-oficial { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--raio-m); margin-top: 10px;
       background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
     .aviso-oficial div { display: flex; flex-direction: column; gap: 2px; font: var(--mat-sys-body-medium); }
     .fonte-kpis { margin: 6px 0 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
@@ -259,7 +260,7 @@ export class App {
   protected readonly larguraPainel = signal(this.larguraInicial());
 
   protected readonly indiceAba = computed(() => ABAS.findIndex((a) => a.id === this.store.aba()));
-  protected readonly filtrosNoticias = computed(() => ['ZONAS', 'NOTICIAS'].includes(this.store.aba()));
+  protected readonly filtrosNoticias = computed(() => true);
   protected readonly orgaoAtivo = computed(() => ORGAO_POR_ID[this.store.orgao()] || null);
   protected readonly contagem = computed(() => {
     const f = this.store.filtrados();
@@ -272,7 +273,7 @@ export class App {
     if (!o?.disponivel || !o.anos) return [];
     const parcial = o.ultimoMes !== 'dez';
     const ano = o.anos[2];
-    const sub = parcial ? `jan–${o.ultimoMes}/${ano} vs ${o.anos[1]}` : `${ano} vs ${o.anos[1]}`;
+    const sub = o.rotuloSel ? `${o.rotuloSel} vs ${o.rotuloAnt}` : parcial ? `jan–${o.ultimoMes}/${ano} vs ${o.anos[1]}` : `${ano} vs ${o.anos[1]}`;
     const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string }[] = [];
     const m = mortesViolentas(o.eventos);
     if (!m) return [];
@@ -284,7 +285,8 @@ export class App {
     }
     for (const e of resto) {
       if (lista.length >= 4) break;
-      lista.push({ rotulo: e.nome, valor: e.porAno[2] == null ? '—' : fmt(e.porAno[2]), delta: [e.porAno[2], e.parcialAnterior], sub });
+      const v = e.sel !== undefined ? e.sel : e.porAno[2], a = e.selAnterior !== undefined ? e.selAnterior : e.parcialAnterior;
+      lista.push({ rotulo: e.nome, valor: v == null ? '—' : fmt(v), delta: [v, a], sub });
     }
     return lista;
   });
@@ -350,9 +352,12 @@ export class App {
     this.store.localizar(() => this.store.statusSemLocalizacao());
   }
 
-  protected ajuda(): void {
-    const anos = this.store.oficial()?.anos?.join(', ');
-    this.dialog.open(AjudaComponent, { maxWidth: '640px', width: 'calc(100vw - 32px)', data: { anos } });
+  /** Como ler o painel: tour que passa por cada parte da tela. */
+  protected readonly tourAberto = signal(false);
+  protected ajuda(): void { this.tourAberto.set(true); }
+  protected fecharTour(): void {
+    this.tourAberto.set(false);
+    gravarLocal(CFG.CHAVE_AJUDA_VISTA, '1');
   }
 
   // --------------------------------------------------------------------------
@@ -417,7 +422,7 @@ function mortesViolentas(eventos: EventoOficial[]) {
   return {
     nome: interv.length ? 'Mortes violentas (MVI)' : 'Mortes violentas (CVLI)',
     partes, comIntervencao: interv.length > 0,
-    ano: somar((e) => e.porAno[2]), anterior: somar((e) => e.parcialAnterior),
+    ano: somar((e) => (e.sel !== undefined ? e.sel : e.porAno[2])), anterior: somar((e) => (e.selAnterior !== undefined ? e.selAnterior : e.parcialAnterior)),
     taxa: taxas.every((t) => t != null) ? Math.round(taxas.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
     taxaEstado: taxasEstado.every((t) => t != null) ? Math.round(taxasEstado.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
   };

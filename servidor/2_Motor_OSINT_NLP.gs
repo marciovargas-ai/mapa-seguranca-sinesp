@@ -24,6 +24,7 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  * um veículo, acrescente o domínio dele na lista do estado.
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
+const SEGUNDOS_ORCAMENTO_COLETA_ = 20;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
   AL: ['gazetaweb.com', 'tnh1.com.br', 'cadaminuto.com.br', 'alagoas24horas.com.br', '7segundos.com.br'],
@@ -185,6 +186,7 @@ function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros)
  */
 function coletarNoticiasCidade_(mun) {
   const resultado = { novasOcorrencias: 0, revalidadas: 0, geocodificacoes: 0, erro: '' };
+  const inicioColeta = Date.now();
   const nomeArquivo = nomeArquivoCidade_(mun.ibge);
   const cidNorm = normalizarTexto_(mun.nome);
 
@@ -257,7 +259,8 @@ function coletarNoticiasCidade_(mun) {
     const materiasLidas = {};
     const semLocal = novas.filter(o => o.p === PRECISAO.MUNICIPIO || o.p === PRECISAO.PENDENTE && !o.l)
       .concat(atual.ocorrencias.filter(o => o.p === PRECISAO.MUNICIPIO && !o.mt && !revalidadas[o.id]))
-      .slice(0, MAX_MATERIAS_POR_COLETA_);
+      // Orçamento de tempo: o painel espera esta coleta; o que faltar fica para a próxima (a cada poucos minutos)
+      .slice(0, Date.now() - inicioColeta > SEGUNDOS_ORCAMENTO_COLETA_ * 1000 ? 0 : MAX_MATERIAS_POR_COLETA_);
     if (semLocal.length) {
       const textos = lerTextoMaterias_(semLocal.map(o => o.u));
       semLocal.forEach((o, i) => {
@@ -297,7 +300,9 @@ function coletarNoticiasCidade_(mun) {
       // Bairros do OpenStreetMap ficam no arquivo próprio (bairros_<IBGE>.json), não no da cidade
       Object.keys(ctx.locais).forEach(k => { if (!ctx.locais[k].osm) reg.locais[k] = ctx.locais[k]; });
       // Limpa notícias antigas de homônimos (São José dos Campos, Vila São José...)
-      reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
+      // Só uma vez por arquivo antigo: as notícias novas já passaram pelo filtro com manchete + resumo
+      // (refiltrar a cada coleta só pela manchete apagava notícias válidas e o total caía)
+      if (reg.filtroHomonimos !== 2) reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
       reg.coletadoEm = agora;
       if (primeiraColeta) reg.historicoEm = agora;
@@ -488,11 +493,13 @@ const BASES_DADOS_GITHUB_ = ['https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-s
  * bairros cadastrados no IBGE; null quando o GitHub não respondeu.
  */
 function obterBairrosIbge_(mun) {
+  let ausentes = 0;
   for (let i = 0; i < BASES_DADOS_GITHUB_.length; i++) {
     try {
       const resp = UrlFetchApp.fetch(BASES_DADOS_GITHUB_[i] + 'bairros/' + mun.ibge + '.json', { muteHttpExceptions: true });
       const codigo = resp.getResponseCode();
-      if (codigo === 404) return [];
+      // A CDN pode guardar um 404 antigo de arquivo publicado depois: só desiste se todos disserem 404
+      if (codigo === 404) { if (++ausentes === BASES_DADOS_GITHUB_.length) return []; continue; }
       if (codigo !== 200) continue;
       return JSON.parse(resp.getContentText())
         .filter(b => b && b.n && b.lat && b.lng)
