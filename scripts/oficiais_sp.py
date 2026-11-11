@@ -3,7 +3,7 @@ Dados oficiais por bairro e por ponto: SSP-SP (boletins de ocorrência, todos os
 Fonte: https://www.ssp.sp.gov.br/assets/estatistica/transparencia/spDados/SPDadosCriminais_<ANO>.xlsx
 Saída por município: dados/oficial/<ibge7>.json
   { fonte, orgao, periodo, atualizado, cats:{cat:n}, bairros:{nome:{cat:n}}, pontos:[[lat,lng,cat,yyyymmdd,rubrica]],
-    grade:{cat:[[lat,lng,n]]} }   pontos = crimes contra a vida (todos); grade = roubos/furtos/veículos em células de ~200 m
+    grade:{cat:[[lat,lng,n]]} }   pontos = crimes contra a vida (todos); grade = roubos/furtos/veículos em células de ~330 m
 e dados/oficial/indice.json { ibge: {uf, orgao, periodo, total} }
 """
 import datetime, io, json, os, re, sys, urllib.request, unicodedata
@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 BASE = 'https://www.ssp.sp.gov.br/assets/estatistica/transparencia/spDados/SPDadosCriminais_{}.xlsx'
 SAIDA = 'dados/oficial'
-CELULA = 0.002  # graus (~200 m)
+CELULA = 0.003  # graus (~330 m)
 
 CATS = [  # ordem importa
     ('cvli', re.compile(r'homic[ií]dio (simples|qualificado|doloso)|feminic|latroc|roubo seguido de morte|les[aã]o corporal seguida de morte', re.I)),
@@ -21,7 +21,7 @@ CATS = [  # ordem importa
     ('carga', re.compile(r'roubo.{0,10}carga', re.I)),
     ('roubo', re.compile(r'\broubo', re.I)),
     ('furto', re.compile(r'\bfurto', re.I)),
-    ('trafico', re.compile(r'tr[aá]fico|entorpecente|drogas', re.I)),
+    ('trafico', re.compile(r'tr[aá]fico (de )?drogas|associa[cç][aã]o para o tr[aá]fico', re.I)),
 ]
 GRADE = {'roubo', 'furto', 'veiculo', 'carga'}
 
@@ -124,8 +124,9 @@ def main():
             'fonte': 'SSP-SP, boletins de ocorrência (dados abertos)', 'orgao': 'SSP-SP', 'periodo': periodo,
             'atualizado': hoje.isoformat(), 'cats': dict(m['cats']),
             'bairros': {k: dict(v) for k, v in sorted(m['bairros'].items(), key=lambda kv: -sum(kv[1].values()))[:400]},
-            'pontos': sorted(m['pontos'], key=lambda p: -p[3])[:3000],
-            'grade': {c: [[round(k[0], 4), round(k[1], 4), n] for k, n in v.most_common(4000)] for c, v in m['grade'].items()},
+            # crimes contra a vida e estupro: todos; tráfico: os 1.500 mais recentes
+            'pontos': [p for p in m['pontos'] if p[2] != 'trafico'] + sorted((p for p in m['pontos'] if p[2] == 'trafico'), key=lambda p: -p[3])[:1500],
+            'grade': {c: [[round(k[0], 4), round(k[1], 4), n] for k, n in v.most_common(12000)] for c, v in m['grade'].items()},
         }
         json.dump(saida, open(os.path.join(SAIDA, f'{ibge}.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
         indice[ibge] = {'uf': 'SP', 'orgao': 'SSP-SP', 'periodo': periodo, 'total': sum(m['cats'].values())}
