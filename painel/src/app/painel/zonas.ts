@@ -12,7 +12,7 @@ import { fmt, rotuloPeriodo } from '../core/util';
   imports: [MatIconModule],
   template: `
     @let f = store.filtrados();
-    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.@if (f.tiroteiosZonas) { Inclui {{ fmt(f.tiroteiosZonas) }} tiroteios verificados pelo Fogo Cruzado. }</p>
+    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.@if (f.tiroteiosZonas) { Inclui {{ fmt(f.tiroteiosZonas) }} tiroteios verificados pelo Fogo Cruzado@if (f.duplicadasFogo) {; {{ fmt(f.duplicadasFogo) }} notícias do mesmo caso não foram contadas de novo}. }</p>
     @for (z of f.zonas; track z.rank) {
       <button type="button" class="cartao zona" (click)="store.focar(z.lat, z.lng, 16, z.raio)">
         <div class="topo">

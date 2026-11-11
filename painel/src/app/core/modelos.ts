@@ -58,7 +58,7 @@ export interface Filtrados {
   todas: Ocorrencia[]; anteriores: Ocorrencia[]; comparavel: boolean; precisas: Ocorrencia[]; semLocal: Ocorrencia[];
   porCat: Record<string, number>; porCatAnt: Record<string, number>; locais: Local[];
   serie: { labels: string[]; porCat: Record<string, number[]> }; semana: number[];
-  fontes: { nome: string; qtd: number }[]; zonas: Zona[]; tiroteiosZonas?: number;
+  fontes: { nome: string; qtd: number }[]; zonas: Zona[]; tiroteiosZonas?: number; duplicadasFogo?: number;
   porOrgao: Record<string, ResumoOrgao>; imprensaLocal: number; totalCruzamento: number; semOrgao: number;
 }
 

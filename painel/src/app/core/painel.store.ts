@@ -11,7 +11,7 @@ import { buscarMunicipio, municipioMaisProximo, municipioPorCodigo, municipiosUf
 import { carregarPopulacao, enriquecerOficial, enriquecerPanorama, PopulacaoUf } from './populacao';
 import { aplicarPeriodo, mesesDoPeriodo } from './periodo';
 import { Servidor } from './servidor';
-import { fetchComTimeout, gravarLocal, lerLocal, normalizar } from './util';
+import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsParaData } from './util';
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
@@ -55,7 +55,13 @@ export class PainelStore {
   /** Zonas vermelhas usam também os tiroteios verificados (Fogo Cruzado), onde houver. */
   private comTiroteios(f: Filtrados, dias: number, categorias: string[]): Filtrados {
     const extra = tiroteiosComoOcorrencias(this.fogoCidade()?.dado?.itens, this.cidade(), dias, categorias);
-    return extra.length ? { ...f, zonas: calcularZonas([...f.precisas, ...extra]), tiroteiosZonas: extra.length } : f;
+    if (!extra.length) return f;
+    // Não contar o mesmo fato duas vezes: notícia de homicídio/tiroteio a menos de 1 km e 1 dia de um
+    // tiroteio do Fogo Cruzado é tratada como o mesmo caso e fica só o registro verificado.
+    const dia = (ts: number) => Math.round(tsParaData(ts).getTime() / 86400000);
+    const noticias = f.precisas.filter((o) => !((o.cat === 'CVLI' || o.cat === 'CONFRONTO') &&
+      extra.some((t) => Math.abs(dia(t.ts) - dia(o.ts)) <= 1 && distanciaKm(o.lat!, o.lng!, t.lat!, t.lng!) < 1)));
+    return { ...f, zonas: calcularZonas([...noticias, ...extra]), tiroteiosZonas: extra.length, duplicadasFogo: f.precisas.length - noticias.length };
   }
   /** Notícias dos 12 meses, sem filtros: base do Panorama. */
   readonly filtrados12 = computed(() => this.comTiroteios(filtrar(this.dados(), CFG.DIAS_HISTORICO_SERVIDOR, [], '', this.escopo() === 'ESTADO'), CFG.DIAS_HISTORICO_SERVIDOR, []));

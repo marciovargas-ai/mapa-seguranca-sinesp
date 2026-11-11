@@ -171,3 +171,36 @@ function detalhesFogoCruzado_(o, vitimas, situacao) {
     tipoAcao: o.policeAction ? 'acao' : o.agentPresence ? 'presenca' : ''
   };
 }
+
+/**
+ * Teste da conexão com o Fogo Cruzado: no editor, escolha "testarFogoCruzado" e clique em Executar.
+ * O resultado aparece no Registro de execução. A senha nunca é mostrada.
+ */
+function testarFogoCruzado() {
+  const props = PropertiesService.getScriptProperties();
+  const email = props.getProperty('FOGO_CRUZADO_EMAIL'), senha = props.getProperty('FOGO_CRUZADO_SENHA');
+  if (!email || !senha) { Logger.log('FALTA CONFIGURAR: grave FOGO_CRUZADO_EMAIL e FOGO_CRUZADO_SENHA nas propriedades do script.'); return; }
+  Logger.log('Conta: ' + email.replace(/^(.).*(@.*)$/, '$1***$2'));
+  CacheService.getScriptCache().remove('FOGO_TOKEN');
+  let token;
+  try { token = tokenFogoCruzado_(email, senha); Logger.log('1. Login: OK'); }
+  catch (e) { Logger.log('1. Login: FALHOU (' + e.message + ')'); return; }
+  const fim = new Date(), inicio = new Date(fim.getTime() - 30 * 86400000);
+  const fmt = d => Utilities.formatDate(d, CONFIG.FUSO, 'yyyy-MM-dd');
+  [['RJ', 'Rio de Janeiro'], ['BA', 'Salvador'], ['PE', 'Recife'], ['PA', 'Belém']].forEach(([uf, cidade]) => {
+    try {
+      const idEstado = idEstadoFogoCruzado_(token, uf);
+      const idCidade = idEstado && idCidadeFogoCruzado_(token, idEstado, cidade);
+      if (!idCidade) { Logger.log('2. ' + cidade + ': cidade não encontrada na API'); return; }
+      const j = getFogoCruzado_(FOGO_CRUZADO_API_ + '/occurrences?idState=' + idEstado + '&idCities=' + idCidade +
+        '&initialdate=' + fmt(inicio) + '&finaldate=' + fmt(fim) + '&page=1&take=500', token);
+      const lista = (j && j.data) || [];
+      const total = (j && j.pageMeta && (j.pageMeta.itemCount || j.pageMeta.total)) || lista.length;
+      const disputas = lista.filter(o => /disputa/i.test(((o.contextInfo || {}).mainReason || {}).name || '')).length;
+      const ultimo = lista.map(o => o.date).filter(Boolean).sort().pop();
+      Logger.log('2. ' + cidade + ': ' + total + ' tiroteios nos últimos 30 dias (' + disputas + ' por disputa entre grupos); mais recente: ' +
+        (ultimo ? Utilities.formatDate(new Date(ultimo), CONFIG.FUSO, 'dd/MM/yyyy HH:mm') : 'nenhum'));
+    } catch (e) { Logger.log('2. ' + cidade + ': FALHOU (' + e.message + ')'); }
+  });
+  Logger.log('Compare com o mapa em fogocruzado.org.br/dados: os números devem bater.');
+}
