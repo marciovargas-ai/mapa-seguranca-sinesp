@@ -12,7 +12,7 @@ import { fmt, rotuloPeriodo } from '../core/util';
   imports: [MatIconModule],
   template: `
     @let f = store.filtrados();
-    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.</p>
+    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.@if (f.tiroteiosZonas) { Inclui {{ fmt(f.tiroteiosZonas) }} tiroteios verificados pelo Fogo Cruzado. }</p>
     @for (z of f.zonas; track z.rank) {
       <button type="button" class="cartao zona" (click)="store.focar(z.lat, z.lng, 16, z.raio)">
         <div class="topo">
@@ -35,7 +35,7 @@ import { fmt, rotuloPeriodo } from '../core/util';
     } @empty {
       <div class="vazio">
         <mat-icon>verified_user</mat-icon>
-        {{ f.precisas.length < minimo ? 'Poucas ocorrências com local preciso no período (' + f.precisas.length + '). Amplie o período para 6 ou 12 meses.'
+        {{ f.precisas.length + (f.tiroteiosZonas || 0) < minimo ? 'Poucas ocorrências com local preciso no período (' + (f.precisas.length + (f.tiroteiosZonas || 0)) + '). Amplie o período para 6 ou 12 meses.'
           : 'As ocorrências estão dispersas: nenhuma área concentra registros suficientes.' }}
       </div>
     }

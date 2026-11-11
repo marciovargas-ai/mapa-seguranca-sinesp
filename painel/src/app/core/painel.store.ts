@@ -1,12 +1,12 @@
 import { computed, Injectable, signal } from '@angular/core';
-import { encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
-import { carregarFogoCruzado, carregarIsp, FogoCruzado, IspMunicipio } from './areas';
+import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
+import { carregarFogoCruzado, carregarIsp, FogoCruzado, IspMunicipio, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
-import { Pacote, Panorama } from './modelos';
+import { Filtrados, Ocorrencia, Pacote, Panorama } from './modelos';
 import { buscarMunicipio, municipioMaisProximo, municipioPorCodigo } from './municipios';
 import { carregarPopulacao, enriquecerOficial, enriquecerPanorama, PopulacaoUf } from './populacao';
 import { Servidor } from './servidor';
@@ -47,10 +47,17 @@ export class PainelStore {
   readonly nomeLocal = computed(() =>
     this.escopo() === 'ESTADO' ? ESTADOS[this.uf()].nome : `${this.cidade()} — ${this.uf()}`);
 
-  readonly filtrados = computed(() =>
-    filtrar(this.dados(), this.periodoDias(), this.categorias(), this.orgao(), this.escopo() === 'ESTADO'));
+  readonly filtrados = computed(() => {
+    const f = filtrar(this.dados(), this.periodoDias(), this.categorias(), this.orgao(), this.escopo() === 'ESTADO');
+    return this.orgao() ? f : this.comTiroteios(f, this.periodoDias(), this.categorias());
+  });
+  /** Zonas vermelhas usam também os tiroteios verificados (Fogo Cruzado), onde houver. */
+  private comTiroteios(f: Filtrados, dias: number, categorias: string[]): Filtrados {
+    const extra = tiroteiosComoOcorrencias(this.fogoCidade()?.dado?.itens, this.cidade(), dias, categorias);
+    return extra.length ? { ...f, zonas: calcularZonas([...f.precisas, ...extra]), tiroteiosZonas: extra.length } : f;
+  }
   /** Notícias dos 12 meses, sem filtros: base do Panorama. */
-  readonly filtrados12 = computed(() => filtrar(this.dados(), CFG.DIAS_HISTORICO_SERVIDOR, [], '', this.escopo() === 'ESTADO'));
+  readonly filtrados12 = computed(() => this.comTiroteios(filtrar(this.dados(), CFG.DIAS_HISTORICO_SERVIDOR, [], '', this.escopo() === 'ESTADO'), CFG.DIAS_HISTORICO_SERVIDOR, []));
 
   /** Código IBGE do município aberto ('' no estado). */
   readonly ibgeCidade = computed(() => (this.escopo() === 'CIDADE' ? this.dados()?.codigoIbge || buscarMunicipio(this.uf(), this.cidade())?.ibge || '' : ''));
@@ -372,4 +379,24 @@ function mesclarDelta(base: any, res: any): any {
   (res.ocorrencias || []).forEach((o: any) => porId.set(o.id, o));
   const ocorrencias = [...porId.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0));
   return { ...res, delta: false, ids: undefined, ocorrencias, totalNaBase: ocorrencias.length };
+}
+
+/** Tiroteios do Fogo Cruzado no formato de ocorrência, para entrarem no cálculo das zonas vermelhas. */
+function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string, periodoDias: number, categorias: string[]): Ocorrencia[] {
+  if (!itens?.length) return [];
+  const d = new Date(Date.now() - periodoDias * 86400000);
+  const limite = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  const lista: Ocorrencia[] = [];
+  for (const t of itens) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(t.d || '');
+    if (!m || !isFinite(t.lat) || !isFinite(t.lng)) continue;
+    const ts = Number(m[3] + m[2] + m[1]);
+    const cat = t.mortos ? 'CVLI' : 'CONFRONTO';
+    if (ts < limite || (categorias.length && !categorias.includes(cat))) continue;
+    lista.push({
+      id: 'fc' + t.id, data: t.d, ts, cidade, bairro: t.bairro || '', cat, titulo: 'Tiroteio (Fogo Cruzado)',
+      veiculo: 'Fogo Cruzado', link: '', lat: t.lat, lng: t.lng, precisao: 'ENDERECO', precisa: true, orgaos: [], local: false,
+    });
+  }
+  return lista;
 }

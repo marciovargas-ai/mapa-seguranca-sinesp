@@ -14,6 +14,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AjudaComponent } from './ajuda';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
+import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
 import { Aba, PainelStore } from './core/painel.store';
 import { fmt, fmt1, gravarLocal, lerLocal } from './core/util';
@@ -113,7 +114,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
                 </div>
               }
             </div>
-            <p class="fonte-kpis">Sinesp/MJSP (polícias do estado, PRF e PF) · {{ periodoOficial() }}. Notícias entram só como complemento.</p>
+            <p class="fonte-kpis">Sinesp/MJSP (polícias do estado, PRF e PF) · {{ periodoOficial() }}. {{ notaMortes() }} Notícias entram só como complemento.</p>
           }
           @if (filtrosNoticias()) {
             <div class="filtros">
@@ -273,18 +274,30 @@ export class App {
     const ano = o.anos[2];
     const sub = parcial ? `jan–${o.ultimoMes}/${ano} vs ${o.anos[1]}` : `${ano} vs ${o.anos[1]}`;
     const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string }[] = [];
-    const [ev, ...resto] = o.eventos;
-    if (!ev) return [];
-    lista.push({ rotulo: ev.nome, valor: ev.porAno[2] == null ? '—' : fmt(ev.porAno[2]), delta: [ev.porAno[2], ev.parcialAnterior], sub, cor: 'var(--cor-perigo)' });
-    if (ev.taxa != null) {
-      lista.push({ rotulo: 'Taxa por 100 mil hab.', valor: fmt1(ev.taxa),
-        sub: (ev.taxaEstado ? `estado: ${fmt1(ev.taxaEstado)} · ` : '') + ev.nome.toLowerCase() });
+    const m = mortesViolentas(o.eventos);
+    if (!m) return [];
+    const resto = o.eventos.filter((e) => !m.partes.includes(e));
+    lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
+    if (m.taxa != null) {
+      lista.push({ rotulo: 'Mortes violentas por 100 mil hab.', valor: fmt1(m.taxa),
+        sub: (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)} · ` : '') + 'últimos 12 meses' });
     }
     for (const e of resto) {
       if (lista.length >= 4) break;
       lista.push({ rotulo: e.nome, valor: e.porAno[2] == null ? '—' : fmt(e.porAno[2]), delta: [e.porAno[2], e.parcialAnterior], sub });
     }
     return lista;
+  });
+
+  /** Explica o que entra na contagem de mortes, para bater com os balanços das secretarias. */
+  protected readonly notaMortes = computed(() => {
+    const o = this.store.oficial();
+    const m = o?.disponivel ? mortesViolentas(o.eventos) : null;
+    if (!m) return '';
+    const nomes = m.partes.map((e) => e.nome.toLowerCase()).join(', ');
+    return m.comIntervencao
+      ? `Mortes violentas intencionais (MVI) = ${nomes}.`
+      : `Mortes violentas = ${nomes} (o que as secretarias chamam de CVLI). Mortes por intervenção policial não entram: o Sinesp só as publica por estado, então o total das secretarias (MVI) fica maior.`;
   });
 
   protected readonly periodoOficial = computed(() => {
@@ -383,4 +396,29 @@ export class App {
     this.larguraPainel.set(this.limitar(Math.round(window.innerWidth * 0.5)));
     gravarLocal(CFG.CHAVE_LARGURA, String(this.larguraPainel()));
   }
+}
+
+/**
+ * Mortes violentas a partir dos eventos do Sinesp: homicídio doloso + latrocínio +
+ * lesão corporal seguida de morte (CVLI) e, quando o recorte publica, mortes por
+ * intervenção de agente do Estado (MVI). Vale para qualquer município ou estado.
+ */
+function mortesViolentas(eventos: EventoOficial[]) {
+  const cvli = eventos.filter((e) => /^(homic[ií]dio doloso|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida de morte)/i.test(e.nome));
+  const interv = eventos.filter((e) => /^morte por interven/i.test(e.nome));
+  const partes = [...cvli, ...interv];
+  if (!cvli.length) return null;
+  const somar = (f: (e: EventoOficial) => number | null | undefined) => {
+    const v = partes.map(f);
+    return v.every((x) => x == null) ? null : v.reduce<number>((a, b) => a + (b || 0), 0);
+  };
+  const taxas = partes.map((e) => e.taxa);
+  const taxasEstado = partes.map((e) => e.taxaEstado);
+  return {
+    nome: interv.length ? 'Mortes violentas (MVI)' : 'Mortes violentas (CVLI)',
+    partes, comIntervencao: interv.length > 0,
+    ano: somar((e) => e.porAno[2]), anterior: somar((e) => e.parcialAnterior),
+    taxa: taxas.every((t) => t != null) ? Math.round(taxas.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
+    taxaEstado: taxasEstado.every((t) => t != null) ? Math.round(taxasEstado.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
+  };
 }
