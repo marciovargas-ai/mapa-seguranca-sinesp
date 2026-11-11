@@ -59,9 +59,15 @@ export function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+// Dentro de um iframe (Google Sites) o navegador pode bloquear o localStorage: o cookie é a reserva
+function lerCookie(chave: string): string | null {
+  try { const m = document.cookie.match(new RegExp('(?:^|; )' + chave + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; } catch { return null; }
+}
 export function lerLocal(chave: string): string | null {
-  try { return localStorage.getItem(chave); } catch { return null; }
+  try { const v = localStorage.getItem(chave); if (v !== null) return v; } catch { /* bloqueado */ }
+  return lerCookie(chave);
 }
 export function gravarLocal(chave: string, valor: string): void {
   try { localStorage.setItem(chave, valor); } catch { /* armazenamento indisponível */ }
+  try { document.cookie = `${chave}=${encodeURIComponent(valor)}; max-age=31536000; path=/; SameSite=None; Secure`; } catch { /* idem */ }
 }

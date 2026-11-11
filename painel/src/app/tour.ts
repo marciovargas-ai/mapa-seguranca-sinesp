@@ -28,6 +28,7 @@ const PASSOS: Passo[] = [
   imports: [MatButtonModule, MatIconModule],
   template: `
     @let c = caixa();
+    <div class="fundo" (click)="fechar.emit(false)"></div>
     <div class="foco" [style.top.px]="c.top" [style.left.px]="c.left" [style.width.px]="c.width" [style.height.px]="c.height"></div>
     <div class="balao" role="dialog" aria-live="polite" [style.top.px]="balao().top" [style.left.px]="balao().left">
       <button type="button" class="x" aria-label="Fechar o tour" (click)="fechar.emit(false)"><span class="material-symbols-outlined">close</span></button>
@@ -44,7 +45,8 @@ const PASSOS: Passo[] = [
   `,
   styles: `
     :host { position: fixed; inset: 0; z-index: 2000; }
-    .x { position: absolute; top: 6px; right: 6px; border: 0; background: none; color: inherit; cursor: pointer; padding: 4px; border-radius: 50%; display: grid; place-items: center; }
+    .fundo { position: fixed; inset: 0; cursor: pointer; }
+    .x { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; border: 0; background: none; color: inherit; cursor: pointer; border-radius: 50%; display: grid; place-items: center; z-index: 1; }
     .x:hover { background: var(--mat-sys-surface-container-high); }
     .foco { position: fixed; border-radius: var(--raio-m); box-shadow: 0 0 0 9999px rgba(10, 20, 40, .6); outline: 3px solid var(--mat-sys-primary);
       transition: all .25s ease; pointer-events: none; }
