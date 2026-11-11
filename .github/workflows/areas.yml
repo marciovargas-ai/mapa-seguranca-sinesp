@@ -25,6 +25,17 @@ jobs:
           fi
       - name: ISP-RJ por área de delegacia
         run: python scripts/isp_rj.py || echo "ISP-RJ indisponível hoje; mantém o arquivo anterior"
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Contornos das CISPs do RJ (pacote ispdata)
+        run: |
+          if [ ! -f dados/cisp_rj_contornos.json ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            sudo apt-get install -y -qq libgdal-dev libgeos-dev libproj-dev libudunits2-dev > /dev/null
+            Rscript -e 'install.packages(c("sf", "ispdata"), quiet = TRUE)'
+            Rscript scripts/cisp_rj.R /tmp/cisp_rj.geojson && python scripts/cisp_contornos.py /tmp/cisp_rj.geojson
+          fi
+        continue-on-error: true
       - name: Publicar
         run: |
           git config user.name "robo-sinesp"
