@@ -47,7 +47,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
     MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
-  host: { '[class.arrastando]': 'arrastando()' },
+  host: { '[class.arrastando]': 'arrastando()', '(window:resize)': 'aoRedimensionar()' },
   template: `
     <mat-toolbar class="topo">
       <div class="marca">
@@ -389,9 +389,17 @@ export class App {
     return this.limitar(salva || Math.round(window.innerWidth * 0.5));
   }
 
+  /** O mapa nunca fica com menos de 40% da tela (nem menos de 360 px); o painel, nunca menos de 380 px. */
   private limitar(px: number): number {
-    const max = Math.max(420, window.innerWidth - 320);
+    const w = window.innerWidth;
+    const max = Math.max(380, Math.min(w - 360, Math.round(w * 0.6)));
     return Math.round(Math.min(max, Math.max(380, px)));
+  }
+
+  /** Janela mudou de tamanho (ou o Google Sites redimensionou o quadro): reajusta a divisão. */
+  protected aoRedimensionar(): void {
+    const salva = Number(lerLocal(CFG.CHAVE_LARGURA));
+    this.larguraPainel.set(this.limitar(salva || Math.round(window.innerWidth * 0.5)));
   }
 
   protected iniciarArraste(ev: PointerEvent): void {
