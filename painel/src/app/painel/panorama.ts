@@ -248,6 +248,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     .resumo-indice { margin-top: 10px; font: var(--mat-sys-body-small); display: grid; gap: 4px; }
     .resumo-indice p { margin: 0; }
     .aviso-baixa { margin: 8px 0 0; font: var(--mat-sys-body-small); color: #991b1b; }
+    :host-context(.tema-escuro) .aviso-baixa { color: #fca5a5; }
     .metodo { margin-top: 10px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); cursor: auto; }
     .metodo summary { cursor: pointer; color: var(--mat-sys-primary); font-weight: 600; }
     .metodo ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -257,7 +258,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     .trilho { stroke: var(--mat-sys-surface-container-highest); }
     .valor { display: flex; flex-direction: column; }
     .valor b { font: var(--mat-sys-display-small); font-weight: 700; line-height: 1; }
-    .valor span { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface-variant); }
+    .valor span:not(.confianca) { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface-variant); }
     .componentes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 5px; }
     .componentes li { display: grid; grid-template-columns: minmax(0, 1.4fr) 1fr 28px; gap: 8px; align-items: center; font: var(--mat-sys-body-small); }
     .k-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

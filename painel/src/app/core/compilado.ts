@@ -274,10 +274,10 @@ export function compilar(c: Entrada): Compilado {
         comps.push({ nome: 'Tendência', peso: pesos.d, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de mortes violentas (Sinesp), ${ref.periodo} contra os 12 meses anteriores` });
         metodo.push(`Tendência: ${v > 0 ? 'alta' : v < 0 ? 'queda' : 'estável'}${v ? ' de ' + Math.abs(v) + '%' : ''} nas mortes violentas em 12 meses (Sinesp). Estável vale 50.`);
       }
-      if (media3) metodo.push(`Cidade com menos de 100 mil habitantes: usa a média de 3 anos e aproxima a taxa da média das cidades pequenas do estado, porque poucos casos fazem a taxa por 100 mil oscilar muito (sem esse ajuste: ${fmt1(txBruta)} por 100 mil).`);
+      if (media3) metodo.push(`Cidade com menos de 100 mil habitantes: usa a média de 3 anos e aproxima a taxa da média das cidades do estado com menos de 100 mil habitantes, porque poucos casos fazem a taxa por 100 mil oscilar muito (sem esse ajuste: ${fmt1(txBruta)} por 100 mil).`);
       // Confiança
       const maior = Math.max(cvli, dSim), menor = Math.min(cvli, dSim);
-      if (hab < CIDADE_PEQUENA_CONF && casos < 10) confianca = { nivel: 'baixa', texto: `Poucos casos (${fmt(casos)} ${casos === 1 ? 'morte' : 'mortes'} em ${media3 ? '3 anos' : '12 meses'}): a taxa foi aproximada da média das cidades pequenas do estado.` };
+      if (hab < CIDADE_PEQUENA_CONF && casos < 10) confianca = { nivel: 'baixa', texto: `Poucos casos (${fmt(casos)} ${casos === 1 ? 'morte' : 'mortes'} em ${media3 ? '3 anos' : '12 meses'}): a taxa foi aproximada da média das cidades do estado com menos de 100 mil habitantes.` };
       else if (!ref.sim) confianca = null;
       else if (maior - menor <= 5 || menor >= maior * 0.75) confianca = { nivel: 'alta', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) contam números parecidos.` };
       else confianca = { nivel: 'média', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) divergem; o índice usa o maior. ${dSim > cvli ? 'O Sinesp deste estado costuma deixar casos de fora.' : 'Parte dos óbitos ainda está sem causa definida no DATASUS.'}` };
