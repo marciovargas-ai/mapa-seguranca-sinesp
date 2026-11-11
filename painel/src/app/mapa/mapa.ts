@@ -19,6 +19,29 @@ declare const L: any;
 /** Escala sequencial (claro → vermelho escuro) do mapa por taxa municipal. */
 const ESCALA = ['#fde0c5', '#facba6', '#f59e74', '#e5604b', '#c42e3c', '#8a1538'];
 /** Bairros: amarelo → vermelho escuro (quantidade de ocorrências). */
+const COR_TIROTEIO = ['#f59e0b', '#ef4444', '#7f1d1d'];
+const gravidade = (t: { mortos: number; feridos: number }) => (t.mortos ? 2 : t.feridos ? 1 : 0);
+
+/** Ponto dentro do contorno GeoJSON do município (sem contorno carregado, aceita). */
+function dentroDoContorno(lat: number, lng: number, geo: any): boolean {
+  if (!geo?.features?.length) return true;
+  for (const f of geo.features) {
+    const g = f.geometry; if (!g) continue;
+    const polys = g.type === 'MultiPolygon' ? g.coordinates : g.type === 'Polygon' ? [g.coordinates] : [];
+    for (const p of polys) {
+      let d = false;
+      for (const anel of p) {
+        for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+          const [xi, yi] = anel[i], [xj, yj] = anel[j];
+          if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) d = !d;
+        }
+      }
+      if (d) return true;
+    }
+  }
+  return false;
+}
+
 const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#b91c1c', '#7f1d1d'];
 
 @Component({
@@ -55,10 +78,17 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       </div>
     } @else if (legenda(); as leg) {
       <div class="legenda">
-        <div class="legenda-titulo">{{ leg.total }} notícias · {{ leg.noMapa }} com local exato</div>
+        <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo }} dias · {{ leg.noMapa }} com local exato</div>
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
         @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
-        @if (leg.fogo) { <div class="legenda-fogo"><i></i>{{ leg.fogo }} tiroteios verificados (Fogo Cruzado)</div> }
+        @if (leg.fogo; as fc) {
+          <div class="legenda-fogo-bloco">
+            <b>{{ fc.total }} tiroteios · Fogo Cruzado · 12 meses</b>
+            <span><i style="background:#7f1d1d"></i>{{ fc.mortes }} com morte</span>
+            <span><i style="background:#ef4444"></i>{{ fc.feridos }} com feridos</span>
+            <span><i style="background:#f59e0b"></i>{{ fc.sem }} sem vítimas</span>
+          </div>
+        }
         @if (leg.semLocal) {
           <details class="sem-bairro">
             <summary>{{ leg.semLocal }} sem bairro identificado</summary>
@@ -96,6 +126,10 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .legenda-fogo { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .legenda-fogo i { width: 10px; height: 10px; border-radius: 50%; background: #dc2626; border: 2px solid #111827; }
     .legenda-fogo i.area { border-radius: 2px; background: linear-gradient(90deg, #fde0c5, #8a1538); border: 1px solid #7f1d1d; flex: none; }
+    .legenda-fogo-bloco { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-bottom: 6px; }
+    .legenda-fogo-bloco b { flex-basis: 100%; font-weight: 500; }
+    .legenda-fogo-bloco span { display: inline-flex; align-items: center; gap: 5px; }
+    .legenda-fogo-bloco i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #111827; }
     .sem-bairro { margin: -2px 0 6px; color: var(--mat-sys-on-surface-variant); }
     .sem-bairro summary { cursor: pointer; }
     .sem-bairro ul { max-height: 160px; overflow: auto; margin: 4px 0 0; padding-left: 16px; }
@@ -143,6 +177,8 @@ export class MapaComponent implements OnDestroy {
   private layerSemLocal: any;
   private layerFogo: any;
   private layerDelegacias: any;
+  /** Contorno do município aberto (IBGE): pontos fora dele não entram no mapa. */
+  private readonly contorno = signal<any>(null);
   private layerBairros: any;
   private layerCoropletico: any;
   private cluster: any;
@@ -185,7 +221,8 @@ export class MapaComponent implements OnDestroy {
    */
   private exatas(f: { precisas: Ocorrencia[] }, b: { lista: BairroResumo[] }): Ocorrencia[] {
     const comContorno = this.store.escopo() === 'CIDADE' && b.lista.some((x) => x.aneis?.length);
-    return comContorno ? f.precisas.filter((o) => o.precisao !== 'BAIRRO') : f.precisas;
+    const geo = this.store.escopo() === 'CIDADE' ? this.contorno() : null;
+    return f.precisas.filter((o) => (!comContorno || o.precisao !== 'BAIRRO') && dentroDoContorno(o.lat!, o.lng!, geo));
   }
 
   protected readonly legenda = computed(() => {
@@ -198,7 +235,12 @@ export class MapaComponent implements OnDestroy {
       total: fmt(f.todas.length), noMapa: fmt(this.exatas(f, this.store.bairrosMapa()).length), bairro: peloBairro.length ? fmt(peloBairro.length) : '',
       semLocal: sem.length ? fmt(sem.length) : '', listaSem: sem.slice(0, 30),
       delegacias: this.camadas().delegacias && !!this.store.ispCidade()?.areas.some((a) => a.aneis?.length),
-      fogo: this.store.fogoCidade()?.dado?.itens.length ? fmt(this.store.fogoCidade()!.dado!.itens.length) : '',
+      fogo: (() => {
+        const it = (this.store.fogoCidade()?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, this.contorno()));
+        return it.length ? { total: fmt(it.length), mortes: fmt(it.filter((t) => gravidade(t) === 2).length), feridos: fmt(it.filter((t) => gravidade(t) === 1).length),
+          sem: fmt(it.filter((t) => gravidade(t) === 0).length) } : null;
+      })(),
+      periodo: this.store.periodoDias(),
       cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
     };
   });
@@ -208,6 +250,7 @@ export class MapaComponent implements OnDestroy {
     effect(() => { const c = this.camadas(); c.satelite; c.mapaEscuro; untracked(() => this.aplicarBase()); });
     effect(() => {
       const f = this.store.filtrados(); const c = this.camadas(); const cor = this.coropleticoAtivo(); const b = this.store.bairrosMapa();
+      this.contorno();
       untracked(() => this.renderizar(f, c, cor, b));
     });
     effect(() => {
@@ -238,8 +281,8 @@ export class MapaComponent implements OnDestroy {
       untracked(() => this.desenharDelegacias(i, c.delegacias && !cor && this.store.escopo() === 'CIDADE'));
     });
     effect(() => {
-      const f = this.store.fogoCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo();
-      untracked(() => this.desenharFogo(f?.dado?.itens || [], c.pinos && !cor));
+      const f = this.store.fogoCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo(); const geo = this.contorno();
+      untracked(() => this.desenharFogo((f?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, geo)), c.pinos && !cor));
     });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
@@ -381,9 +424,12 @@ export class MapaComponent implements OnDestroy {
     if (!this.map) return;
     this.layerFogo.clearLayers();
     if (!visivel) return;
-    for (const t of itens) {
-      const m = L.circleMarker([t.lat, t.lng], { renderer: this.renderer, radius: t.mortos ? 7 : 5, fillColor: '#dc2626', color: '#111827',
-        weight: 2, fillOpacity: 0.9 });
+    // Mais graves por cima: sem vítima (laranja), com feridos (vermelho), com morte (vinho, maior)
+    const ordem = itens.slice().sort((a, b) => gravidade(a) - gravidade(b));
+    for (const t of ordem) {
+      const g = gravidade(t);
+      const m = L.circleMarker([t.lat, t.lng], { renderer: this.renderer, radius: [4, 5.5, 7.5][g], fillColor: COR_TIROTEIO[g], color: '#111827',
+        weight: g === 2 ? 1.6 : 1, fillOpacity: 0.9 });
       m.bindPopup(() => `<div class="popup"><span class="popup-cat" style="color:#dc2626">Tiroteio</span> · ${esc(t.d)}` +
         `<div class="popup-titulo">${esc(t.bairro || 'Bairro não informado')}</div><div class="popup-meta">${esc(t.endereco)}</div>` +
         `${fmt(t.mortos)} mortos · ${fmt(t.feridos)} feridos${t.policia ? ' · com ação policial' : ''}${t.motivo ? '<br>' + esc(t.motivo) : ''}` +
@@ -559,9 +605,11 @@ export class MapaComponent implements OnDestroy {
   private async desenharFronteira(codigo: string, ver: boolean, ehEstado: boolean): Promise<void> {
     const token = ++this.tokenFronteira;
     this.layerFronteira?.clearLayers();
+    this.contorno.set(null);
     if (!ver || !codigo || !this.map) return;
     const geo = await this.obterMalha(codigo);
     if (token !== this.tokenFronteira || !geo?.features) return;
+    this.contorno.set(ehEstado ? null : geo);
     const cor = ehEstado ? CFG.COR_FRONTEIRA_ESTADO : CFG.COR_FRONTEIRA_CIDADE;
     const camada = L.geoJSON(geo, { pane: 'paneFronteira', interactive: false, style: { stroke: false, fillColor: cor, fillOpacity: ehEstado ? 0.03 : 0.08 } });
     // Só a linha do contorno recebe clique, para não cobrir os pinos e os bairros

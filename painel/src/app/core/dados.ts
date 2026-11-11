@@ -9,7 +9,8 @@ export const CFG = {
   CIDADE_PADRAO: 'São Paulo',
   TEMPO_LIMITE_LOCALIZACAO_MS: 3000,
   TIMEOUT_REDE_EXTERNA_MS: 6000,
-  MINUTOS_CACHE_NAVEGADOR: 5, // reabrir a mesma cidade nesse prazo não chama o servidor
+  MINUTOS_CACHE_NAVEGADOR: 5,
+  MINUTOS_ATUALIZACAO_AUTOMATICA: 3, // com o painel aberto, busca novidades (só o que mudou) nesse intervalo // reabrir a mesma cidade nesse prazo não chama o servidor
   DIAS_CACHE_FRONTEIRAS: 60, // contornos do IBGE guardados no navegador
   CACHE_PACOTES_MB: 40, // dados guardados no navegador (abre na hora; apaga os menos usados)
   MAX_NOTICIAS_POR_PAGINA: 40,

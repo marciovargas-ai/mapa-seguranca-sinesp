@@ -55,10 +55,10 @@ export async function carregarIsp(uf: string, ibge: string): Promise<IspMunicipi
 }
 
 /** Tiroteios dos últimos 12 meses na cidade (Fogo Cruzado). */
-export async function carregarFogoCruzado(uf: string, cidade: string): Promise<FogoCruzado | null> {
+export async function carregarFogoCruzado(uf: string, cidade: string, ignorarCache = false): Promise<FogoCruzado | null> {
   if (!UFS_FOGO_CRUZADO.includes(uf) || !cidade) return null;
   const chave = 'FOGO_' + uf + '_' + cidade;
-  const guardado = await CacheDisco.obter<FogoCruzado>(chave, 0.25);
+  const guardado = ignorarCache ? null : await CacheDisco.obter<FogoCruzado>(chave, 1 / 24);
   if (guardado) return guardado;
   const r = await Servidor.fogoCruzado(uf, cidade);
   if (r?.configurado && !r.erro) CacheDisco.salvar(chave, r);

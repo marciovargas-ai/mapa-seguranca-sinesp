@@ -108,8 +108,35 @@ export class PainelStore {
   private panoramas = new Map<string, Panorama>();
 
   constructor() {
+    // Tempo real: com o painel aberto e visível, busca novidades a cada poucos minutos (só o que mudou)
+    setInterval(() => this.buscarNovidades(), CFG.MINUTOS_ATUALIZACAO_AUTOMATICA * 60000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.buscarNovidades(); });
     const tema = lerLocal(CFG.CHAVE_TEMA);
     this.definirTema(tema ? tema === 'escuro' : window.matchMedia?.('(prefers-color-scheme: dark)').matches, false);
+  }
+
+  private ultimaBusca = Date.now();
+
+  /** Atualização automática: pede ao servidor só o que mudou; se os dados estão velhos, dispara a coleta. */
+  private buscarNovidades(): void {
+    if (document.visibilityState !== 'visible' || this.escopo() !== 'CIDADE' || this.carregando() || this.coletando()) return;
+    if (Date.now() - this.ultimaBusca < 60000) return;
+    this.ultimaBusca = Date.now();
+    const d = this.dados(); if (!d) return;
+    const uf = this.uf(), cidade = this.cidade(), token = this.tokenAbertura;
+    const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
+    Servidor.cidade(uf, cidade, d.centroLat, d.centroLng, false, desdeDe(base)).then((res) => {
+      if (!this.receber(res, token)) return;
+      if (res.precisaColeta) this.coletar(uf, cidade, d.centroLat, d.centroLng, token);
+      else this.definirStatus('check_circle', 'Dados de ' + (res.ultimaColeta || res.atualizadoEm) + ' · atualização automática', 'ok');
+    }).catch(() => { /* tenta de novo no próximo ciclo */ });
+    this.recarregarFogo();
+  }
+
+  private recarregarFogo(): void {
+    const f = this.fogo(); if (!f || f.carregando) return;
+    const [uf, cidade] = f.chave.split('|');
+    carregarFogoCruzado(uf, cidade, true).then((dado) => { if (this.fogo()?.chave === f.chave && dado?.configurado && !dado.erro) this.fogo.set({ chave: f.chave, dado, carregando: false }); });
   }
 
   definirTema(escuro: boolean, salvar = true): void {
@@ -188,14 +215,17 @@ export class PainelStore {
     this.carregando.set(true);
     this.definirStatus('sync', 'Carregando ' + (ehEstado ? meta.nome : mun!.nome) + '…');
     let mostrouDoDisco = false;
+    // 1º o que está guardado no navegador; depois o servidor manda só o que mudou desde essa versão
     CacheDisco.obterPacote<any>(chave).then((v) => {
-      if (!v || token !== this.tokenAbertura || !this.carregando()) return;
-      mostrouDoDisco = true;
-      this.dados.set(normalizarPacote(v.dado));
-      this.definirStatus('sync', 'Mostrando dados guardados · atualizando…');
-    });
-
-    Servidor.cidade(uf, nomeServidor, lat, lng, false).then((res) => {
+      const base = v?.dado || null;
+      if (base && token === this.tokenAbertura && this.carregando()) {
+        mostrouDoDisco = true;
+        this.dados.set(normalizarPacote(base));
+        this.memoria.set(chave, { em: 0, res: base });
+        this.definirStatus('sync', 'Mostrando dados guardados · buscando novidades…');
+      }
+      return Servidor.cidade(uf, nomeServidor, lat, lng, false, desdeDe(base));
+    }).then((res) => {
       if (!this.receber(res, token)) return;
       this.carregando.set(false);
       if (res.precisaColeta && !ehEstado) { this.coletar(uf, mun!.nome, lat, lng, token); return; }
@@ -208,10 +238,11 @@ export class PainelStore {
     });
   }
 
-  private receber(res: any, token: number): boolean {
-    if (token !== this.tokenAbertura || !res) return false;
+  private receber(resposta: any, token: number): boolean {
+    if (token !== this.tokenAbertura || !resposta) return false;
+    const chave = chaveLocal(resposta.uf, resposta.cidade);
+    const res = mesclarDelta(this.memoria.get(chave)?.res || null, resposta);
     this.dados.set(normalizarPacote(res));
-    const chave = chaveLocal(res.uf, res.cidade);
     this.memoria.set(chave, { em: Date.now(), res });
     CacheDisco.salvarPacote(chave, res);
     return true;
@@ -220,7 +251,8 @@ export class PainelStore {
   private coletar(uf: string, cidade: string, lat: number, lng: number, token: number): void {
     this.definirStatus('travel_explore', 'Consultando Google Notícias e imprensa local…');
     this.coletando.set(true);
-    Servidor.cidade(uf, cidade, lat, lng, true).then((res) => {
+    const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
+    Servidor.cidade(uf, cidade, lat, lng, true, desdeDe(base)).then((res) => {
       this.coletando.set(false);
       if (!this.receber(res, token)) return;
       if (res.coletaEmAndamento) { this.definirStatus('hourglass_top', 'Coleta em andamento; atualize em instantes'); return; }
@@ -323,4 +355,21 @@ export class PainelStore {
 
   statusLocalizando(): void { this.definirStatus('my_location', 'Localizando…'); }
   statusSemLocalizacao(): void { this.definirStatus('location_off', 'Localização indisponível', 'erro'); }
+}
+
+/** Momento da versão guardada (só pacotes no formato com delta). */
+function desdeDe(base: any): number {
+  return base && base.formato === 2 && !base.ehEstado && base.cidade !== 'ESTADO_INTEIRO' ? Number(base.ultimaColetaMs) || 0 : 0;
+}
+
+/** Junta a resposta "só o que mudou" com a versão guardada: troca as alteradas, acrescenta as novas e tira as que saíram. */
+function mesclarDelta(base: any, res: any): any {
+  if (!res?.delta) return res;
+  if (!base?.ocorrencias) return { ...res, delta: false, ids: undefined };
+  const atuais = new Set<string>(res.ids || []);
+  const porId = new Map<string, any>();
+  base.ocorrencias.forEach((o: any) => { if (!res.ids || atuais.has(o.id)) porId.set(o.id, o); });
+  (res.ocorrencias || []).forEach((o: any) => porId.set(o.id, o));
+  const ocorrencias = [...porId.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return { ...res, delta: false, ids: undefined, ocorrencias, totalNaBase: ocorrencias.length };
 }
