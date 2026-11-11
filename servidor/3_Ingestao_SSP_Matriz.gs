@@ -75,9 +75,13 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
   const idadeMs = registro && registro.coletadoEm ? Date.now() - registro.coletadoEm : Infinity;
   if (forcarColeta === true) {
     if (idadeMs > CONFIG.MINUTOS_MIN_ENTRE_COLETAS * 60000) {
-      coleta = coletarNoticiasCidade_(mun);
+      coleta = coletarNoticiasCidade_(mun, 'busca');
       if (coleta.registro) registro = coleta.registro;
     }
+  } else if (forcarColeta === 'materias') {
+    // 2ª etapa: lê o texto das matérias para achar o bairro (o painel já mostra as notícias)
+    coleta = coletarNoticiasCidade_(mun, 'materias');
+    if (coleta.registro) registro = coleta.registro;
   }
 
   // Descarta na leitura as notícias de homônimos gravadas antes do filtro (São José dos Campos etc.)
@@ -98,6 +102,7 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
     centroLng: mun.lng,
     novasCapturadasAgora: coleta ? coleta.novasOcorrencias : 0,
     coletaEmAndamento: !!(coleta && coleta.erro === 'EM_ANDAMENTO'),
+    materiasPendentes: coleta && coleta.materiasPendentes || 0,
     precisaColeta: forcarColeta !== true && idadeMs > MINUTOS_VALIDADE_TEMPO_REAL_ * 60000,
     ultimaColeta: registro && registro.coletadoEm ? Utilities.formatDate(new Date(registro.coletadoEm), CONFIG.FUSO, 'dd/MM/yyyy HH:mm') : '',
     ultimaColetaMs: registro && registro.coletadoEm ? registro.coletadoEm : 0,

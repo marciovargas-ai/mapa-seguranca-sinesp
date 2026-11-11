@@ -16,9 +16,13 @@ jobs:
           python-version: '3.12'
       - run: pip install openpyxl
       - run: python -u scripts/oficiais_sp.py
+      - name: ISP-RJ e roubos por município
+        run: |
+          python scripts/isp_rj.py || echo "ISP-RJ indisponível hoje; mantém o arquivo anterior"
+          python scripts/roubos_municipais.py
       - name: Publicar
         run: |
           git config user.name "robo-sinesp"
           git config user.email "robo-sinesp@users.noreply.github.com"
-          git add dados/oficial
+          git add dados/oficial dados/isp_rj_cisp.json dados/roubos_municipios.json
           git diff --cached --quiet || (git commit -m "Dados oficiais por bairro: SP $(date -u +%Y-%m-%d)" && git pull --rebase && git push)

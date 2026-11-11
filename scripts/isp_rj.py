@@ -32,6 +32,8 @@ CAMPOS = {
     'roubo_carga': 'Roubo de carga',
     'roubo_rua': 'Roubos de rua',
     'furto_veiculos': 'Furto de veículo',
+    'total_roubos': 'Total de roubos',
+    'total_furtos': 'Total de furtos',
     'apreensao_drogas': 'Apreensão de drogas',
     'apf': 'Prisões em flagrante',
     'pessoas_desaparecidas': 'Pessoas desaparecidas',

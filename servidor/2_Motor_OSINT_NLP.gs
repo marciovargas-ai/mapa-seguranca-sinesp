@@ -207,7 +207,9 @@ function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros)
  * Coleta as notícias de um município e atualiza o arquivo dele.
  * mun = { uf, nome, ibge, lat, lng } (de 6_Base_Municipios.gs).
  */
-function coletarNoticiasCidade_(mun) {
+function coletarNoticiasCidade_(mun, modo) {
+  // modo: 'busca' = só procura notícias novas (rápido, o painel espera); 'materias' = só lê o texto
+  // das matérias ainda sem bairro (o painel chama em seguida, sem travar a tela); vazio = tudo (robô)
   const resultado = { novasOcorrencias: 0, revalidadas: 0, geocodificacoes: 0, erro: '' };
   const inicioColeta = Date.now();
   const nomeArquivo = nomeArquivoCidade_(mun.ibge);
@@ -223,14 +225,14 @@ function coletarNoticiasCidade_(mun) {
     const atual = lerJson_(nomeArquivo) || novoRegistroCidade_(mun);
     // Histórico completo (12 meses) na primeira coleta e também, uma vez por dia, enquanto a cidade
     // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
-    const primeiraColeta = !atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_ ||
-      ((atual.ocorrencias || []).length < MIN_NOTICIAS_HISTORICO_ && Date.now() - (atual.historicoEm || 0) > 86400000);
+    const primeiraColeta = modo !== 'materias' && (!atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_ ||
+      ((atual.ocorrencias || []).length < MIN_NOTICIAS_HISTORICO_ && Date.now() - (atual.historicoEm || 0) > 86400000));
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
     const janela = primeiraColeta ? CONFIG.DIAS_JANELA_NOTICIAS + 'd'
       : Math.min(CONFIG.DIAS_JANELA_NOTICIAS, Math.ceil((Date.now() - atual.coletadoEm) / 86400000) + 3) + 'd';
     const bairrosOsm = obterBairrosOsm_(mun);
-    const candidatos = buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm);
+    const candidatos = modo === 'materias' ? [] : buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm);
 
     // 2. Deduplicação contra o que já existe no arquivo
     const idsExistentes = new Set(atual.ocorrencias.map(o => o.id));
@@ -281,9 +283,11 @@ function coletarNoticiasCidade_(mun) {
     //     Lê o texto das notícias novas (e de antigas ainda sem bairro) para achar bairro ou rua.
     const materiasLidas = {};
     const semLocal = novas.filter(o => o.p === PRECISAO.MUNICIPIO || o.p === PRECISAO.PENDENTE && !o.l)
-      .concat(atual.ocorrencias.filter(o => o.p === PRECISAO.MUNICIPIO && !o.mt && !revalidadas[o.id]))
-      // Orçamento de tempo: o painel espera esta coleta; o que faltar fica para a próxima (a cada poucos minutos)
-      .slice(0, Date.now() - inicioColeta > SEGUNDOS_ORCAMENTO_COLETA_ * 1000 ? 0 : MAX_MATERIAS_POR_COLETA_);
+      .concat(atual.ocorrencias.filter(o => o.p === PRECISAO.MUNICIPIO && !o.mt && !revalidadas[o.id]));
+    const totalSemLocal = semLocal.length;
+    // Orçamento de tempo: na busca rápida o painel espera, então a leitura fica para a chamada seguinte
+    semLocal.splice(modo === 'busca' || Date.now() - inicioColeta > SEGUNDOS_ORCAMENTO_COLETA_ * 1000 ? 0 : MAX_MATERIAS_POR_COLETA_);
+    resultado.materiasPendentes = totalSemLocal - semLocal.length;
     if (semLocal.length) {
       const textos = lerTextoMaterias_(semLocal.map(o => o.u));
       semLocal.forEach((o, i) => {
@@ -327,7 +331,7 @@ function coletarNoticiasCidade_(mun) {
       // (refiltrar a cada coleta só pela manchete apagava notícias válidas e o total caía)
       if (reg.filtroHomonimos !== 2) reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
-      reg.coletadoEm = agora;
+      if (modo !== 'materias') reg.coletadoEm = agora;
       if (primeiraColeta) { reg.historicoEm = agora; reg.versaoFiltro = VERSAO_FILTRO_CIDADE_; }
       return podarRegistroCidade_(reg);
     });

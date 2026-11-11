@@ -17,7 +17,8 @@ CATS = [  # ordem importa
     ('tentativa', re.compile(r'(homic[ií]d|feminic).*tent|tent.*(homic[ií]d|feminic)', re.I)),
     ('cvli', re.compile(r'homic[ií]dio (simples|qualificado|doloso)|feminic|latroc|roubo seguido de morte|les[aã]o corporal seguida de morte', re.I)),
     ('estupro', re.compile(r'estupro', re.I)),
-    ('veiculo', re.compile(r'(roubo|furto).{0,20}ve[ií]culo|ve[ií]culo.{0,20}(roubo|furto)', re.I)),
+    # Só roubo de veículo (com violência); furto de veículo entra em 'furto'
+    ('veiculo', re.compile(r'roubo.{0,20}ve[ií]culo|ve[ií]culo.{0,20}roubo', re.I)),
     ('carga', re.compile(r'roubo.{0,10}carga', re.I)),
     ('roubo', re.compile(r'\broubo', re.I)),
     ('furto', re.compile(r'\bfurto', re.I)),
