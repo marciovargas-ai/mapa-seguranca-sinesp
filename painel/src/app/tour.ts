@@ -101,7 +101,7 @@ export class TourComponent {
       const el = document.querySelector(p.alvo) as HTMLElement | null;
       // Parte que não existe neste local (ex.: índice de risco sem dado oficial): pula
       if (!el) { const prox = n + passo; if (prox >= 0 && prox < PASSOS.length) this.ir(prox, passo); return; }
-      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      rolarAte(el);
       setTimeout(() => this.tick.update((v) => v + 1), 350);
     }, 120);
     this.tick.update((v) => v + 1);
@@ -112,5 +112,28 @@ export class TourComponent {
     if (e.key === 'Escape') this.fechar.emit(false);
     else if (e.key === 'ArrowRight' && this.i() + 1 < this.total) this.ir(this.i() + 1);
     else if (e.key === 'ArrowLeft' && this.i() > 0) this.ir(this.i() - 1);
+  }
+}
+
+/**
+ * Rola só a caixa do painel que contém o alvo. scrollIntoView também rolava a página inteira (mesmo com
+ * overflow escondido), e dentro do Google Sites isso subia o painel e deixava uma faixa branca embaixo.
+ */
+function rolarAte(el: HTMLElement): void {
+  let p = el.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) {
+      const r = el.getBoundingClientRect(), rp = p.getBoundingClientRect();
+      if (r.top < rp.top || r.bottom > rp.bottom) p.scrollBy({ top: r.top - rp.top - (rp.height - Math.min(r.height, rp.height)) / 2, behavior: 'smooth' });
+      return;
+    }
+    p = p.parentElement;
+  }
+  // Celular: a própria página rola
+  const doc = document.scrollingElement;
+  if (doc && doc.scrollHeight > window.innerHeight + 4 && getComputedStyle(document.body).overflowY !== 'hidden') {
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) window.scrollBy({ top: r.top - (window.innerHeight - Math.min(r.height, window.innerHeight)) / 2, behavior: 'smooth' });
   }
 }

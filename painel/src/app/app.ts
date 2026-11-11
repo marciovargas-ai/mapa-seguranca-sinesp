@@ -361,6 +361,8 @@ export class App {
   protected fecharTour(naoMostrar: boolean): void {
     this.tourAberto.set(false);
     if (naoMostrar) gravarLocal(CFG.CHAVE_AJUDA_VISTA, '1');
+    // No computador a página não rola: desfaz qualquer deslocamento (evita faixa branca dentro do Google Sites)
+    if (window.innerWidth > 900) window.scrollTo(0, 0);
   }
 
   // --------------------------------------------------------------------------
