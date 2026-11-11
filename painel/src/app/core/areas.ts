@@ -15,6 +15,9 @@ export interface IspMunicipio { fonte: string; periodo: { de: string; ate: strin
 export interface Tiroteio {
   id: string; d: string; lat: number; lng: number; bairro: string; endereco: string;
   mortos: number; feridos: number; policia: boolean; motivo: string;
+  /** Detalhes do Fogo Cruzado (servidor v5.3+): disputa entre grupos armados, motivos, recortes, chacina, agentes, jovens, bala perdida, transporte, animais. */
+  gp?: number; mc?: string[]; rc?: string[]; ch?: number; ag?: { m: number; f: number } | null; cr?: number; bp?: number;
+  tr?: string[]; an?: number; un?: string; tipoAcao?: string;
 }
 export interface FogoCruzado { configurado: boolean; erro?: string; atualizadoEm?: string; itens: Tiroteio[] }
 

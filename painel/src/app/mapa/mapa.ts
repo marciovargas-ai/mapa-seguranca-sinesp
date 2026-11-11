@@ -87,6 +87,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
             <span><i style="background:#7f1d1d"></i>{{ fc.mortes }} com morte</span>
             <span><i style="background:#ef4444"></i>{{ fc.feridos }} com feridos</span>
             <span><i style="background:#f59e0b"></i>{{ fc.sem }} sem vítimas</span>
+            @if (fc.disputa) { <span><i style="background:transparent;border:2px solid #a855f7"></i>{{ fc.disputa }} em disputa entre facções/milícia</span> }
           </div>
         }
         @if (leg.semLocal) {
@@ -238,7 +239,7 @@ export class MapaComponent implements OnDestroy {
       fogo: (() => {
         const it = (this.store.fogoCidade()?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, this.contorno()));
         return it.length ? { total: fmt(it.length), mortes: fmt(it.filter((t) => gravidade(t) === 2).length), feridos: fmt(it.filter((t) => gravidade(t) === 1).length),
-          sem: fmt(it.filter((t) => gravidade(t) === 0).length) } : null;
+          sem: fmt(it.filter((t) => gravidade(t) === 0).length), disputa: it.some((t) => t.gp) ? fmt(it.filter((t) => t.gp).length) : '' } : null;
       })(),
       periodo: this.store.periodoDias(),
       cats: CATEGORIAS.filter((c) => f.porCat[c.id]).map((c) => ({ ...c, qtd: fmt(f.porCat[c.id]) })), zonas: f.zonas.length,
@@ -428,11 +429,16 @@ export class MapaComponent implements OnDestroy {
     const ordem = itens.slice().sort((a, b) => gravidade(a) - gravidade(b));
     for (const t of ordem) {
       const g = gravidade(t);
-      const m = L.circleMarker([t.lat, t.lng], { renderer: this.renderer, radius: [4, 5.5, 7.5][g], fillColor: COR_TIROTEIO[g], color: '#111827',
-        weight: g === 2 ? 1.6 : 1, fillOpacity: 0.9 });
+      const m = L.circleMarker([t.lat, t.lng], { renderer: this.renderer, radius: [4, 5.5, 7.5][g], fillColor: COR_TIROTEIO[g],
+        color: t.gp ? '#a855f7' : '#111827', weight: t.gp ? 2.2 : g === 2 ? 1.6 : 1, fillOpacity: 0.9 });
       m.bindPopup(() => `<div class="popup"><span class="popup-cat" style="color:#dc2626">Tiroteio</span> · ${esc(t.d)}` +
         `<div class="popup-titulo">${esc(t.bairro || 'Bairro não informado')}</div><div class="popup-meta">${esc(t.endereco)}</div>` +
-        `${fmt(t.mortos)} mortos · ${fmt(t.feridos)} feridos${t.policia ? ' · com ação policial' : ''}${t.motivo ? '<br>' + esc(t.motivo) : ''}` +
+        `${fmt(t.mortos)} mortos · ${fmt(t.feridos)} feridos${t.tipoAcao === 'presenca' ? ' · com presença de agentes' : t.policia ? ' · com ação policial' : ''}` +
+        `${t.motivo ? '<br>Motivo: ' + esc(t.motivo) : ''}${t.gp ? '<br><b style="color:#a855f7">Disputa entre grupos armados (facção/milícia)</b>' : ''}` +
+        `${t.mc?.length ? '<br>' + esc(t.mc.join(', ')) : ''}${t.rc?.length ? '<br>Recortes: ' + esc(t.rc.join(', ')) : ''}` +
+        `${t.ch ? '<br><b>Chacina</b>' : ''}${t.ag && (t.ag.m || t.ag.f) ? `<br>Agentes: ${t.ag.m} mortos, ${t.ag.f} feridos` : ''}` +
+        `${t.cr ? `<br>${t.cr} criança(s)/adolescente(s) atingido(s)` : ''}${t.bp ? '<br>Bala perdida' : ''}` +
+        `${t.tr?.length ? '<br>Transporte interrompido: ' + esc(t.tr.join(', ')) : ''}${t.un ? '<br>Unidade: ' + esc(t.un) : ''}` +
         `<div class="popup-meta">Fonte: Instituto Fogo Cruzado (verificado, local exato)</div></div>`);
       this.layerFogo.addLayer(m);
     }

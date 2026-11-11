@@ -3,6 +3,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { corCategoria, nomeCategoria } from '../core/compilado';
+import { Tiroteio } from '../core/areas';
 import { PainelStore } from '../core/painel.store';
 import { fmt, fmt1, pct } from '../core/util';
 import { DeltaComponent, GraficoComponent } from './comuns';
@@ -119,6 +120,26 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
             @if (f.bairros.length) {
               <div class="nota">Bairros com mais tiroteios: {{ f.bairros }}</div>
             }
+            @if (f.detalhado) {
+              <h4 class="sub-bloco" matTooltip="Tiroteios que o Fogo Cruzado classificou como disputa entre facções e/ou milícia (sem agentes de segurança em serviço), ou com motivo complementar ligado a facção, milícia ou tráfico.">
+                <mat-icon>groups</mat-icon> Facções e milícias</h4>
+              <div class="fc">
+                <div><b class="perigo">{{ fmt(f.disputas) }}</b><span>tiroteios em disputa entre grupos armados</span></div>
+                <div><b>{{ fmt(f.mortosDisputa) }}</b><span>mortos nessas disputas</span></div>
+                <div><b>{{ pctTexto(f.disputas, f.total) }}</b><span>dos tiroteios da cidade</span></div>
+              </div>
+              @if (f.bairrosDisputa) { <div class="nota">Onde as disputas mais acontecem: {{ f.bairrosDisputa }}</div> }
+              <div class="fc">
+                <div><b>{{ fmt(f.chacinas) }}</b><span>chacinas (3+ mortos)</span></div>
+                <div><b>{{ fmt(f.agentesM) }} / {{ fmt(f.agentesF) }}</b><span>agentes mortos / feridos</span></div>
+                <div><b>{{ fmt(f.jovens) }}</b><span>crianças e adolescentes atingidos</span></div>
+                <div><b>{{ fmt(f.balas) }}</b><span>bala perdida</span></div>
+                <div><b>{{ fmt(f.transporte) }}</b><span>com transporte interrompido</span></div>
+                <div><b>{{ fmt(f.animais) }}</b><span>animais atingidos</span></div>
+              </div>
+              @if (f.motivos) { <div class="nota">Motivos registrados: {{ f.motivos }}</div> }
+              <div class="nota">No mapa, tiroteios em disputa entre grupos armados têm borda roxa. O território de cada facção não vem na API do Fogo Cruzado.</div>
+            }
           }
         </section>
       }
@@ -226,7 +247,10 @@ const CORES_ANOS = ['#94a3b8', '#60a5fa', '#1d4ed8'];
       text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
     .linha.m { grid-template-columns: minmax(0, 2fr) 70px 60px 60px; }
     .linha.d { grid-template-columns: minmax(0, 1fr) minmax(90px, 1.4fr) 60px 80px 90px; cursor: default; }
-    .fc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+    .fc { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 6px; }
+    .fc span { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+    .sub-bloco { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; font: var(--mat-sys-title-small); }
+    .sub-bloco mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .fc div { display: flex; flex-direction: column; }
     .fc b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .fc span { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
@@ -281,7 +305,7 @@ export class PanoramaComponent {
   protected readonly fogo = computed(() => {
     const v = this.store.fogoCidade();
     if (!v) return null;
-    const vazio = { total: 0, mortos: 0, feridos: 0, policia: 0, bairros: '' };
+    const vazio = { total: 0, mortos: 0, feridos: 0, policia: 0, bairros: '', detalhado: false } as any;
     if (v.carregando) return { ...vazio, texto: 'Carregando tiroteios do Fogo Cruzado…' };
     const d = v.dado;
     if (!d) return null;
@@ -294,8 +318,13 @@ export class PanoramaComponent {
       texto: d.itens.length ? '' : 'Nenhum tiroteio registrado nos últimos 12 meses.',
       total: d.itens.length, mortos: d.itens.reduce((a, t) => a + t.mortos, 0), feridos: d.itens.reduce((a, t) => a + t.feridos, 0),
       policia: d.itens.filter((t) => t.policia).length, bairros: top,
+      ...resumoFaccoes(d.itens),
     };
   });
+
+  protected pctTexto(n: number, total: number): string {
+    return total ? Math.round((n / total) * 100) + '%' : '—';
+  }
 
   protected arco(v: number): string {
     const comp = Math.PI * 50;
@@ -335,4 +364,29 @@ export class PanoramaComponent {
       },
     };
   });
+}
+
+/** Resumo de facções/milícias e do contexto dos tiroteios (campos detalhados do Fogo Cruzado). */
+function resumoFaccoes(itens: Tiroteio[]) {
+  const detalhado = itens.some((t) => t.gp !== undefined);
+  const disputa = itens.filter((t) => t.gp);
+  const contar = (l: string[]) => {
+    const c: Record<string, number> = {};
+    l.forEach((x) => { if (x) c[x] = (c[x] || 0) + 1; });
+    return Object.entries(c).sort((a, b) => b[1] - a[1]);
+  };
+  return {
+    detalhado,
+    disputas: disputa.length,
+    mortosDisputa: disputa.reduce((a, t) => a + t.mortos, 0),
+    bairrosDisputa: contar(disputa.map((t) => t.bairro)).slice(0, 6).map(([n, q]) => `${n} (${q})`).join(', '),
+    chacinas: itens.filter((t) => t.ch).length,
+    agentesM: itens.reduce((a, t) => a + (t.ag?.m || 0), 0),
+    agentesF: itens.reduce((a, t) => a + (t.ag?.f || 0), 0),
+    jovens: itens.reduce((a, t) => a + (t.cr || 0), 0),
+    balas: itens.filter((t) => t.bp).length,
+    transporte: itens.filter((t) => t.tr?.length).length,
+    animais: itens.reduce((a, t) => a + (t.an || 0), 0),
+    motivos: contar(itens.map((t) => t.motivo)).slice(0, 6).map(([n, q]) => `${n} (${q})`).join(', '),
+  };
 }
