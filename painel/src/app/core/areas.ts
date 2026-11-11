@@ -76,10 +76,19 @@ export interface ReferenciaBruta { periodo: string; ufs: Record<string, { cvli: 
 /** Montada no painel com a população do IBGE: taxas de todos os municípios com 20 mil hab. ou mais. */
 export interface ReferenciaNacional {
   periodo: string; brasil: { cvli: number; pop: number; taxa: number };
-  /** ibge → [mortes usadas, habitantes, taxa por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano,
-   *  tentativas por 100 mil, CVLI 12 meses anteriores, média de 3 anos usada (1) ou não (0)] */
-  taxas: number[]; totais: number[]; taxasTent: number[]; municipios: Record<string, number[]>;
+  /** ibge → [mortes por ano, habitantes, taxa ajustada por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano,
+   *  tentativas por 100 mil (ajustada), CVLI 12 meses anteriores, média de 3 anos (1) ou 12 meses (0),
+   *  roubos por 100 mil (ajustada; -1 = estado não publica), taxa de mortes sem ajuste, casos de morte no período,
+   *  roubos por ano] */
+  taxas: number[]; totais: number[]; taxasTent: number[]; taxasRoubo: number[]; municipios: Record<string, number[]>;
   sim: { ano: number; preliminar: boolean } | null;
+  roubos: Record<string, { fonte: string; periodo: string; definicao: string }>;
+}
+/** Roubos por município, das secretarias estaduais: ibge6 → [roubos por ano, furtos por ano] */
+export interface RoubosBruto { atualizado: string; estados: Record<string, { fonte: string; periodo: string; definicao: string }>; municipios: Record<string, [number, number | null]> }
+let roubos: Promise<RoubosBruto | null> | null = null;
+export function carregarRoubos(): Promise<RoubosBruto | null> {
+  return roubos || (roubos = baixarDados('roubos_municipios.json', 'ROUBOS_MUN1', 3));
 }
 /** SIM/DATASUS: ibge6 → [agressão, intervenção legal, intenção indeterminada]; população do IBGE junto. */
 export interface SimBruto { ano: number; preliminar: boolean; municipios: Record<string, [number, number, number]>; populacao?: { ano: number; municipios: Record<string, number> } }

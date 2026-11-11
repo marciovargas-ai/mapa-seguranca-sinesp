@@ -1,7 +1,7 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
 import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './oficial';
-import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
+import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, carregarRoubos, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
@@ -287,10 +287,21 @@ export class PainelStore {
       const novas = res.novasCapturadasAgora || 0;
       this.definirStatus('check_circle', (novas ? `Google Notícias: ${novas} ${novas === 1 ? 'notícia nova' : 'notícias novas'} · `
         : 'Google Notícias: nada novo · ') + 'atualizado às ' + res.atualizadoEm, 'ok');
+      if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
     }).catch(() => {
       this.coletando.set(false);
       if (token === this.tokenAbertura) this.definirStatus('error', 'Coleta não concluída; mostrando dados salvos', 'erro');
     });
+  }
+
+  /** 2ª etapa, sem travar a tela: o servidor lê o texto das matérias para achar o bairro de cada notícia. */
+  private lerMaterias(uf: string, cidade: string, lat: number, lng: number, token: number, rodadas: number): void {
+    if (rodadas <= 0 || token !== this.tokenAbertura) return;
+    const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
+    Servidor.cidade(uf, cidade, lat, lng, 'materias', desdeDe(base)).then((res) => {
+      if (!this.receber(res, token)) return;
+      if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, rodadas - 1);
+    }).catch(() => undefined);
   }
 
   atualizarAgora(): void {
@@ -427,15 +438,15 @@ function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string,
 }
 
 async function montarReferencia(): Promise<ReferenciaNacional | null> {
-  const [bruta, sim] = await Promise.all([carregarReferencia(), carregarSim().catch(() => null)]);
+  const [bruta, sim, rb] = await Promise.all([carregarReferencia(), carregarSim().catch(() => null), carregarRoubos().catch(() => null)]);
   if (!bruta?.ufs) return null;
   const ufs = Object.keys(bruta.ufs);
   // População: a do arquivo do SIM (IBGE, todos os municípios) e, se faltar, a API do IBGE por estado
   const popSim = sim?.populacao?.municipios;
   const pops = popSim ? [] : await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
-  const municipios: Record<string, number[]> = {};
-  const taxas: number[] = [], taxasTent: number[] = [], totais: number[] = [];
-  let mortes = 0, pop = 0, ufsOk = 0;
+  type Bruto = { ibge: string; uf: string; hab: number; mortes: number; anos: number; tent: number; roubo: number | null; d: number[]; dSim: number };
+  const brutos: Bruto[] = [];
+  let mortesBr = 0, popBr = 0, ufsOk = 0;
   ufs.forEach((uf, k) => {
     const p = pops[k];
     if (!popSim && !p) return;
@@ -448,24 +459,55 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
       const d = det[m.norm] || [nomes[m.norm] || 0, 0, 0, 0, 0];
       const s = sim?.municipios[c6];
       const dSim = s ? s[0] + s[1] : 0;
-      // Cidade pequena (< 20 mil hab.): média de 3 anos do Sinesp, para um caso isolado não distorcer a taxa
-      const pequena = hab < 20000 && d[2] > 0;
-      const cvli = pequena ? d[2] / 3 : d[0];
+      // Abaixo de 100 mil hab.: média anual de 3 anos do Sinesp, para um caso isolado não distorcer a taxa
+      const anos = hab < CIDADE_GRANDE && d[2] > 0 ? 3 : 1;
+      const cvli = anos === 3 ? d[2] / 3 : d[0];
       // Cada fonte deixa de contar casos em lugares diferentes (o Sinesp depende do envio de cada estado; o SIM
       // tem óbitos ainda sem causa definida). A maior das duas é a contagem mais completa, sem somar o mesmo caso.
-      const usado = Math.max(cvli, dSim);
-      const tent = pequena ? d[4] / 3 : d[3];
-      mortes += Math.max(d[0], dSim); pop += hab;
-      const linha = [Math.round(usado * 10) / 10, hab, Math.round((usado / hab) * 1e6) / 10, d[0], dSim, Math.round((tent / hab) * 1e6) / 10, d[1], pequena ? 1 : 0];
-      municipios[m.ibge] = linha;
-      if (hab >= 20000) { taxas.push(linha[2]); taxasTent.push(linha[5]); totais.push(linha[0]); }
+      const mortes = Math.max(cvli, dSim);
+      const tent = anos === 3 ? d[4] / 3 : d[3];
+      const r = rb?.municipios[c6];
+      brutos.push({ ibge: m.ibge, uf, hab, mortes, anos, tent, roubo: r ? r[0] : null, d, dSim });
+      mortesBr += Math.max(d[0], dSim); popBr += hab;
     }
   });
   if (ufsOk < 20) return null;  // sem população da maior parte do país, não compara
+
+  // Ajuste para cidades pequenas (Bayes empírico, como em saúde pública): com poucos casos, a taxa é puxada
+  // para a média das cidades com menos de 100 mil hab. do mesmo estado, na proporção do tamanho da cidade.
+  const media: Record<string, number[]> = {};
+  for (const b of brutos) {
+    if (b.hab >= CIDADE_GRANDE) continue;
+    const a = (media[b.uf] ??= [0, 0, 0, 0, 0]);
+    a[0] += b.mortes; a[1] += b.hab; a[2] += b.tent;
+    if (b.roubo != null) { a[3] += b.roubo; a[4] += b.hab; }
+  }
+  const ajustar = (casos: number, hab: number, anos: number, mu: number) =>
+    hab >= CIDADE_GRANDE || !(mu >= 0) ? (casos / hab) * 1e5 : ((casos * anos + mu * FORCA_AJUSTE) / (hab * anos + FORCA_AJUSTE)) * 1e5;
+  const r1 = (x: number) => Math.round(x * 10) / 10;
+  const municipios: Record<string, number[]> = {};
+  const taxas: number[] = [], taxasTent: number[] = [], taxasRoubo: number[] = [], totais: number[] = [];
+  for (const b of brutos) {
+    const a = media[b.uf];
+    const mu = (i: number, h = 1) => (a && a[h] ? a[i] / a[h] : NaN);
+    const tx = ajustar(b.mortes, b.hab, b.anos, mu(0));
+    const tt = ajustar(b.tent, b.hab, b.anos, mu(2));
+    const tr = b.roubo == null ? -1 : ajustar(b.roubo, b.hab, 1, mu(3, 4));
+    const linha = [r1(b.mortes), b.hab, r1(tx), b.d[0], b.dSim, r1(tt), b.d[1], b.anos === 3 ? 1 : 0, r1(tr),
+      r1((b.mortes / b.hab) * 1e5), Math.round(b.mortes * b.anos), Math.round(b.roubo ?? 0)];
+    municipios[b.ibge] = linha;
+    if (b.hab >= 20000) { taxas.push(linha[2]); taxasTent.push(linha[5]); totais.push(linha[0]); if (tr >= 0) taxasRoubo.push(linha[8]); }
+  }
   const ord = (l: number[]) => l.sort((x, y) => x - y);
   return {
-    periodo: bruta.periodo, brasil: { cvli: mortes, pop, taxa: Math.round((mortes / pop) * 1e6) / 10 },
-    taxas: ord(taxas), taxasTent: ord(taxasTent), totais: ord(totais), municipios,
+    periodo: bruta.periodo, brasil: { cvli: mortesBr, pop: popBr, taxa: Math.round((mortesBr / popBr) * 1e6) / 10 },
+    taxas: ord(taxas), taxasTent: ord(taxasTent), taxasRoubo: ord(taxasRoubo), totais: ord(totais), municipios,
     sim: sim ? { ano: sim.ano, preliminar: !!sim.preliminar } : null,
+    roubos: rb?.estados || {},
   };
 }
+
+/** Cidades abaixo disto usam média de 3 anos e taxa ajustada pela média do estado. */
+const CIDADE_GRANDE = 100000;
+/** Peso da média do estado no ajuste, em habitantes-ano (equivale a somar 30 mil habitantes "médios"). */
+const FORCA_AJUSTE = 30000;

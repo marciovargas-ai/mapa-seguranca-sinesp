@@ -20,8 +20,8 @@ function chamar<T>(funcao: string, ...args: unknown[]): Promise<T> {
 }
 
 export const Servidor = {
-  cidade: (uf: string, cidade: string, lat: number, lng: number, forcar: boolean, desde = 0) =>
-    chamar<any>('obterOuAtualizarCidadeNacional', uf, cidade, lat, lng, forcar === true, desde || 0),
+  cidade: (uf: string, cidade: string, lat: number, lng: number, forcar: boolean | 'materias', desde = 0) =>
+    chamar<any>('obterOuAtualizarCidadeNacional', uf, cidade, lat, lng, forcar === 'materias' ? 'materias' : forcar === true, desde || 0),
   panorama: (uf: string) => chamar<Panorama>('obterPanoramaEstado', uf),
   bairros: (ibge: string) => chamar<any[]>('obterBairrosCidade', ibge).then((l) => (Array.isArray(l) ? l : []), () => []),
   fogoCruzado: (uf: string, cidade: string) =>

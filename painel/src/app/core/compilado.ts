@@ -42,7 +42,7 @@ export interface Indicador {
 }
 
 export interface Componente { nome: string; peso: number; valor: number; texto: string }
-export interface Risco { valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string; metodo: string[]; confianca: { nivel: 'alta' | 'média'; texto: string } | null; contexto: string[] }
+export interface Risco { valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string; metodo: string[]; confianca: { nivel: 'alta' | 'média' | 'baixa'; texto: string } | null; contexto: string[]; resumo: string[]; titulo: string }
 export interface Posicao { rank: number; total: number; taxa: number; mediana: number; taxaEstado: number | null }
 export interface Fonte { nome: string; estado: 'ok' | 'parcial' | 'sem'; detalhe: string; dica: string }
 export interface Municipal { nome: string; ibge: string | null; pop: number | null; total: number; anterior: number; taxa: number | null }
@@ -124,6 +124,9 @@ interface Entrada {
   f12: Filtrados; periodoDias: number; bairros: BairroResumo[]; bairrosOsm: number; bairrosCarregando: boolean; ultimaColeta: string;
   referencia: ReferenciaNacional | null; isp: IspMunicipio | null; tiroteios: Tiroteio[] | null;
 }
+
+/** Abaixo disto, com menos de 10 casos, o selo de confiança fica "baixa". */
+const CIDADE_PEQUENA_CONF = 100000;
 
 export function compilar(c: Entrada): Compilado {
   const o = c.oficial?.disponivel && c.oficial.anos ? c.oficial : null;
@@ -241,43 +244,59 @@ export function compilar(c: Entrada): Compilado {
     const metodo: string[] = [];
     let confianca: Risco['confianca'] = null;
     const simTxt = ref?.sim ? `DATASUS ${ref.sim.ano}${ref.sim.preliminar ? ' (preliminar)' : ''}` : 'DATASUS';
+    const resumo: string[] = [];
+    let comRoubos = false;
     if (ref && linhaRef && minhaTaxa != null) {
-      const [usado, hab, , cvli, dSim, tentTx, cAnt, pequena] = linhaRef;
+      const [usado, hab, , cvli, dSim, tentTx, cAnt, media3, roubTx, txBruta, casos, roubAno] = linhaRef;
+      comRoubos = roubTx != null && roubTx >= 0 && ref.taxasRoubo.length >= 50;
+      const pesos = comRoubos ? { m: 50, r: 30, t: 10, d: 10 } : { m: 65, r: 0, t: 20, d: 15 };
+      const n = fmt(ref.taxas.length);
       const p = percentil(ref.taxas, minhaTaxa)!;
-      comps.push({ nome: 'Mortes violentas por 100 mil (Brasil)', peso: 65, valor: p,
-        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
-      metodo.push(`Mortes violentas: ${fmt(Math.round(usado))} em 12 meses${pequena ? ' (média anual de 3 anos, porque a cidade tem menos de 20 mil habitantes)' : ''}, ${fmt1(minhaTaxa)} por 100 mil habitantes (população IBGE: ${fmt(hab)}).`);
-      metodo.push(`Duas fontes oficiais são comparadas e vale a maior, sem somar: Sinesp/Ministério da Justiça (${ref.periodo}): ${fmt(cvli)} homicídios dolosos, latrocínios e lesões seguidas de morte; ${simTxt}, Ministério da Saúde, atestados de óbito: ${fmt(dSim)} mortes por agressão ou intervenção policial.`);
-      metodo.push(`Posição nacional: mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios com 20 mil habitantes ou mais (Brasil: ${fmt1(ref.brasil.taxa)} por 100 mil). Peso de 65%.`);
+      comps.push({ nome: 'Mortes violentas', peso: pesos.m, valor: p,
+        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${n} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
+      metodo.push(`Mortes violentas: ${fmt(Math.round(usado))} por ano, ${fmt1(minhaTaxa)} por 100 mil habitantes. Mais alta que ${p}% dos ${n} municípios do país com 20 mil hab. ou mais. Vale o maior número entre Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}), sem somar.`);
+      if (comRoubos) {
+        const pr = percentil(ref.taxasRoubo, roubTx)!;
+        const est = ref.roubos[c.uf];
+        comps.push({ nome: 'Roubos', peso: pesos.r, valor: pr,
+          texto: `${fmt1(roubTx)} por 100 mil (${est?.fonte.split(',')[0] || 'secretaria estadual'}); mais alta que ${pr}% dos ${fmt(ref.taxasRoubo.length)} municípios comparáveis dos estados que publicam roubos` });
+        metodo.push(`Roubos: ${fmt(roubAno)} por ano, ${fmt(Math.round(roubTx))} por 100 mil habitantes (${est?.fonte.split(',')[0] || 'secretaria estadual'}${est?.periodo ? ', ' + est.periodo : ''}). Mais alta que ${pr}% dos ${fmt(ref.taxasRoubo.length)} municípios com 20 mil hab. ou mais dos estados que publicam esse dado (${Object.keys(ref.roubos).join(' e ')}).`);
+      }
       if (ref.taxasTent.length) {
         const pt = percentil(ref.taxasTent, tentTx)!;
-        comps.push({ nome: 'Tentativas de homicídio e feminicídio (Brasil)', peso: 20, valor: pt,
-          texto: `${fmt1(tentTx)} por 100 mil (Sinesp); acima de ${pt}% dos municípios do país com 20 mil hab. ou mais` });
-        metodo.push(`Tentativas de homicídio e de feminicídio (Sinesp): ${fmt1(tentTx)} por 100 mil, acima de ${pt}% dos municípios comparáveis do país. Peso de 20%.`);
+        comps.push({ nome: 'Tentativas de homicídio', peso: pesos.t, valor: pt,
+          texto: `${fmt1(tentTx)} por 100 mil (Sinesp, inclui feminicídio); acima de ${pt}% dos municípios do país com 20 mil hab. ou mais` });
+        metodo.push(`Tentativas de homicídio e feminicídio: ${fmt1(tentTx)} por 100 mil (Sinesp). Mais alta que ${pt}% dos municípios comparáveis.`);
       }
-      const base = pequena ? 0 : Math.max(cvli, cAnt);
+      const base = hab < 20000 ? 0 : Math.max(cvli, cAnt);
       if (base >= 10) {
         const v = variacao(cvli, cAnt) || 0;
-        comps.push({ nome: 'Tendência (12 meses)', peso: 15, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de mortes violentas (Sinesp), ${ref.periodo} contra os 12 meses anteriores` });
-        metodo.push(`Tendência: ${v > 0 ? '+' : ''}${v}% de mortes violentas (Sinesp) nos últimos 12 meses contra os 12 anteriores; estável vale 50. Peso de 15%.`);
-      } else {
-        metodo.push('Tendência: não entra, porque o número de casos é pequeno demais para medir variação com segurança.');
+        comps.push({ nome: 'Tendência', peso: pesos.d, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de mortes violentas (Sinesp), ${ref.periodo} contra os 12 meses anteriores` });
+        metodo.push(`Tendência: ${v > 0 ? 'alta' : v < 0 ? 'queda' : 'estável'}${v ? ' de ' + Math.abs(v) + '%' : ''} nas mortes violentas em 12 meses (Sinesp). Estável vale 50.`);
       }
-      // Confiança: as duas fontes nacionais contam parecido?
+      if (media3) metodo.push(`Cidade com menos de 100 mil habitantes: usa a média de 3 anos e aproxima a taxa da média das cidades pequenas do estado, porque poucos casos fazem a taxa por 100 mil oscilar muito (sem esse ajuste: ${fmt1(txBruta)} por 100 mil).`);
+      // Confiança
       const maior = Math.max(cvli, dSim), menor = Math.min(cvli, dSim);
-      if (!ref.sim) confianca = null;
+      if (hab < CIDADE_PEQUENA_CONF && casos < 10) confianca = { nivel: 'baixa', texto: `Poucos casos (${fmt(casos)} ${casos === 1 ? 'morte' : 'mortes'} em ${media3 ? '3 anos' : '12 meses'}): a taxa foi aproximada da média das cidades pequenas do estado.` };
+      else if (!ref.sim) confianca = null;
       else if (maior - menor <= 5 || menor >= maior * 0.75) confianca = { nivel: 'alta', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) contam números parecidos.` };
       else confianca = { nivel: 'média', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) divergem; o índice usa o maior. ${dSim > cvli ? 'O Sinesp deste estado costuma deixar casos de fora.' : 'Parte dos óbitos ainda está sem causa definida no DATASUS.'}` };
+      const partes = comps.map((x) => `${x.nome.toLowerCase()} (${x.peso}%)`);
+      resumo.push(`Nota de 0 a 100 que compara ${c.nomeLocal} com os municípios do Brasil: quanto maior, mais violenta.`);
+      resumo.push(`Soma, por 100 mil habitantes, ${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}.`);
+      if (!comRoubos) resumo.push('Roubos ainda não entram: o dado por município deste estado ainda não está no painel. Por enquanto, a nota usa só violência letal.');
+      resumo.push(`Fontes: Sinesp (Ministério da Justiça), DATASUS (Ministério da Saúde), IBGE${comRoubos ? ' e ' + (ref.roubos[c.uf]?.fonte.split(',')[0] || 'secretaria estadual') : ''}.`);
     } else if (posMvi.percentil != null) {
       comps.push({ nome: 'Mortes violentas (estado)', peso: 65, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis do estado (referência nacional ainda carregando)` });
     }
     // Contexto local, fora da nota
     const contexto: string[] = [];
-    if (c.isp?.areas?.length && popLocal) {
+    const popCtx = linhaRef?.[1] || popLocal;
+    if (c.isp?.areas?.length && popCtx) {
       const mortes = soma(c.isp.areas.map((a: { u12: Record<string, number> }) => a.u12['hom_por_interv_policial'] || 0));
-      contexto.push(`Mortes por intervenção policial: ${fmt(mortes)} em 12 meses (ISP-RJ), ${fmt1((mortes / popLocal) * 1e5)} por 100 mil; média do Brasil ≈ ${fmt1(MIAE_BRASIL_100MIL)}.`);
+      contexto.push(`Mortes por intervenção policial: ${fmt(mortes)} em 12 meses (ISP-RJ), ${fmt1((mortes / popCtx) * 1e5)} por 100 mil; média do Brasil ≈ ${fmt1(MIAE_BRASIL_100MIL)}.`);
     }
-    if (c.tiroteios?.length && popLocal) contexto.push(`Tiroteios verificados: ${fmt(c.tiroteios.length)} em 12 meses (Instituto Fogo Cruzado), ${fmt1((c.tiroteios.length / popLocal) * 1e5)} por 100 mil.`);
+    if (c.tiroteios?.length && popCtx) contexto.push(`Tiroteios verificados: ${fmt(c.tiroteios.length)} em 12 meses (Instituto Fogo Cruzado), ${fmt1((c.tiroteios.length / popCtx) * 1e5)} por 100 mil.`);
     if (contexto.length) metodo.push('Contexto local, fora da nota (dado que não existe para todos os municípios): ' + contexto.join(' '));
     const pesoTotal = soma(comps.map((x) => x.peso));
     if (pesoTotal >= 60) {
@@ -285,9 +304,9 @@ export function compilar(c: Entrada): Compilado {
       const [nivel, cor] = valor >= 75 ? ['Muito alto', '#b91c1c'] : valor >= 55 ? ['Alto', '#ea580c'] : valor >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a'];
       risco = {
         valor, nivel, cor, componentes: comps, confianca, contexto,
-        metodo: [...metodo, 'Resultado: média ponderada dos componentes, de 0 a 100 (0–34 baixo, 35–54 moderado, 55–74 alto, 75+ muito alto). A mesma régua vale para qualquer município do Brasil.'],
-        dica: 'Índice de violência letal de 0 a 100, com a mesma régua para os 5.570 municípios: só usa dados que existem para todos (Sinesp, DATASUS e população do IBGE), comparando a cidade com todos os municípios do país com 20 mil hab. ou mais. Média ponderada: ' +
-          comps.map((x) => `${x.nome} (${Math.round((x.peso / pesoTotal) * 100)}%)`).join(', ') + '.',
+        resumo, titulo: comRoubos ? 'Índice de criminalidade' : 'Índice de violência letal',
+        metodo: [...metodo, 'Nota final: média ponderada das partes (0–34 baixo, 35–54 moderado, 55–74 alto, 75 ou mais muito alto).'],
+        dica: 'Passe o mouse em cada barra para ver o número por trás dela.',
       };
     }
   }
@@ -326,7 +345,7 @@ export function compilar(c: Entrada): Compilado {
       (top.length ? `; os bairros mais citados são ${top.map((b) => `${b.nome} (${fmt(b.qtd)})`).join(', ')}` : '') +
       (f.zonas[0] ? ` e a principal zona vermelha fica em ${f.zonas[0].nome.split(',')[0]}` : '') + '.');
   }
-  if (risco) parecer.push(`Índice de violência letal: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o Brasil.`);
+  if (risco) parecer.push(`${risco.titulo}: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o Brasil.`);
 
   // Série: MVI mês a mês (36 meses) com as notícias dos últimos 12 meses no mesmo eixo de tempo
   let serie: Compilado['serie'] = null;

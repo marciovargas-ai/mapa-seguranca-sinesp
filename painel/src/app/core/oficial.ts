@@ -15,7 +15,7 @@ export interface OficialArea {
 
 export const NOME_CAT_OFICIAL: Record<string, string> = {
   cvli: 'Homicídio, feminicídio e latrocínio', tentativa: 'Tentativa de homicídio', estupro: 'Estupro',
-  roubo: 'Roubo', furto: 'Furto', veiculo: 'Roubo/furto de veículo', carga: 'Roubo de carga', trafico: 'Tráfico de drogas',
+  roubo: 'Roubo', furto: 'Furto', veiculo: 'Roubo de veículo', carga: 'Roubo de carga', trafico: 'Tráfico de drogas',
 };
 /** Categoria das notícias (filtro do painel) → categorias oficiais equivalentes. */
 const POR_FILTRO: Record<string, string[]> = {
@@ -33,7 +33,7 @@ export async function carregarOficial(ibge: string): Promise<OficialArea | null>
   const idx = await indice;
   if (!idx) { indice = null; return null; }
   if (!idx[ibge]) return null;
-  return baixarDadosPublicos(`oficial/${ibge}.json`, 'OFICIAL_' + ibge + '_' + idx[ibge].periodo, 7);
+  return baixarDadosPublicos(`oficial/${ibge}.json`, 'OFICIAL2_' + ibge + '_' + idx[ibge].periodo, 7);
 }
 
 export interface BairroOficial { total: number; cats: Record<string, number> }

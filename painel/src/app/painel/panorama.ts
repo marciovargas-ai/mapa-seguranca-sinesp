@@ -34,14 +34,14 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
       @if (c.risco; as r) {
         <article class="cartao risco" [matTooltip]="r.dica" matTooltipClass="dica-larga">
-          <header><mat-icon>speed</mat-icon><h3>Índice de violência letal</h3><mat-icon class="info">info</mat-icon></header>
+          <header><mat-icon>speed</mat-icon><h3>{{ r.titulo }}</h3><mat-icon class="info">info</mat-icon></header>
           <div class="medidor">
             <svg viewBox="0 0 120 68" aria-hidden="true">
               <path d="M10 62 A50 50 0 0 1 110 62" class="trilho" />
               <path d="M10 62 A50 50 0 0 1 110 62" class="arco" [style.stroke]="r.cor" [attr.stroke-dasharray]="arco(r.valor)" />
             </svg>
             <div class="valor"><b [style.color]="r.cor">{{ r.valor }}</b><span>de 100 · {{ r.nivel }}</span>
-              @if (r.confianca; as cf) { <span class="confianca" [class.media]="cf.nivel === 'média'" [matTooltip]="cf.texto">Confiança {{ cf.nivel }}</span> }
+              @if (r.confianca; as cf) { <span class="confianca" [class.media]="cf.nivel === 'média'" [class.baixa]="cf.nivel === 'baixa'" [matTooltip]="cf.texto">Confiança {{ cf.nivel }}</span> }
             </div>
           </div>
           <ul class="componentes">
@@ -53,8 +53,10 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
               </li>
             }
           </ul>
+          <div class="resumo-indice">@for (l of r.resumo; track $index) { <p>{{ l }}</p> }</div>
+          @if (r.confianca?.nivel === 'baixa') { <p class="aviso-baixa">{{ r.confianca!.texto }}</p> }
           <details class="metodo">
-            <summary>De onde vêm os números e como chegamos ao índice</summary>
+            <summary>Ver os números de cada parte</summary>
             <ol>@for (l of r.metodo; track $index) { <li>{{ l }}</li> }</ol>
           </details>
         </article>
@@ -242,6 +244,10 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     .risco { cursor: help; }
     .confianca { margin-top: 6px; align-self: flex-start; font: var(--mat-sys-label-small); font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
     .confianca.media { background: #fef3c7; color: #92400e; }
+    .confianca.baixa { background: #fee2e2; color: #991b1b; }
+    .resumo-indice { margin-top: 10px; font: var(--mat-sys-body-small); display: grid; gap: 4px; }
+    .resumo-indice p { margin: 0; }
+    .aviso-baixa { margin: 8px 0 0; font: var(--mat-sys-body-small); color: #991b1b; }
     .metodo { margin-top: 10px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); cursor: auto; }
     .metodo summary { cursor: pointer; color: var(--mat-sys-primary); font-weight: 600; }
     .metodo ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
