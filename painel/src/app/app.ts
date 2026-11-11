@@ -14,6 +14,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TourComponent } from './tour';
 import { FaccoesComponent } from './painel/faccoes';
+import { AgenteComponent } from './agente';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -43,7 +44,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, NoticiasComponent, DeltaComponent, TourComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()' },
   template: `
@@ -84,6 +85,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     <main class="corpo" #corpo [style.--largura-painel.px]="larguraPainel()">
       <section class="area-mapa"><app-mapa /></section>
       @if (tourAberto()) { <app-tour (fechar)="fecharTour($event)" /> }
+      <app-agente />
 
       <div class="divisor" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"
         (pointerdown)="iniciarArraste($event)" (keydown.arrowleft)="ajustar(40)" (keydown.arrowright)="ajustar(-40)" (dblclick)="larguraPadrao()">

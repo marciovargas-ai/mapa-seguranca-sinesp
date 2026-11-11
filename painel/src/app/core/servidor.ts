@@ -26,6 +26,11 @@ export const Servidor = {
   bairros: (ibge: string) => chamar<any[]>('obterBairrosCidade', ibge).then((l) => (Array.isArray(l) ? l : []), () => []),
   fogoCruzado: (uf: string, cidade: string) =>
     chamar<any>('obterFogoCruzado', uf, cidade).then((r) => r || null, (e) => ({ configurado: true, erro: String(e?.message || e), itens: [] })),
+  agenteStatus: () => chamar<{ configurado: boolean }>('statusAgenteIA'),
+  agente: (pergunta: string, contexto: string, conversaId: string) =>
+    chamar<{ ok: boolean; resposta?: string; conversaId?: string; erro?: string; configurado?: boolean }>('perguntarAgenteIA', pergunta, contexto, conversaId),
+  exportar: (formato: 'pdf' | 'sheets', titulo: string, local: string, pergunta: string, resposta: string) =>
+    chamar<{ ok: boolean; url: string; nome: string }>('exportarRespostaIA', formato, titulo, local, pergunta, resposta),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),
 };

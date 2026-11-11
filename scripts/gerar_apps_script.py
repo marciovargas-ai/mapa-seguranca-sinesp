@@ -94,6 +94,14 @@ def main():
     with open(os.path.join(DIST, 'styles.css'), encoding='utf-8') as f:
         css = f.read()
 
+    # O CSS global vai junto com o aplicativo: assim o tema sempre combina com o código, mesmo que o
+    # Painel_Estilos do Apps Script esteja de uma versão antiga (ele fica só como reserva até o app abrir)
+    css_js = json.dumps(css, ensure_ascii=False).replace('<', '\\u003c')
+    js = ("(function(){try{var h=document.head;h.querySelectorAll('style').forEach(function(s){"
+          "if(s.id!=='painel-estilos'&&s.textContent.indexOf('--mat-sys')>=0)s.remove();});"
+          "var e=document.getElementById('painel-estilos')||document.createElement('style');e.id='painel-estilos';"
+          "e.textContent=" + css_js + ";h.appendChild(e);}catch(x){}})();\n") + js
+
     # Partes cortadas em ';' ou '}' para cada arquivo terminar num ponto legível
     partes, inicio = [], 0
     while inicio < len(js):
