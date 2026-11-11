@@ -1,6 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
-import { carregarFogoCruzado, carregarIsp, carregarReferencia, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
+import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
@@ -413,30 +413,38 @@ function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string,
 }
 
 async function montarReferencia(): Promise<ReferenciaNacional | null> {
-  const bruta = await carregarReferencia();
+  const [bruta, sim] = await Promise.all([carregarReferencia(), carregarSim().catch(() => null)]);
   if (!bruta?.ufs) return null;
   const ufs = Object.keys(bruta.ufs);
-  const pops = await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
-  const municipios: Record<string, [number, number, number]> = {};
-  let cvli = 0, pop = 0, ufsOk = 0;
+  // População: a do arquivo do SIM (IBGE, todos os municípios) e, se faltar, a API do IBGE por estado
+  const popSim = sim?.populacao?.municipios;
+  const pops = popSim ? [] : await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
+  const municipios: Record<string, [number, number, number, number, number]> = {};
+  let mortes = 0, pop = 0, ufsOk = 0;
   ufs.forEach((uf, k) => {
     const p = pops[k];
-    if (!p) return;
+    if (!popSim && !p) return;
     ufsOk++;
-    cvli += bruta.ufs[uf].cvli;
-    pop += p.total;
     const nomes = bruta.ufs[uf].municipios;
     for (const m of municipiosUf(uf)) {
-      const hab = p.porCodigo[m.ibge];
-      if (!hab || hab < 20000) continue;
-      const c = nomes[m.norm] || 0;
-      municipios[m.ibge] = [c, hab, Math.round((c / hab) * 1e6) / 10];
+      const c6 = String(m.ibge).slice(0, 6);
+      const hab = popSim ? popSim[c6] : p!.porCodigo[m.ibge];
+      if (!hab) continue;
+      const cvli = nomes[m.norm] || 0;
+      const s = sim?.municipios[c6];
+      const dSim = s ? s[0] + s[1] : 0;
+      // Cada fonte deixa de contar casos em lugares diferentes (o Sinesp depende do envio de cada estado; o SIM
+      // tem óbitos ainda sem causa definida). A maior das duas é a contagem mais completa, sem somar o mesmo caso.
+      const usado = Math.max(cvli, dSim);
+      mortes += usado; pop += hab;
+      if (hab >= 20000) municipios[m.ibge] = [usado, hab, Math.round((usado / hab) * 1e6) / 10, cvli, dSim];
     }
   });
   if (ufsOk < 20) return null;  // sem população da maior parte do país, não compara
   const linhas = Object.values(municipios);
   return {
-    periodo: bruta.periodo, brasil: { cvli, pop, taxa: Math.round((cvli / pop) * 1e6) / 10 },
+    periodo: bruta.periodo, brasil: { cvli: mortes, pop, taxa: Math.round((mortes / pop) * 1e6) / 10 },
     taxas: linhas.map((l) => l[2]).sort((a, b) => a - b), totais: linhas.map((l) => l[0]).sort((a, b) => a - b), municipios,
+    sim: sim ? { ano: sim.ano, preliminar: !!sim.preliminar } : null,
   };
 }

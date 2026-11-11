@@ -51,6 +51,10 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
               </li>
             }
           </ul>
+          <details class="metodo">
+            <summary>De onde vêm os números e como chegamos ao índice</summary>
+            <ol>@for (l of r.metodo; track $index) { <li>{{ l }}</li> }</ol>
+          </details>
         </article>
       }
     </section>
@@ -234,6 +238,9 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       border-radius: 6px; padding: 2px 8px; cursor: help; }
     .parecer p { margin: 0 0 6px; font: var(--mat-sys-body-medium); line-height: 1.55; }
     .risco { cursor: help; }
+    .metodo { margin-top: 10px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); cursor: auto; }
+    .metodo summary { cursor: pointer; color: var(--mat-sys-primary); font-weight: 600; }
+    .metodo ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
     .medidor { display: flex; align-items: center; gap: 12px; }
     .medidor svg { width: 130px; flex: none; }
     .trilho, .arco { fill: none; stroke-width: 11; stroke-linecap: round; }

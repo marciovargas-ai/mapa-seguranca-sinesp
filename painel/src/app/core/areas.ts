@@ -73,7 +73,15 @@ export interface ReferenciaBruta { periodo: string; ufs: Record<string, { cvli: 
 /** Montada no painel com a população do IBGE: taxas de todos os municípios com 20 mil hab. ou mais. */
 export interface ReferenciaNacional {
   periodo: string; brasil: { cvli: number; pop: number; taxa: number };
-  taxas: number[]; totais: number[]; municipios: Record<string, [number, number, number]>;
+  /** ibge → [mortes usadas, habitantes, taxa por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano] */
+  taxas: number[]; totais: number[]; municipios: Record<string, [number, number, number, number, number]>;
+  sim: { ano: number; preliminar: boolean } | null;
+}
+/** SIM/DATASUS: ibge6 → [agressão, intervenção legal, intenção indeterminada]; população do IBGE junto. */
+export interface SimBruto { ano: number; preliminar: boolean; municipios: Record<string, [number, number, number]>; populacao?: { ano: number; municipios: Record<string, number> } }
+let sim: Promise<SimBruto | null> | null = null;
+export function carregarSim(): Promise<SimBruto | null> {
+  return sim || (sim = baixarDados('sim_homicidios.json', 'SIM_HOMICIDIOS', 7));
 }
 let referencia: Promise<ReferenciaBruta | null> | null = null;
 export function carregarReferencia(): Promise<ReferenciaBruta | null> {

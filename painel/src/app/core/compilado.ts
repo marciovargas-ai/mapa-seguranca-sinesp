@@ -42,7 +42,7 @@ export interface Indicador {
 }
 
 export interface Componente { nome: string; peso: number; valor: number; texto: string }
-export interface Risco { valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string }
+export interface Risco { valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string; metodo: string[] }
 export interface Posicao { rank: number; total: number; taxa: number; mediana: number; taxaEstado: number | null }
 export interface Fonte { nome: string; estado: 'ok' | 'parcial' | 'sem'; detalhe: string; dica: string }
 export interface Municipal { nome: string; ibge: string | null; pop: number | null; total: number; anterior: number; taxa: number | null }
@@ -239,10 +239,18 @@ export function compilar(c: Entrada): Compilado {
     // Pesos: o que mede violência letal de forma comparável no país inteiro pesa mais. Componentes que só
     // comparam dentro do estado (tentativas, feminicídio) ou que crescem com o tamanho da cidade (volume)
     // ficaram fora, porque inflavam capitais e cidades de estados menos violentos.
+    const metodo: string[] = [];
     if (ref && minhaTaxa != null) {
       const p = percentil(ref.taxas, minhaTaxa)!;
+      const simTxt = ref.sim ? `DATASUS ${ref.sim.ano}${ref.sim.preliminar ? ' (preliminar)' : ''}` : 'DATASUS';
+      const origem = linhaRef ? (linhaRef[4] > linhaRef[3] ? `${simTxt}: ${fmt(linhaRef[4])} mortes por agressão ou intervenção policial` : `Sinesp ${ref.periodo}: ${fmt(linhaRef[3])} mortes violentas`) : 'Sinesp';
       comps.push({ nome: 'Letalidade no Brasil (mortes violentas por 100 mil)', peso: 60, valor: p,
-        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
+        texto: `${fmt1(minhaTaxa)} por 100 mil (${origem}); mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
+      if (linhaRef) {
+        metodo.push(`Mortes violentas em 12 meses: ${fmt(linhaRef[0])} (${fmt1(minhaTaxa)} por 100 mil habitantes, população IBGE ${fmt(linhaRef[1])}).`);
+        metodo.push(`Duas fontes oficiais são comparadas e vale a maior, sem somar: Sinesp/Ministério da Justiça, ${ref.periodo}, com ${fmt(linhaRef[3])} (homicídio doloso, latrocínio e lesão corporal seguida de morte), e ${simTxt}, Ministério da Saúde, atestados de óbito, com ${fmt(linhaRef[4])} (agressões e mortes por intervenção policial).`);
+      }
+      metodo.push(`Posição: taxa mais alta que ${p}% dos ${fmt(ref.taxas.length)} municípios brasileiros com 20 mil habitantes ou mais (Brasil: ${fmt1(ref.brasil.taxa)} por 100 mil). Peso de 60%.`);
     } else if (posMvi.percentil != null) {
       comps.push({ nome: 'Letalidade no estado', peso: 60, valor: posMvi.percentil, texto: `mais alta que ${posMvi.percentil}% dos municípios comparáveis do estado (referência nacional ainda carregando)` });
     }
@@ -252,15 +260,18 @@ export function compilar(c: Entrada): Compilado {
       const tx = (mortes / popLocal) * 1e5;
       comps.push({ nome: 'Mortes por intervenção policial', peso: 15, valor: Math.round(Math.min(100, (tx / (2 * MIAE_BRASIL_100MIL)) * 100)),
         texto: `${fmt(mortes)} em 12 meses (ISP-RJ), ${fmt1(tx)} por 100 mil; média do Brasil ≈ ${fmt1(MIAE_BRASIL_100MIL)}` });
+      metodo.push(`Mortes por intervenção policial: ${fmt(mortes)} em 12 meses pelo ISP-RJ (${fmt1(tx)} por 100 mil; o dobro da média do Brasil vale 100). Peso de 15%.`);
     }
     // Violência armada verificada (Fogo Cruzado), onde existe
     if (c.tiroteios && popLocal) {
       const tx = (c.tiroteios.length / popLocal) * 1e5;
       comps.push({ nome: 'Tiroteios verificados', peso: 15, valor: Math.round(Math.min(100, (tx / 40) * 100)),
         texto: `${fmt(c.tiroteios.length)} tiroteios em 12 meses (Fogo Cruzado), ${fmt1(tx)} por 100 mil (40 ou mais = 100)` });
+      metodo.push(`Tiroteios verificados pelo Instituto Fogo Cruzado: ${fmt(c.tiroteios.length)} em 12 meses (${fmt1(tx)} por 100 mil; 40 ou mais vale 100). Peso de 15%.`);
     }
     if (mvi && mvi.anterior != null && Math.max(mvi.ano || 0, mvi.anterior) >= 10) {
       const v = variacao(mvi.ano, mvi.anterior) || 0;
+      metodo.push(`Tendência: ${v > 0 ? '+' : ''}${v}% de mortes violentas (Sinesp) em ${periodoAno} contra ${periodoAnt}; estável vale 50. Peso de 10%.`);
       comps.push({ nome: 'Tendência', peso: 10, valor: Math.round(Math.max(0, Math.min(100, 50 + v))), texto: `${v > 0 ? '+' : ''}${v}% de mortes violentas em ${periodoAno}` });
     }
     const pesoTotal = soma(comps.map((x) => x.peso));
@@ -269,6 +280,7 @@ export function compilar(c: Entrada): Compilado {
       const [nivel, cor] = valor >= 75 ? ['Muito alto', '#b91c1c'] : valor >= 55 ? ['Alto', '#ea580c'] : valor >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a'];
       risco = {
         valor, nivel, cor, componentes: comps,
+        metodo: [...metodo, comps.length < 4 ? 'Onde não há dado de intervenção policial ou de tiroteios, o peso é redistribuído entre os demais componentes.' : '', 'Resultado: média ponderada dos componentes, de 0 a 100 (0–34 baixo, 35–54 moderado, 55–74 alto, 75+ muito alto).'].filter(Boolean),
         dica: 'Índice de 0 a 100, comparável entre quaisquer municípios do Brasil: a maior parte do peso vem da taxa de mortes violentas por habitante, comparada com todos os municípios do país com 20 mil hab. ou mais (Sinesp, mesmo período). Onde há dados, entram também mortes por intervenção policial (ISP-RJ) e tiroteios verificados (Fogo Cruzado). Tamanho da cidade não conta. Média ponderada: ' +
           comps.map((x) => `${x.nome} (${Math.round((x.peso / pesoTotal) * 100)}%)`).join(', ') + '.',
       };
@@ -289,6 +301,9 @@ export function compilar(c: Entrada): Compilado {
         (r ? `, ${r >= 1.1 ? fmt1(r) + ' vezes a do estado' : r <= 0.9 ? 'abaixo da do estado' : 'próxima da do estado'} (${fmt1(posicao.taxaEstado)})` : '') +
         `, o que põe o município em ${posicao.rank}º entre ${posicao.total} municípios com mais de 20 mil habitantes.`);
     } else if (tx != null) parecer.push(`Em 12 meses, a taxa é de ${fmt1(tx)} por 100 mil habitantes.`);
+    const lr = !c.ehEstado && c.ibge ? c.referencia?.municipios[c.ibge] : undefined;
+    if (lr && c.referencia?.sim && lr[4] > lr[3] * 1.15 && lr[4] - lr[3] >= 5)
+      parecer.push(`Os atestados de óbito do DATASUS (${c.referencia.sim.ano}${c.referencia.sim.preliminar ? ', preliminar' : ''}) registram ${fmt(lr[4])} mortes por agressão ou ação policial, mais que as ${fmt(lr[3])} do Sinesp; o índice de risco usa o número maior (${fmt1(lr[2])} por 100 mil).`);
     const mulher = ag('mulher'), veic = ag('veiculos'), ten = ag('tentativas'), traf = ag('trafico'), armas = ag('armas');
     const partes: string[] = [];
     if (ten?.ano) partes.push(`${fmt(ten.ano)} tentativas de homicídio`);
