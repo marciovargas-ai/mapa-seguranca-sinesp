@@ -1,0 +1,14 @@
+name: Sondar fontes oficiais estaduais
+on:
+  workflow_dispatch:
+jobs:
+  sondar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install openpyxl
+      - run: python -u scripts/sondar_fontes.py
