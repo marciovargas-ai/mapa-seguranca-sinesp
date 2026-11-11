@@ -10,6 +10,7 @@ import { BairroResumo } from '../core/bairros';
 import { Ocorrencia } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
 import { Camadas, PainelStore } from '../core/painel.store';
+import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, IspMunicipio, Tiroteio } from '../core/areas';
 import { esc, fetchComTimeout, fmt, fmt1, urlSegura } from '../core/util';
@@ -80,6 +81,10 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       <div class="legenda">
         <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo >= 365 ? '12 meses' : leg.periodo >= 180 ? '6 meses' : leg.periodo + ' dias' }} · {{ leg.noMapa }} com local exato</div>
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
+        @if (leg.oficial; as of) {
+          <div class="legenda-oficial"><b>Dados oficiais · {{ of.orgao }}</b>
+            <span>{{ of.total }} ocorrências registradas ({{ of.cats }}), {{ of.periodo }}. Bairros pintados pelo número oficial; quadrados = local do crime contra a vida.</span></div>
+        }
         @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
         @if (leg.fogo; as fc) {
           <div class="legenda-fogo-bloco">
@@ -161,6 +166,7 @@ export class MapaComponent implements OnDestroy {
     { id: 'zonas', nome: 'Zonas vermelhas', icone: 'crisis_alert' },
     { id: 'calor', nome: 'Mapa de calor', icone: 'local_fire_department' },
     { id: 'pinos', nome: 'Ocorrências', icone: 'location_on' },
+    { id: 'oficial', nome: 'Dados oficiais por bairro (secretaria)', icone: 'verified' },
     { id: 'delegacias', nome: 'Áreas de delegacia (oficial, RJ)', icone: 'local_police' },
     { id: 'bairros', nome: 'Nomes dos bairros', icone: 'label' },
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
@@ -178,6 +184,7 @@ export class MapaComponent implements OnDestroy {
   private layerSemLocal: any;
   private layerFogo: any;
   private layerDelegacias: any;
+  private layerOficial: any;
   /** Contorno do município aberto (IBGE): pontos fora dele não entram no mapa. */
   private readonly contorno = signal<any>(null);
   private layerBairros: any;
@@ -228,13 +235,17 @@ export class MapaComponent implements OnDestroy {
 
   protected readonly legenda = computed(() => {
     const f = this.store.filtrados();
-    if (!f.todas.length) return null;
+    if (!f.todas.length && !this.store.oficialBairros()) return null;
     const peloBairro = this.store.escopo() === 'CIDADE' ? this.store.bairrosMapa().peloBairro : [];
     const noBairro = new Set(peloBairro.map((a) => a.o));
     const sem = f.semLocal.filter((o) => !noBairro.has(o));
     return {
       total: fmt(f.todas.length), noMapa: fmt(this.exatas(f, this.store.bairrosMapa()).length), bairro: peloBairro.length ? fmt(peloBairro.length) : '',
       semLocal: sem.length ? fmt(sem.length) : '', listaSem: sem.slice(0, 30),
+      oficial: (() => {
+        const ob = this.camadas().oficial ? this.store.oficialBairros() : null;
+        return ob ? { orgao: ob.dado.orgao, total: fmt(ob.cats.reduce((a, c) => a + (ob.dado.cats[c] || 0), 0)), periodo: ob.dado.periodo, cats: ob.cats.length >= 8 ? 'todos os tipos' : ob.cats.map((c) => NOME_CAT_OFICIAL[c].toLowerCase()).join(', ') } : null;
+      })(),
       delegacias: this.camadas().delegacias && !!this.store.ispCidade()?.areas.some((a) => a.aneis?.length),
       fogo: (() => {
         const it = (this.store.fogoCidade()?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, this.contorno()));
@@ -251,7 +262,7 @@ export class MapaComponent implements OnDestroy {
     effect(() => { const c = this.camadas(); c.satelite; c.mapaEscuro; untracked(() => this.aplicarBase()); });
     effect(() => {
       const f = this.store.filtrados(); const c = this.camadas(); const cor = this.coropleticoAtivo(); const b = this.store.bairrosMapa();
-      this.contorno();
+      this.contorno(); this.store.oficialBairros(); this.store.periodoDias();
       untracked(() => this.renderizar(f, c, cor, b));
     });
     effect(() => {
@@ -329,6 +340,7 @@ export class MapaComponent implements OnDestroy {
     this.layerSemLocal = L.layerGroup().addTo(map);
     this.layerFogo = L.layerGroup().addTo(map);
     this.layerDelegacias = L.layerGroup().addTo(map);
+    this.layerOficial = L.layerGroup().addTo(map);
     this.layerBairros = L.layerGroup().addTo(map);
     this.cluster = typeof L.markerClusterGroup === 'function'
       ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 40, disableClusteringAtZoom: 16, showCoverageOnHover: false, spiderfyOnMaxZoom: true })
@@ -454,7 +466,11 @@ export class MapaComponent implements OnDestroy {
         `<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
         lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
       : 'Nenhuma ocorrência noticiada no período escolhido.';
-    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
+    const ob = this.camadas().oficial ? this.store.oficialBairros() : null;
+    const of = ob?.porBairro.get(b.nome);
+    const oficial = ob ? `<div class="popup-oficial"><b>${of ? fmt(of.total) : 0} registros oficiais</b> (${esc(ob.dado.orgao)}, ${esc(ob.dado.periodo)})` +
+      (of ? '<ul class="lista-sem-local">' + Object.entries(of.cats).sort((x, y) => y[1] - x[1]).map(([c, n]) => `<li>${esc(NOME_CAT_OFICIAL[c] || c)}: <b>${fmt(n)}</b></li>`).join('') + '</ul>' : '') + '</div>' : '';
+    return `<div class="popup"><b>${esc(b.nome)}</b><br>${oficial}${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
   }
 
   /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */
@@ -470,36 +486,62 @@ export class MapaComponent implements OnDestroy {
    */
   private desenharBairros(lista: BairroResumo[], f: ReturnType<PainelStore['filtrados']>): void {
     this.layerBairros.clearLayers();
+    this.desenharPontosOficiais(lista.length > 0);
     if (!lista.length) return;
-    const max = Math.max(1, ...lista.map((b) => b.qtd));
+    // Com dado oficial da secretaria, a cor do bairro vem dele; as notícias ficam como complemento no balão
+    const ob = this.camadas().oficial ? this.store.oficialBairros() : null;
+    const valor = (b: BairroResumo) => (ob ? ob.porBairro.get(b.nome)?.total || 0 : b.qtd);
+    const max = Math.max(1, ...lista.map(valor));
     const escuro = this.camadas().mapaEscuro || this.camadas().satelite;
+    const rotulo = (b: BairroResumo) => ob ? `${fmt(valor(b))} registros oficiais` : `${fmt(b.qtd)} ocorrências`;
     lista.forEach((b) => {
-      const cor = this.corBairro(b.qtd, max);
+      const q = valor(b);
+      const cor = this.corBairro(q, max);
       let forma: any;
       if (b.aneis) {
-        forma = L.polygon(b.aneis, { pane: 'paneBairros', renderer: this.renderer, color: b.qtd ? '#7c2d12' : escuro ? '#cbd5e1' : '#475569',
-          weight: b.qtd ? 1.2 : 0.8, opacity: b.qtd ? 0.8 : 0.45, dashArray: b.qtd ? null : '3 3', fillColor: cor, fillOpacity: b.qtd ? 0.42 : 0 });
-      } else if (b.qtd) {
-        forma = L.circle([b.lat, b.lng], { pane: 'paneBairros', renderer: this.renderer, radius: 150 + 450 * Math.sqrt(b.qtd / max),
+        forma = L.polygon(b.aneis, { pane: 'paneBairros', renderer: this.renderer, color: q ? '#7c2d12' : escuro ? '#cbd5e1' : '#475569',
+          weight: q ? 1.2 : 0.8, opacity: q ? 0.8 : 0.45, dashArray: q ? null : '3 3', fillColor: cor, fillOpacity: q ? 0.42 : 0 });
+      } else if (q) {
+        forma = L.circle([b.lat, b.lng], { pane: 'paneBairros', renderer: this.renderer, radius: 150 + 450 * Math.sqrt(q / max),
           color: '#7c2d12', weight: 1, fillColor: cor, fillOpacity: 0.4 });
       }
       if (forma) {
-        forma.bindTooltip(`<b>${esc(b.nome)}</b> · ${b.qtd ? fmt(b.qtd) + ' ocorrências' : 'sem ocorrência no período'}`, { sticky: true });
+        forma.bindTooltip(`<b>${esc(b.nome)}</b> · ${q ? rotulo(b) : 'sem registro no período'}`, { sticky: true });
         forma.bindPopup(() => this.popupBairro(b));
         forma.on('mouseover', () => forma.setStyle({ weight: 2.5 }));
-        forma.on('mouseout', () => forma.setStyle({ weight: b.qtd ? 1.2 : 0.8 }));
+        forma.on('mouseout', () => forma.setStyle({ weight: q ? 1.2 : 0.8 }));
         this.layerBairros.addLayer(forma);
       }
     });
-    // Rótulos dos bairros com ocorrência (os 30 maiores)
-    lista.filter((b) => b.qtd).slice(0, 30).forEach((b) => {
+    // Rótulos dos bairros com mais registros (os 30 maiores)
+    lista.filter((b) => valor(b)).sort((a, b) => valor(b) - valor(a)).slice(0, 30).forEach((b) => {
       const icone = L.divIcon({ className: 'rotulo-bairro', iconSize: null, iconAnchor: [-6, 12],
-        html: `<div><i style="background:${CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i>${esc(b.nome)} <b>(${fmt(b.qtd)})</b></div>` });
+        html: `<div><i style="background:${ob ? '#113366' : CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i>${esc(b.nome)} <b>(${fmt(valor(b))})</b></div>` });
       const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome, pane: 'paneRotulos' });
       mk.bindPopup(() => this.popupBairro(b));
       this.layerBairros.addLayer(mk);
     });
     void f;
+  }
+
+  /** Crimes contra a vida com local registrado no boletim (secretaria estadual): quadrado vinho. */
+  private desenharPontosOficiais(visivel: boolean): void {
+    this.layerOficial.clearLayers();
+    const ob = this.camadas().oficial && this.camadas().pinos ? this.store.oficialBairros() : null;
+    if (!visivel || !ob) return;
+    const d = new Date(Date.now() - this.store.periodoDias() * 86400000);
+    const limite = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    // Sem filtro, só crimes contra a pessoa viram ponto; tráfico aparece quando o filtro Tráfico está ligado
+    const quer = new Set(this.store.categorias().length ? ob.cats : ob.cats.filter((c) => c !== 'trafico'));
+    for (const [lat, lng, cat, dia, rub] of ob.dado.pontos) {
+      if (!quer.has(cat) || dia < limite) continue;
+      const data = `${String(dia % 100).padStart(2, '0')}/${String(Math.floor(dia / 100) % 100).padStart(2, '0')}/${Math.floor(dia / 10000)}`;
+      const m = L.marker([lat, lng], { pane: 'paneRotulos', keyboard: false,
+        icon: L.divIcon({ className: 'ponto-oficial', iconSize: [9, 9], html: `<div class="${cat}"></div>` }) });
+      m.bindPopup(`<div class="popup"><span class="popup-cat" style="color:#7f1d1d">${esc(NOME_CAT_OFICIAL[cat] || cat)}</span> · ${data}` +
+        `<div class="popup-titulo">${esc(rub)}</div><div class="popup-meta">Fonte oficial: ${esc(ob.dado.fonte)} (local informado no boletim de ocorrência)</div></div>`);
+      this.layerOficial.addLayer(m);
+    }
   }
 
   /** Resumo oficial do município ao clicar no contorno. */

@@ -159,7 +159,7 @@ function centro(aneis: [number, number][][]): [number, number] {
   return [cy / (3 * area), cx / (3 * area)];
 }
 
-function dentro(lat: number, lng: number, aneis: [number, number][][]): boolean {
+export function dentro(lat: number, lng: number, aneis: [number, number][][]): boolean {
   let d = false;
   for (const anel of aneis) {
     for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {

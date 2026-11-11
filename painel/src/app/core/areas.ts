@@ -26,6 +26,9 @@ export const UFS_FOGO_CRUZADO = ['RJ', 'PE', 'BA', 'PA'];
 let arquivoIsp: Promise<any | null> | null = null;
 let arquivoContornos: Promise<any | null> | null = null;
 
+/** Arquivo do repositório de dados (CDN com reserva no GitHub), guardado no disco por alguns dias. */
+export function baixarDadosPublicos(nome: string, chave: string, dias: number): Promise<any | null> { return baixarDados(nome, chave, dias); }
+
 async function baixarDados(nome: string, chave: string, dias: number): Promise<any | null> {
   const guardado = await CacheDisco.obter<any>(chave, dias);
   if (guardado) return guardado;

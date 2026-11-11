@@ -1,5 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
+import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './oficial';
 import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
@@ -15,7 +16,7 @@ import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsPara
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
-export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean }
+export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean }
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
@@ -31,7 +32,7 @@ export class PainelStore {
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
   readonly aba = signal<Aba>('PANORAMA');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true });
+  readonly camadas = signal<Camadas>({ zonas: true, calor: true, pinos: true, bairros: true, fronteira: true, vizinhos: true, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
@@ -81,6 +82,15 @@ export class PainelStore {
   readonly isp = signal<{ ibge: string; dado: IspMunicipio | null } | null>(null);
   readonly fogo = signal<{ chave: string; dado: FogoCruzado | null; carregando: boolean } | null>(null);
   readonly referencia = signal<ReferenciaNacional | null>(null);
+  /** Ocorrências oficiais por bairro e ponto (secretarias estaduais que publicam boletins). */
+  readonly oficialArea = signal<{ ibge: string; dado: OficialArea | null } | null>(null);
+  readonly oficialCidade = computed(() => { const v = this.oficialArea(); return v && this.escopo() === 'CIDADE' && v.ibge === this.ibgeCidade() ? v.dado : null; });
+  readonly oficialBairros = computed(() => {
+    const o = this.oficialCidade();
+    if (!o) return null;
+    const cats = catsOficiais(this.categorias());
+    return { ...oficialPorBairro(o, this.listaBairros(), cats), cats, dado: o };
+  });
   readonly ispCidade = computed(() => { const v = this.isp(); return v && v.ibge === this.ibgeCidade() ? v.dado : null; });
   readonly fogoCidade = computed(() => {
     const v = this.fogo();
@@ -333,6 +343,10 @@ export class PainelStore {
     if (this.isp()?.ibge !== ibge) {
       this.isp.set({ ibge, dado: null });
       carregarIsp(uf, ibge).then((dado) => { if (this.isp()?.ibge === ibge) this.isp.set({ ibge, dado }); });
+    }
+    if (this.oficialArea()?.ibge !== ibge) {
+      this.oficialArea.set({ ibge, dado: null });
+      carregarOficial(ibge).then((dado) => { if (this.oficialArea()?.ibge === ibge) this.oficialArea.set({ ibge, dado }); }).catch(() => undefined);
     }
     const chave = uf + '|' + cidade;
     if (this.fogo()?.chave !== chave) {

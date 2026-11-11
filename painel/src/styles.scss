@@ -115,3 +115,12 @@ html.tema-escuro .popup-meta { color: #94a3b8; }
 .mat-mdc-form-field .mdc-text-field--outlined { --mdc-outlined-text-field-container-shape: var(--raio-m); }
 .mat-mdc-dialog-surface { border-radius: var(--raio) !important; }
 .leaflet-container .leaflet-control-zoom, .leaflet-bar { border-radius: var(--raio-m) !important; overflow: hidden; border-color: var(--borda-suave) !important; }
+
+/* Dados oficiais por bairro (secretarias estaduais) */
+.ponto-oficial div { width: 9px; height: 9px; background: #7f1d1d; border: 1.5px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; transform: rotate(45deg); }
+.ponto-oficial div.tentativa { background: #c2410c; box-shadow: 0 0 0 1px #c2410c; }
+.ponto-oficial div.estupro { background: #6d28d9; box-shadow: 0 0 0 1px #6d28d9; }
+.ponto-oficial div.trafico { background: #0f766e; box-shadow: 0 0 0 1px #0f766e; }
+.legenda-oficial { display: grid; gap: 2px; margin-bottom: 8px; padding: 6px 8px; border-radius: var(--raio-m, 12px); background: color-mix(in srgb, #113366 10%, transparent); border-left: 3px solid #113366; }
+.legenda-oficial span { font-size: 12px; opacity: .85; }
+.popup-oficial { margin: 4px 0 6px; padding: 4px 6px; border-left: 3px solid #113366; background: color-mix(in srgb, #113366 8%, transparent); border-radius: 6px; }
