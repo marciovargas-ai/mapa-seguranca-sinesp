@@ -454,7 +454,7 @@ export class MapaComponent implements OnDestroy {
         `<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
         lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
       : 'Nenhuma ocorrência noticiada no período escolhido.';
-    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : 'OpenStreetMap'}</small></div>`;
+    return `<div class="popup"><b>${esc(b.nome)}</b><br>${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
   }
 
   /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */

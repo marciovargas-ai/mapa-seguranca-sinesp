@@ -1,0 +1,31 @@
+name: Validar coleta de notícias (amostra nacional)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cidades:
+        description: 'UF:Município separados por vírgula (vazio = amostra nacional)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Simular a primeira coleta do servidor com a rede real
+        run: |
+          IFS=',' read -ra C <<< "${{ github.event.inputs.cidades }}"
+          node validacao/simular_coleta.js "${C[@]}"
+      - name: Publicar relatório
+        run: |
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add validacao/relatorio.json validacao/relatorio.md
+          git diff --cached --quiet || (git commit -m "Validação da coleta: $(date -u +%Y-%m-%d %H:%M)" && git pull --rebase && git push)

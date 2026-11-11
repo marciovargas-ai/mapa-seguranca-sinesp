@@ -11,10 +11,10 @@ import { fetchComTimeout, idadeDias, normalizar } from './util';
  * e só o ponto central quando não tem. Guarda 90 dias no disco; o servidor manda
  * a lista de pontos que ele já tem como reserva.
  */
-export interface Bairro { n: string; lat: number; lng: number; aneis?: [number, number][][]; fonte?: 'IBGE' | 'OSM' }
+export interface Bairro { n: string; lat: number; lng: number; aneis?: [number, number][][]; fonte?: 'IBGE' | 'OSM'; aprox?: boolean; f?: string }
 
 export interface BairroResumo {
-  nome: string; lat: number; lng: number; aneis?: [number, number][][]; osm: boolean; fonte?: 'IBGE' | 'OSM';
+  nome: string; lat: number; lng: number; aneis?: [number, number][][]; osm: boolean; fonte?: 'IBGE' | 'OSM'; aprox?: boolean;
   qtd: number; graves: number; recentes: number; cats: Record<string, number>; catTop: string;
   ocorrencias: Ocorrencia[];
 }
@@ -67,13 +67,13 @@ async function bairrosIbge(ibge: string): Promise<Bairro[]> {
   const guardado = await CacheDisco.obter<Bairro[]>(chave, DIAS_CACHE);
   if (guardado?.length) return guardado;
   // "Não tem no IBGE" vale só 7 dias, para pegar municípios que o robô publicar depois
-  if (await CacheDisco.obter<boolean>('BAIRROS_IBGE_SEM_' + ibge, 7)) return [];
+  if (await CacheDisco.obter<boolean>('BAIRROS_IBGE_SEM2_' + ibge, 7)) return [];
   for (const base of CFG.BASES_DADOS) {
     try {
       const r = await fetchComTimeout(base + 'bairros/' + ibge + '.json', 12000);
-      if (r.status === 404) { CacheDisco.salvar('BAIRROS_IBGE_SEM_' + ibge, true); return []; }
+      if (r.status === 404) { CacheDisco.salvar('BAIRROS_IBGE_SEM2_' + ibge, true); return []; }
       if (!r.ok) continue;
-      const lista = ((await r.json()) as Bairro[]).filter((b) => b && b.n && b.aneis?.length).map((b) => ({ ...b, fonte: 'IBGE' as const }));
+      const lista = ((await r.json()) as Bairro[]).filter((b) => b && b.n && b.aneis?.length).map((b) => ({ ...b, fonte: (b.f ? 'OSM' : 'IBGE') as 'IBGE' | 'OSM', aprox: b.f === 'OSM~' }));
       CacheDisco.salvar(chave, lista);
       return lista;
     } catch { /* tenta o próximo endereço */ }
@@ -180,7 +180,7 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
   const porNome = new Map(bairros.map((b) => [normalizar(b.n), b]));
   const comContorno = bairros.filter((b) => b.aneis);
   const novo = (b: Bairro, osm: boolean): BairroResumo =>
-    ({ nome: b.n, lat: b.lat, lng: b.lng, aneis: b.aneis, osm, fonte: b.fonte, qtd: 0, graves: 0, recentes: 0, cats: {}, catTop: '', ocorrencias: [] });
+    ({ nome: b.n, lat: b.lat, lng: b.lng, aneis: b.aneis, osm, fonte: b.fonte, aprox: b.aprox, qtd: 0, graves: 0, recentes: 0, cats: {}, catTop: '', ocorrencias: [] });
   bairros.forEach((b) => resumo.set(normalizar(b.n), novo(b, true)));
 
   const peloBairro: PeloBairro[] = [];

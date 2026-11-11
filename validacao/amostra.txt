@@ -1,0 +1,39 @@
+# Amostra nacional: cidades médias e pequenas, fora das capitais, de todos os estados
+RS:Alvorada
+RS:Viamão
+RS:Caxias do Sul
+RS:Sapucaia do Sul
+BA:Feira de Santana
+BA:Camaçari
+BA:Simões Filho
+CE:Caucaia
+CE:Juazeiro do Norte
+RN:Mossoró
+PE:Jaboatão dos Guararapes
+PE:Caruaru
+PA:Ananindeua
+PA:Marabá
+RJ:Duque de Caxias
+RJ:Itaboraí
+SP:Guarulhos
+SP:Ribeirão Preto
+MG:Contagem
+MG:Uberlândia
+GO:Aparecida de Goiânia
+PR:Londrina
+PR:Cascavel
+MA:Imperatriz
+ES:Serra
+PB:Santa Rita
+AL:Arapiraca
+SE:Nossa Senhora do Socorro
+PI:Parnaíba
+MT:Rondonópolis
+MS:Dourados
+RO:Ji-Paraná
+AP:Santana
+AM:Parintins
+AC:Cruzeiro do Sul
+TO:Araguaína
+RR:Rorainópolis
+DF:Brasília
