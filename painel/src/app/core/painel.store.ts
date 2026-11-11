@@ -182,6 +182,21 @@ export class PainelStore {
     this.categorias.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   }
 
+  /** Sobe a cada "Limpar filtros" (a busca por texto da aba Notícias também se apaga). */
+  readonly limpezaFiltros = signal(0);
+  readonly filtrosAtivos = computed(() =>
+    this.periodoDias() !== CFG.PERIODO_PADRAO_DIAS || this.categorias().length > 0 || !!this.orgao() || this.textoNoticias() !== '');
+  /** Texto digitado no filtro da aba Notícias (para o botão saber que há filtro). */
+  readonly textoNoticias = signal('');
+
+  limparFiltros(): void {
+    this.periodoDias.set(CFG.PERIODO_PADRAO_DIAS);
+    this.categorias.set([]);
+    this.orgao.set('');
+    this.textoNoticias.set('');
+    this.limpezaFiltros.update((n) => n + 1);
+  }
+
   definirOrgao(id: string): void {
     this.orgao.update((atual) => (id && id !== atual ? id : ''));
   }

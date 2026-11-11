@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,6 +18,9 @@ import { fmt, normalizar, urlSegura } from '../core/util';
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filtro">
       <mat-icon matPrefix>filter_list</mat-icon>
       <input matInput placeholder="Filtrar por palavra, bairro ou veículo" [value]="filtro()" (input)="digitar($any($event.target).value)" />
+      @if (filtro()) {
+        <button matSuffix mat-icon-button aria-label="Limpar o texto do filtro" (click)="digitar('')"><mat-icon>close</mat-icon></button>
+      }
     </mat-form-field>
     <p class="nota">{{ fmt(lista().length) }} notícias</p>
     @for (o of visiveis(); track o.id) {
@@ -83,11 +86,15 @@ export class NoticiasComponent {
 
   constructor() {
     // Nova cidade ou novos filtros: volta para a primeira página
+    this.store.textoNoticias.set('');
     effect(() => { this.store.filtrados(); this.pagina.set(1); });
+    // "Limpar filtros" na barra do topo apaga também o texto
+    effect(() => { if (this.store.limpezaFiltros()) untracked(() => this.digitar('')); });
   }
 
   protected digitar(v: string): void {
     this.filtro.set(v);
+    this.store.textoNoticias.set(v);
     clearTimeout(this.timer);
     this.timer = setTimeout(() => { this.filtroAplicado.set(v); this.pagina.set(1); }, 180);
   }

@@ -142,6 +142,11 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
                   </mat-chip>
                 }
               </mat-chip-set>
+              @if (store.filtrosAtivos()) {
+                <button mat-stroked-button class="limpar-filtros" (click)="store.limparFiltros()" matTooltip="Volta para 12 meses, todos os tipos e todos os órgãos">
+                  <mat-icon>filter_alt_off</mat-icon>Limpar filtros
+                </button>
+              }
             </div>
           }
         </header>
@@ -204,6 +209,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .status.ok mat-icon { color: var(--cor-sucesso); }
     .status.erro { color: var(--cor-perigo); }
     .filtros { margin-top: 10px; display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
+    .limpar-filtros { --mat-outlined-button-label-text-color: var(--shopee-laranja); border-color: var(--shopee-laranja) !important; border-radius: 999px; height: 34px; }
     .filtros mat-button-toggle-group { --mat-button-toggle-height: 34px; flex: none; }
     .categorias { --mat-chip-container-height: 30px; }
     .ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
