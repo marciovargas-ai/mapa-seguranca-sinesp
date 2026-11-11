@@ -1,0 +1,30 @@
+name: Bairros do OpenStreetMap (municípios sem malha do IBGE)
+
+on:
+  schedule:
+    - cron: '0 12 3 * *'   # dia 3 de cada mês
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  osm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool > /dev/null
+          pip install geopandas==1.2.0 pyogrio==0.13.0 shapely
+      - name: Bairros do OSM para o Brasil inteiro
+        run: python scripts/osm_bairros.py
+      - name: Publicar
+        run: |
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add dados/bairros
+          git diff --cached --quiet || (git commit -m "Bairros do OSM: atualização $(date -u +%Y-%m-%d)" && git pull --rebase && git push)
