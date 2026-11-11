@@ -1,21 +1,18 @@
 {
- "em": "2026-11-11T04:26:03.961Z",
+ "em": "2026-11-11T04:37:05.496Z",
  "estat": {
-  "pedidos": 282,
+  "pedidos": 324,
   "porHost": {
    "cdn.jsdelivr.net": 5,
-   "news.google.com": 152,
-   "gauchazh.clicrbs.com.br": 3,
+   "news.google.com": 180,
+   "gauchazh.clicrbs.com.br": 7,
    "correiodopovo.com.br": 3,
    "jornalnh.com.br": 3,
-   "diariogaucho.clicrbs.com.br": 3,
+   "diariogaucho.clicrbs.com.br": 6,
    "g1.globo.com": 33,
-   "extra.globo.com": 2,
-   "odia.ig.com.br": 2,
-   "osaogoncalo.com.br": 1,
-   "oglobo.globo.com": 3,
-   "www.osaogoncalo.com.br": 1,
-   "www.stj.jus.br": 1,
+   "guaiba.com.br": 1,
+   "www.correiodopovo.com.br": 5,
+   "www.pc.rs.gov.br": 1,
    "bnews.com.br": 4,
    "correio24horas.com.br": 4,
    "acordacidade.com.br": 1,
@@ -38,9 +35,9 @@
    "portal6.com.br": 4,
    "goias.gov.br": 2,
    "aparecida.go.gov.br": 1,
-   "record.r7.com": 1,
    "cqcs.com.br": 1,
    "www.jornalopcao.com.br": 5,
+   "www.gov.br": 1,
    "dol.com.br": 7,
    "oliberal.com": 1,
    "romanews.com.br": 3,
@@ -49,7 +46,13 @@
    "www.zedudu.com.br": 1,
    "www.terra.com.br": 1,
    "debatecarajas.com.br": 1,
-   "correiodecarajas.com.br": 1
+   "correiodecarajas.com.br": 1,
+   "extra.globo.com": 2,
+   "odia.ig.com.br": 2,
+   "osaogoncalo.com.br": 1,
+   "oglobo.globo.com": 3,
+   "www.osaogoncalo.com.br": 1,
+   "www.stj.jus.br": 1
   }
  },
  "relatorio": [
@@ -57,12 +60,12 @@
    "uf": "RS",
    "cidade": "Alvorada",
    "ibge": "4300604",
-   "segundos": 52,
-   "pedidos": 22,
+   "segundos": 60,
+   "pedidos": 64,
    "erro": "",
    "noticias": 16,
-   "comBairro": 2,
-   "pctBairro": 13,
+   "comBairro": 15,
+   "pctBairro": 94,
    "imprensaLocal": 12,
    "viaRssDireto": 0,
    "bairrosConhecidos": 13,
@@ -76,55 +79,24 @@
     "TRAFICO": 3
    },
    "exemplos": [
-    "[CVLI] Homem é morto a tiros em Alvorada, na Região Metropolitana — Local não informado (GZH)",
+    "[CVLI] Homem é morto a tiros em Alvorada, na Região Metropolitana — Bela Vista (GZH)",
     "[CVLI] Homem é encontrado morto a tiros no bairro Bela Vista, em Alvorada — Bela Vista (Terra)",
     "[CONFRONTO] Três feridos após tiroteio no Passo do Feijó, em Alvorada, onde homem morreu, seguem hospitalizados em Porto Alegre — Local não informado (Rádio Guaíba)",
-    "[PATRIMONIO] Polícia prende seis pessoas em ação contra grupo suspeito de roubo de veículos em Porto Alegre e Alvorada — Local não informado (GZH)",
-    "[TRAFICO] Brigada Militar apreende 167 kg de maconha e artefatos explosivos em Alvorada — Local não informado (Correio do Povo)",
-    "[PATRIMONIO] O que se sabe sobre a morte de três suspeitos após assalto em Alvorada — Local não informado (Correio do Povo)"
-   ]
-  },
-  {
-   "uf": "RJ",
-   "cidade": "Rio de Janeiro",
-   "ibge": "3304557",
-   "segundos": 8,
-   "pedidos": 54,
-   "erro": "",
-   "noticias": 9,
-   "comBairro": 4,
-   "pctBairro": 44,
-   "imprensaLocal": 1,
-   "viaRssDireto": 0,
-   "bairrosConhecidos": 162,
-   "fonteBairros": "IBGE",
-   "itensFeedsUf": 600,
-   "feedsUf": 8,
-   "porCategoria": {
-    "TRAFICO": 2,
-    "CONFRONTO": 4,
-    "PATRIMONIO": 2,
-    "CVLI": 1
-   },
-   "exemplos": [
-    "[TRAFICO] Foragido do Rio de Janeiro é preso no Espírito Santo — Local não informado (G1)",
-    "[CONFRONTO] Menina de 3 anos morre após ser baleada pela irmã de 5 no Rio de Janeiro — Local não informado (Estadão)",
-    "[PATRIMONIO] 'O Rio de Janeiro está tomado pela incerteza', diz dono de rede de restaurantes vítima de tentativa de assalto na Lagoa — Lagoa (O GLOBO)",
-    "[CONFRONTO] Lutador de jiu-jítsu espanca mulheres, tenta agredir policial e é baleado e preso no Rio de Janeiro — Local não informado (Folha de S.Paulo)",
-    "[CONFRONTO] Idosa de 82 anos é baleada durante assalto no Leblon, no Rio de Janeiro — Leblon (UOL Notícias)",
-    "[TRAFICO] Comunidade indígena do Rio de Janeiro será indenizada por reportagem que a associou ao tráfico de drogas — Local não informado (STJ)"
+    "[PATRIMONIO] Polícia prende seis pessoas em ação contra grupo suspeito de roubo de veículos em Porto Alegre e Alvorada — Rubem Berta (GZH)",
+    "[TRAFICO] Brigada Militar apreende 167 kg de maconha e artefatos explosivos em Alvorada — Americana (Correio do Povo)",
+    "[PATRIMONIO] O que se sabe sobre a morte de três suspeitos após assalto em Alvorada — Algarve (Correio do Povo)"
    ]
   },
   {
    "uf": "BA",
    "cidade": "Camaçari",
    "ibge": "2905701",
-   "segundos": 30,
+   "segundos": 31,
    "pedidos": 68,
    "erro": "",
    "noticias": 25,
-   "comBairro": 7,
-   "pctBairro": 28,
+   "comBairro": 6,
+   "pctBairro": 24,
    "imprensaLocal": 10,
    "viaRssDireto": 0,
    "bairrosConhecidos": 9,
@@ -150,10 +122,10 @@
    "uf": "GO",
    "cidade": "Aparecida de Goiânia",
    "ibge": "5201405",
-   "segundos": 6,
+   "segundos": 9,
    "pedidos": 77,
    "erro": "",
-   "noticias": 26,
+   "noticias": 25,
    "comBairro": 3,
    "pctBairro": 12,
    "imprensaLocal": 0,
@@ -164,7 +136,7 @@
    "feedsUf": 3,
    "porCategoria": {
     "TRAFICO": 5,
-    "PATRIMONIO": 14,
+    "PATRIMONIO": 13,
     "CONFRONTO": 3,
     "CVLI": 4
    },
@@ -181,10 +153,10 @@
    "uf": "PA",
    "cidade": "Marabá",
    "ibge": "1504208",
-   "segundos": 9,
+   "segundos": 11,
    "pedidos": 61,
    "erro": "",
-   "noticias": 42,
+   "noticias": 43,
    "comBairro": 11,
    "pctBairro": 26,
    "imprensaLocal": 7,
@@ -196,7 +168,7 @@
    "porCategoria": {
     "CVLI": 24,
     "CONFRONTO": 8,
-    "TRAFICO": 8,
+    "TRAFICO": 9,
     "PATRIMONIO": 2
    },
    "exemplos": [
@@ -206,6 +178,37 @@
     "[CONFRONTO] Homem é baleado dentro de frigorífico da JBS, em Marabá — Local não informado (G1)",
     "[CONFRONTO] Homem morre após tiroteio com a PM durante ação policial contra tráfico em Marabá — Liberdade (G1)",
     "[CONFRONTO] Homem baleado em confronto com a polícia em Marabá já havia sido preso por tráfico de drogas — Local não informado (Portal Debate)"
+   ]
+  },
+  {
+   "uf": "RJ",
+   "cidade": "Rio de Janeiro",
+   "ibge": "3304557",
+   "segundos": 11,
+   "pedidos": 54,
+   "erro": "",
+   "noticias": 9,
+   "comBairro": 4,
+   "pctBairro": 44,
+   "imprensaLocal": 1,
+   "viaRssDireto": 0,
+   "bairrosConhecidos": 162,
+   "fonteBairros": "IBGE",
+   "itensFeedsUf": 600,
+   "feedsUf": 8,
+   "porCategoria": {
+    "TRAFICO": 2,
+    "CONFRONTO": 4,
+    "PATRIMONIO": 2,
+    "CVLI": 1
+   },
+   "exemplos": [
+    "[TRAFICO] Foragido do Rio de Janeiro é preso no Espírito Santo — Local não informado (G1)",
+    "[CONFRONTO] Menina de 3 anos morre após ser baleada pela irmã de 5 no Rio de Janeiro — Local não informado (Estadão)",
+    "[PATRIMONIO] 'O Rio de Janeiro está tomado pela incerteza', diz dono de rede de restaurantes vítima de tentativa de assalto na Lagoa — Lagoa (O GLOBO)",
+    "[CONFRONTO] Lutador de jiu-jítsu espanca mulheres, tenta agredir policial e é baleado e preso no Rio de Janeiro — Local não informado (Folha de S.Paulo)",
+    "[CONFRONTO] Idosa de 82 anos é baleada durante assalto no Leblon, no Rio de Janeiro — Leblon (UOL Notícias)",
+    "[TRAFICO] Comunidade indígena do Rio de Janeiro será indenizada por reportagem que a associou ao tráfico de drogas — Local não informado (STJ)"
    ]
   }
  ]
