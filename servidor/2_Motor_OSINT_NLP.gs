@@ -23,6 +23,7 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  * Notícias (site:) e para marcar a notícia como "imprensa local". Para incluir
  * um veículo, acrescente o domínio dele na lista do estado.
  */
+const MIN_NOTICIAS_HISTORICO_ = 20;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
   AL: ['gazetaweb.com', 'tnh1.com.br', 'cadaminuto.com.br', 'alagoas24horas.com.br', '7segundos.com.br'],
@@ -195,7 +196,10 @@ function coletarNoticiasCidade_(mun) {
 
   try {
     const atual = lerJson_(nomeArquivo) || novoRegistroCidade_(mun);
-    const primeiraColeta = !atual.coletadoEm;
+    // Histórico completo (12 meses) na primeira coleta e também, uma vez por dia, enquanto a cidade
+    // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
+    const primeiraColeta = !atual.coletadoEm ||
+      ((atual.ocorrencias || []).length < MIN_NOTICIAS_HISTORICO_ && Date.now() - (atual.historicoEm || 0) > 86400000);
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
     const janela = primeiraColeta ? CONFIG.DIAS_JANELA_NOTICIAS + 'd'
@@ -296,6 +300,7 @@ function coletarNoticiasCidade_(mun) {
       reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
       reg.coletadoEm = agora;
+      if (primeiraColeta) reg.historicoEm = agora;
       return podarRegistroCidade_(reg);
     });
 
@@ -491,7 +496,7 @@ function obterBairrosIbge_(mun) {
       if (codigo !== 200) continue;
       return JSON.parse(resp.getContentText())
         .filter(b => b && b.n && b.lat && b.lng)
-        .map(b => ({ n: String(b.n), lat: Number(b.lat), lng: Number(b.lng) }));
+        .map(b => ({ n: String(b.n), lat: Number(b.lat), lng: Number(b.lng), f: b.f || '' }));
     } catch (e) {
       Logger.log('Bairros IBGE (' + mun.nome + '): ' + e.message);
     }
@@ -513,7 +518,7 @@ function obterBairrosOsm_(mun) {
 
   const ibge = obterBairrosIbge_(mun);
   if (ibge && ibge.length) {
-    gravarJson_(nome, { em: Date.now(), fonte: 'IBGE', itens: ibge });
+    gravarJson_(nome, { em: Date.now(), fonte: ibge[0].f ? 'OSM (robô)' : 'IBGE', itens: ibge });
     return ibge;
   }
   if (salvo && Date.now() - salvo.em < DIAS_VALIDADE_BAIRROS_ * 86400000) {
