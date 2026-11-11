@@ -1,0 +1,30 @@
+name: Referência nacional (taxas de todos os municípios)
+
+on:
+  workflow_run:
+    workflows: ['Atualizar Sinesp']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  referencia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/referencia_nacional.py
+      - name: Publicar
+        run: |
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add dados/referencia_nacional.json
+          git diff --cached --quiet || (git commit -m "Referência nacional: $(date -u +%Y-%m-%d)" && git pull --rebase && git push)
