@@ -36,7 +36,7 @@ import { MonitorShopee, NoticiaShopee } from './core/shopee';
           @for (i of visiveis(); track i.id) {
             <article [class.nova]="m.ehNova(i)">
               <div class="linha1"><span class="tipo" [class.seg]="i.seguranca">{{ i.tipo }}</span><small>{{ i.data }} · {{ i.veiculo }}@if (i.ufs.length) { · {{ i.ufs.join(', ') }} }</small></div>
-              <a [href]="i.link" target="_blank" rel="noopener" (click)="m.marcarLida(i)">{{ i.titulo }}</a>
+              <a [href]="i.link" target="_blank" rel="noopener" translate="no" (click)="m.marcarLida(i)">{{ i.titulo }}</a>
               <div class="acoes">
                 <button type="button" (click)="resumir(i)"><mat-icon>auto_awesome</mat-icon>Perguntar ao agente</button>
                 @if (m.ehNova(i)) { <button type="button" (click)="m.marcarLida(i)"><mat-icon>done</mat-icon>Lida</button> }
@@ -65,11 +65,11 @@ import { MonitorShopee, NoticiaShopee } from './core/shopee';
           <div class="texto">
             @if (a.itens.length === 1) {
               <b>Notícia nova sobre a Shopee</b>
-              <span>{{ a.itens[0].titulo }}</span>
+              <span translate="no">{{ a.itens[0].titulo }}</span>
               <small>{{ a.itens[0].tipo }} · {{ a.itens[0].veiculo }}</small>
             } @else {
               <b>{{ a.itens.length }} notícias novas sobre a Shopee</b>
-              <span>{{ a.itens[0].titulo }}</span>
+              <span translate="no">{{ a.itens[0].titulo }}</span>
               <small>e mais {{ a.itens.length - 1 }}</small>
             }
             <div class="botoes">

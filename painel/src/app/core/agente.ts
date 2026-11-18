@@ -1,3 +1,4 @@
+import { idioma } from './i18n';
 import { Injectable, inject, signal } from '@angular/core';
 import { CATEGORIA_POR_ID, ESTADOS } from './dados';
 import { encurtarOficial } from './analise';
@@ -44,7 +45,7 @@ export class AgenteIA {
     this.abrir();
     this.mensagens.update((l) => [...l, { id: ++this.seq, papel: 'usuario', texto: exibir || t }]);
     this.pensando.set(true);
-    this.montarContexto(t).then((ctx) => Servidor.agente(t, ctx, this.conversaId)).then((r) => {
+    this.montarContexto(t).then((ctx) => Servidor.agente(t, ctx, this.conversaId, idioma())).then((r) => {
       if (r?.ok) {
         this.conversaId = r.conversaId || this.conversaId;
         this.mensagens.update((l) => [...l, { id: ++this.seq, papel: 'ia', texto: r.resposta || '', pergunta: exibir || t, titulo }]);

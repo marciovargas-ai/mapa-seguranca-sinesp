@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { idioma, traduzirGrafico } from '../core/i18n';
 import { PainelStore } from '../core/painel.store';
 
 declare const Chart: any;
@@ -92,15 +93,17 @@ export class GraficoComponent implements OnDestroy {
   private grafico: any = null;
   private tipo = '';
   private escuro: boolean | null = null;
+  private lingua = '';
 
   constructor() {
     effect(() => {
-      const cfg = this.config();
+      const lingua = idioma();
+      const cfg = traduzirGrafico(this.config());
       const escuro = this.store.escuro();
       if (!chartPronto()) return;
       const texto = escuro ? '#c4c7cf' : '#44474e';
       const grade = escuro ? 'rgba(148,163,184,.16)' : 'rgba(100,116,139,.16)';
-      if (this.grafico && this.tipo === cfg.type && this.escuro === escuro) {
+      if (this.grafico && this.tipo === cfg.type && this.escuro === escuro && this.lingua === lingua) {
         this.grafico.data = cfg.data;
         this.grafico.update('none');
         return;
@@ -125,6 +128,7 @@ export class GraficoComponent implements OnDestroy {
       });
       this.tipo = cfg.type;
       this.escuro = escuro;
+      this.lingua = lingua;
     });
   }
 

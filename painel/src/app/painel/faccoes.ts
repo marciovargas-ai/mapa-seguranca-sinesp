@@ -88,7 +88,7 @@ const PESO = { disputa: 3, morto: 2, tiroteio: 1, faccao: 2, trafico: 1, oficial
           }
           @if (a.noticias.length) {
             <ul class="exemplos">
-              @for (o of a.noticias; track o.id) { <li><a [href]="o.link" target="_blank" rel="noopener">{{ o.titulo }}</a> <small>{{ o.data }} · {{ o.veiculo }}</small></li> }
+              @for (o of a.noticias; track o.id) { <li><a [href]="o.link" target="_blank" rel="noopener" translate="no">{{ o.titulo }}</a> <small>{{ o.data }} · {{ o.veiculo }}</small></li> }
             </ul>
           }
           <button type="button" class="ver" (click)="store.focar(a.lat, a.lng, 15)">Ver no mapa <mat-icon>arrow_forward</mat-icon></button>

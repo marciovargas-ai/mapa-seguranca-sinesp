@@ -12,6 +12,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
+import { definirIdioma, idioma, iniciarTraducao } from './core/i18n';
+import { Servidor } from './core/servidor';
 import { TourComponent } from './tour';
 import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
@@ -49,7 +52,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
-    MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
+    MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule, MatMenuModule,
     MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, FavoritosComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()', '(window:resize)': 'aoRedimensionar()' },
@@ -90,6 +93,13 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         </button>
         <button mat-icon-button matTooltip="Como ler o painel (tour guiado)" aria-label="Como ler o painel" (click)="ajuda()"><mat-icon>help_outline</mat-icon></button>
+        <button mat-button class="idioma" [matMenuTriggerFor]="menuIdioma" matTooltip="Idioma" aria-label="Idioma">
+          <mat-icon>translate</mat-icon><span translate="no">{{ idioma() === 'en' ? 'EN' : 'PT' }}</span>
+        </button>
+        <mat-menu #menuIdioma="matMenu">
+          <button mat-menu-item (click)="definirIdioma('pt')" translate="no"><mat-icon>{{ idioma() === 'pt' ? 'check' : '' }}</mat-icon>Português (Brasil)</button>
+          <button mat-menu-item (click)="definirIdioma('en')" translate="no"><mat-icon>{{ idioma() === 'en' ? 'check' : '' }}</mat-icon>English (US)</button>
+        </mat-menu>
       </div>
     </mat-toolbar>
 
@@ -245,6 +255,8 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .kpi-rotulo mat-icon { font-size: 14px; width: 14px; height: 14px; color: var(--mat-sys-primary); flex: none; }
     .kpi b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .kpi-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; min-height: 20px; }
+    .idioma { min-width: 0; padding: 0 8px; font-weight: 600; letter-spacing: .4px; }
+    .idioma mat-icon { margin-right: 4px; }
     .faixa-inmet { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px; border-radius: var(--raio-m); border-left: 4px solid;
       background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface); text-decoration: none; font: var(--mat-sys-body-small); }
     .faixa-inmet span { flex: 1; min-width: 0; }
@@ -401,7 +413,16 @@ export class App {
     return `${a - 2} a ${a}`;
   }
 
+  protected readonly idioma = idioma;
+  /** Troca o idioma da tela e dos próximos e-mails de alerta. */
+  protected definirIdioma(i: 'pt' | 'en'): void {
+    if (i === idioma()) return;
+    definirIdioma(i);
+    Servidor.idiomaAlertas(i).catch(() => undefined);
+  }
+
   constructor() {
+    iniciarTraducao();
     // No computador o painel ocupa a tela inteira e só as caixas internas rolam. Se algo deslocar a página
     // (rolagem automática dentro do Google Sites), ela volta ao lugar, para o topo nunca ficar escondido.
     const fixas = new Set(['HTML', 'BODY', 'APP-ROOT']);

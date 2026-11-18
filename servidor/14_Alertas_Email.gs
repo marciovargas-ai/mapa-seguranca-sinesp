@@ -27,6 +27,23 @@ const ALERTAS_TEMAS_ = {
   BLOQUEIO: { nome: 'Distúrbio e bloqueio de via', cor: '#64748b' }
 };
 
+/** Nomes em inglês (e-mail com o painel em inglês americano). */
+const ALERTAS_TEMAS_EN_ = {
+  CVLI: 'Homicide and robbery-murder', CONFRONTO: 'Shootings and firearms', CARGA: 'Cargo theft',
+  PATRIMONIO: 'Robbery and theft', TRAFICO: 'Drug trafficking and police operations', BLOQUEIO: 'Unrest and road blockades'
+};
+const INMET_EVENTOS_EN_ = {
+  'tempestade': 'storm', 'chuvas intensas': 'heavy rain', 'acumulado de chuva': 'rain accumulation', 'vendaval': 'windstorm',
+  'ventos costeiros': 'coastal winds', 'onda de calor': 'heat wave', 'baixa umidade': 'low humidity', 'declínio de temperatura': 'temperature drop',
+  'geada': 'frost', 'perigo potencial': 'potential danger', 'perigo': 'danger', 'grande perigo': 'great danger'
+};
+/** Texto no idioma do usuário: L_(p, 'português', 'English'). */
+function L_(p, pt, en) { return p && p.idioma === 'en' ? en : pt; }
+function nomeTemaAlerta_(p, id) {
+  return L_(p, (ALERTAS_TEMAS_[id] || {}).nome || id, ALERTAS_TEMAS_EN_[id] || (ALERTAS_TEMAS_[id] || {}).nome || id);
+}
+function inmetEn_(t) { const k = String(t || '').toLowerCase(); return INMET_EVENTOS_EN_[k] || k; }
+
 function chaveAlerta_(email) { return 'ALERTA::' + email; }
 function chaveAlertaEnviados_(email) { return 'ALERTA_ENV::' + email; }
 
@@ -55,6 +72,7 @@ function limparPreferenciasAlerta_(p, anterior) {
     inmet: p.inmet !== false,
     frequencia: p.frequencia === 'diario' || p.frequencia === 'semanal' ? p.frequencia : 'imediato',
     hora: Math.max(5, Math.min(22, Number(p.hora) || 7)),
+    idioma: p.idioma === 'en' ? 'en' : 'pt',
     criado: (anterior && anterior.criado) || Date.now(),
     ultimoEnvio: (anterior && anterior.ultimoEnvio) || Date.now(),
     ultimoDiario: (anterior && anterior.ultimoDiario) || '',
@@ -71,6 +89,17 @@ function gravarPreferenciasAlerta_(email, prefs) {
   props.setProperty(chaveAlerta_(email), JSON.stringify(prefs));
   const indice = lerIndiceAlertas_();
   if (indice.indexOf(email) === -1) { indice.push(email); props.setProperty('ALERTA_INDICE', JSON.stringify(indice)); }
+}
+
+/** Painel: quando o usuário troca o idioma, os próximos e-mails saem no idioma novo (se ele tiver alertas). */
+function definirIdiomaAlertas(idioma) {
+  const conta = contaFavoritos_();
+  if (!conta) return { ok: false };
+  const p = lerPreferenciasAlerta_(conta);
+  if (!p) return { ok: true };
+  p.idioma = idioma === 'en' ? 'en' : 'pt';
+  gravarPreferenciasAlerta_(conta, p);
+  return { ok: true };
 }
 
 /** Painel: preferências do usuário logado. */
@@ -196,19 +225,19 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
       const resumo = ler(nomeArquivoUf_(f.uf));
       Object.keys((resumo && resumo.cidades) || {}).forEach(ibge => {
         const c = resumo.cidades[ibge];
-        (c.ocorrencias || []).forEach(o => { if (novo(o, true)) itens.push(itemAlerta_(o, c.cidade, unidades)); });
+        (c.ocorrencias || []).forEach(o => { if (novo(o, true)) itens.push(itemAlerta_(o, c.cidade, unidades, p)); });
       });
     } else {
       const mun = obterMunicipioBase_(f.uf, f.nome);
       const reg = mun ? ler(nomeArquivoCidade_(mun.ibge)) : null;
-      ((reg && reg.ocorrencias) || []).forEach(o => { if (novo(o, false)) itens.push(itemAlerta_(o, mun.nome, unidades)); });
+      ((reg && reg.ocorrencias) || []).forEach(o => { if (novo(o, false)) itens.push(itemAlerta_(o, mun.nome, unidades, p)); });
     }
     // Primeiro o que aconteceu perto de unidade Shopee, depois por gravidade e data
     itens.sort((a, b) => ((a.unidade ? 0 : 1) - (b.unidade ? 0 : 1)) || (ALERTAS_ORDEM_[a.tema] - ALERTAS_ORDEM_[b.tema]) || (b.data < a.data ? -1 : 1));
     const porTema = {};
     itens.forEach(i => { porTema[i.tema] = (porTema[i.tema] || 0) + 1; });
     const max = p.frequencia === 'semanal' ? 20 : 15;
-    if (itens.length) blocos.push({ titulo: f.nome === 'ESTADO_INTEIRO' ? 'Estado: ' + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')', itens: itens.slice(0, max), total: itens.length, porTema: porTema });
+    if (itens.length) blocos.push({ titulo: f.nome === 'ESTADO_INTEIRO' ? L_(p, 'Estado: ', 'State: ') + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')', itens: itens.slice(0, max), total: itens.length, porTema: porTema });
   });
 
   // Avisos do INMET (perigo e grande perigo) que atingem os locais escolhidos
@@ -222,11 +251,13 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
         return avisosInmetDoLocal_({ avisos: [a] }, f.uf, mun ? mun.ibge : '').length > 0;
       }).map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf);
       if (!nomes.length) return;
-      const quando = t => (t ? Utilities.formatDate(new Date(t), CONFIG.FUSO, "dd/MM HH'h'mm") : '');
-      itens.push({ id: 'inmet' + a.id, tema: 'INMET', rotulo: 'INMET · ' + a.grau, cor: a.cor || '#F57C00', titulo: 'Aviso de ' + String(a.evento || '').toLowerCase() + ' (' + String(a.grau || '').toLowerCase() + ')',
-        link: a.link, veiculo: 'INMET', data: [quando(a.inicio), quando(a.fim)].filter(Boolean).join(' a '), local: juntarComE_(nomes) });
+      const quando = t => (t ? Utilities.formatDate(new Date(t), CONFIG.FUSO, L_(p, "dd/MM HH'h'mm", 'MM/dd HH:mm')) : '');
+      itens.push({ id: 'inmet' + a.id, tema: 'INMET', rotulo: 'INMET · ' + L_(p, a.grau, inmetEn_(a.grau)), cor: a.cor || '#F57C00',
+        titulo: L_(p, 'Aviso de ' + String(a.evento || '').toLowerCase() + ' (' + String(a.grau || '').toLowerCase() + ')',
+          'Warning: ' + inmetEn_(a.evento) + ' (' + inmetEn_(a.grau) + ')'),
+        link: a.link, veiculo: 'INMET', data: [quando(a.inicio), quando(a.fim)].filter(Boolean).join(L_(p, ' a ', ' to ')), local: juntarComE_(nomes, p) });
     });
-    if (itens.length) blocos.push({ titulo: 'Avisos do INMET', itens: itens.slice(0, 6) });
+    if (itens.length) blocos.push({ titulo: L_(p, 'Avisos do INMET', 'INMET weather warnings'), itens: itens.slice(0, 6), inmet: true });
   }
 
   if (p.shopee) {
@@ -238,7 +269,7 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
       (p.shopeeEscopo === 'brasil' || !i.ufs || !i.ufs.length || i.ufs.some(u => ufs.has(u))))
       .slice(0, 15)
       .map(i => ({ id: i.id, tema: 'SHOPEE', rotulo: i.tipo || 'Shopee', cor: '#EE4D2D', titulo: i.titulo, link: i.link, veiculo: i.veiculo, data: i.data || '', local: (i.ufs || []).join(', ') }));
-    if (itens.length) blocos.push({ titulo: 'Shopee nas notícias', itens: itens, shopee: true });
+    if (itens.length) blocos.push({ titulo: L_(p, 'Shopee nas notícias', 'Shopee in the news'), itens: itens, shopee: true });
   }
 
   // Limite total por e-mail
@@ -252,7 +283,7 @@ const ALERTAS_ORDEM_ = { CVLI: 0, CONFRONTO: 1, CARGA: 2, PATRIMONIO: 3, TRAFICO
 const ALERTAS_RAIO_UNIDADE_KM_ = 3;
 
 /** Unidade Shopee mais próxima a até 3 km da ocorrência (só ocorrências com local preciso). */
-function unidadeProximaAlerta_(o, unidades) {
+function unidadeProximaAlerta_(o, unidades, p) {
   if (!unidades || !unidades.length || !o.lat || !o.lng || !PRECISOES_NO_MAPA_.has(o.p)) return '';
   let melhor = null, dist = ALERTAS_RAIO_UNIDADE_KM_;
   unidades.forEach(u => {
@@ -260,21 +291,25 @@ function unidadeProximaAlerta_(o, unidades) {
     const d = distanciaKm_(o.lat, o.lng, u.lat, u.lng);
     if (d <= dist) { dist = d; melhor = u; }
   });
-  return melhor ? 'A ' + String(Math.round(dist * 10) / 10).replace('.', ',') + ' km da unidade ' + melhor.codigo + (melhor.nome ? ' · ' + melhor.nome : '') : '';
+  if (!melhor) return '';
+  const km = String(Math.round(dist * 10) / 10);
+  return L_(p, 'A ' + km.replace('.', ',') + ' km da unidade ', km + ' km from site ') + melhor.codigo + (melhor.nome ? ' · ' + melhor.nome : '');
 }
 
-function itemAlerta_(o, cidade, unidades) {
+function itemAlerta_(o, cidade, unidades, p) {
   const t = ALERTAS_TEMAS_[o.c] || { nome: o.c, cor: '#64748b' };
+  const en = p && p.idioma === 'en';
   const partes = String(o.d || '').split('-');
-  return { id: o.id, tema: o.c, rotulo: t.nome, cor: t.cor, titulo: o.t, link: o.u, veiculo: o.v, unidade: unidadeProximaAlerta_(o, unidades),
-    data: partes.length === 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : '', local: [o.b ? 'Bairro ' + o.b : '', cidade].filter(Boolean).join(' · ') };
+  return { id: o.id, tema: o.c, rotulo: nomeTemaAlerta_(p, o.c), cor: t.cor, titulo: o.t, link: o.u, veiculo: o.v, unidade: unidadeProximaAlerta_(o, unidades, p),
+    data: partes.length === 3 ? (en ? partes[1] + '/' + partes[2] + '/' + partes[0] : partes[2] + '/' + partes[1] + '/' + partes[0]) : '',
+    local: [o.b ? (en ? 'Neighborhood ' : 'Bairro ') + o.b : '', cidade].filter(Boolean).join(' · ') };
 }
 
 function nomeUfAlerta_(uf) {
   try { return (ESTADOS_BRASIL_METADATA[uf] && ESTADOS_BRASIL_METADATA[uf].nome) || uf; } catch (e) { return uf; }
 }
 
-function juntarComE_(l) { return l.length < 2 ? l.join('') : l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1]; }
+function juntarComE_(l, p) { return l.length < 2 ? l.join('') : l.slice(0, -1).join(', ') + L_(p, ' e ', ' and ') + l[l.length - 1]; }
 
 function escAlerta_(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -284,11 +319,15 @@ function linkSeguroAlerta_(u) { return /^https?:\/\//i.test(String(u || '')) ? S
 /** E-mail em HTML com tabelas e estilos embutidos (abre bem no Gmail, Outlook e celular). */
 function montarEmailAlerta_(p, blocos, teste) {
   const total = contarItensBlocos_(blocos);
-  const quando = Utilities.formatDate(new Date(), CONFIG.FUSO, "dd/MM/yyyy 'às' HH:mm");
-  const titulo = teste ? 'E-mail de teste dos seus alertas' : (p.frequencia === 'diario' ? 'Resumo diário de segurança' : p.frequencia === 'semanal' ? 'Resumo semanal de segurança' : 'Novo alerta de segurança');
+  const en = p.idioma === 'en';
+  const quando = Utilities.formatDate(new Date(), CONFIG.FUSO, en ? "MM/dd/yyyy 'at' HH:mm" : "dd/MM/yyyy 'às' HH:mm");
+  const titulo = teste ? L_(p, 'E-mail de teste dos seus alertas', 'Test email for your alerts')
+    : p.frequencia === 'diario' ? L_(p, 'Resumo diário de segurança', 'Daily security summary')
+    : p.frequencia === 'semanal' ? L_(p, 'Resumo semanal de segurança', 'Weekly security summary') : L_(p, 'Novo alerta de segurança', 'New security alert');
   const resumo = total
-    ? total + (total === 1 ? ' novidade: ' : ' novidades: ') + juntarComE_(blocos.map(b => (b.total || b.itens.length) + (b.shopee ? ' sobre a Shopee' : b.titulo === 'Avisos do INMET' ? (b.itens.length === 1 ? ' aviso do INMET' : ' avisos do INMET') : ' em ' + b.titulo)))
-    : 'Nada novo nos locais e temas escolhidos' + (teste ? ' nos últimos 7 dias.' : '.');
+    ? total + (total === 1 ? L_(p, ' novidade: ', ' update: ') : L_(p, ' novidades: ', ' updates: ')) + juntarComE_(blocos.map(b => (b.total || b.itens.length) +
+      (b.shopee ? L_(p, ' sobre a Shopee', ' about Shopee') : b.inmet ? (b.itens.length === 1 ? L_(p, ' aviso do INMET', ' INMET warning') : L_(p, ' avisos do INMET', ' INMET warnings')) : L_(p, ' em ', ' in ') + b.titulo)), p)
+    : L_(p, 'Nada novo nos locais e temas escolhidos', 'Nothing new in the chosen places and topics') + (teste ? L_(p, ' nos últimos 7 dias.', ' in the last 7 days.') : '.');
   const url = urlPainelAlertas_();
 
   const linhas = blocos.map(b => {
@@ -303,16 +342,16 @@ function montarEmailAlerta_(p, blocos, teste) {
         '</td></tr>';
     }).join('');
     const contagem = b.porTema && (p.frequencia !== 'imediato' || b.total > b.itens.length)
-      ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">' + escAlerta_((b.total > b.itens.length ? b.total + ' no período, as ' + b.itens.length + ' mais relevantes abaixo: ' : '') +
-        Object.keys(b.porTema).sort((x, y) => ALERTAS_ORDEM_[x] - ALERTAS_ORDEM_[y]).map(t => b.porTema[t] + ' ' + ((ALERTAS_TEMAS_[t] || {}).nome || t).toLowerCase()).join(', ')) + '</div>' : '';
+      ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">' + escAlerta_((b.total > b.itens.length ? b.total + L_(p, ' no período, as ' + b.itens.length + ' mais relevantes abaixo: ', ' in the period, the ' + b.itens.length + ' most relevant below: ') : '') +
+        Object.keys(b.porTema).sort((x, y) => ALERTAS_ORDEM_[x] - ALERTAS_ORDEM_[y]).map(t => b.porTema[t] + ' ' + nomeTemaAlerta_(p, t).toLowerCase()).join(', ')) + '</div>' : '';
     return '<tr><td style="padding:20px 28px 4px"><div style="font-size:13px;font-weight:700;color:' + (b.shopee ? '#EE4D2D' : '#113366') + ';text-transform:uppercase;letter-spacing:.6px">' + escAlerta_(b.titulo) + ' (' + (b.total || b.itens.length) + ')</div>' + contagem +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + itens + '</table></td></tr>';
   }).join('');
 
-  const temas = p.temas.map(t => ALERTAS_TEMAS_[t].nome).join(', ') || 'nenhum tema de ocorrência';
-  const locais = p.locais.map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf).join(', ') || 'nenhum local';
+  const temas = p.temas.map(t => nomeTemaAlerta_(p, t)).join(', ') || L_(p, 'nenhum tema de ocorrência', 'no incident topic');
+  const locais = p.locais.map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf).join(', ') || L_(p, 'nenhum local', 'no place');
 
-  const html = '<!doctype html><html lang="pt-BR"><body style="margin:0;padding:0;background:#f3f4f6;font-family:Roboto,Arial,Helvetica,sans-serif;color:#1f2937">' +
+  const html = '<!doctype html><html lang="' + L_(p, 'pt-BR', 'en-US') + '"><body style="margin:0;padding:0;background:#f3f4f6;font-family:Roboto,Arial,Helvetica,sans-serif;color:#1f2937">' +
     '<div style="display:none;max-height:0;overflow:hidden">' + escAlerta_(resumo) + '</div>' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6"><tr><td align="center" style="padding:24px 12px">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">' +
@@ -323,18 +362,22 @@ function montarEmailAlerta_(p, blocos, teste) {
       '<div style="font-size:20px;font-weight:700;margin-top:2px">' + escAlerta_(titulo) + '</div></td></tr></table>' +
     '</td></tr>' +
     '<tr><td style="padding:20px 28px 0"><div style="font-size:14px;color:#374151;line-height:1.5">' + escAlerta_(resumo) + '</div>' +
-      '<div style="font-size:12px;color:#9ca3af;margin-top:4px">Mapa da Segurança · ' + escAlerta_(quando) + '</div></td></tr>' +
+      '<div style="font-size:12px;color:#9ca3af;margin-top:4px">' + L_(p, 'Mapa da Segurança', 'Security Map') + ' · ' + escAlerta_(quando) + '</div></td></tr>' +
     linhas +
-    '<tr><td align="center" style="padding:24px 28px 8px"><a href="' + escAlerta_(url) + '" style="display:inline-block;background:#EE4D2D;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px">Abrir o Mapa da Segurança</a></td></tr>' +
+    '<tr><td align="center" style="padding:24px 28px 8px"><a href="' + escAlerta_(url) + '" style="display:inline-block;background:#EE4D2D;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px">' + L_(p, 'Abrir o Mapa da Segurança', 'Open the Security Map') + '</a></td></tr>' +
     '<tr><td style="padding:16px 28px 24px;font-size:11px;line-height:1.6;color:#9ca3af;border-top:1px solid #eef0f3">' +
-      'Você recebe este e-mail porque ativou os alertas no Mapa da Segurança. Locais: ' + escAlerta_(locais) + '. Temas: ' + escAlerta_(temas) + (p.shopee ? '; notícias da Shopee' : '') + (p.inmet !== false ? '; avisos do INMET' : '') + '. ' +
-      'Para mudar ou cancelar, abra o painel e clique em <b>Meus alertas</b>.<br>' +
-      'Notícias são fontes públicas e servem de complemento; a estatística oficial é a do Sinesp/MJSP. Uso interno da Shopee: não encaminhe para fora da empresa.' +
+      (en
+        ? 'You receive this email because you turned on alerts in the Security Map. Places: ' + escAlerta_(locais) + '. Topics: ' + escAlerta_(temas) + (p.shopee ? '; Shopee news' : '') + (p.inmet !== false ? '; INMET warnings' : '') + '. ' +
+          'To change or cancel, open the dashboard and click <b>My email alerts</b>.<br>' +
+          'News comes from public sources and is supplementary; the official statistics are from Sinesp/MJSP. For internal Shopee use only: do not forward outside the company.'
+        : 'Você recebe este e-mail porque ativou os alertas no Mapa da Segurança. Locais: ' + escAlerta_(locais) + '. Temas: ' + escAlerta_(temas) + (p.shopee ? '; notícias da Shopee' : '') + (p.inmet !== false ? '; avisos do INMET' : '') + '. ' +
+          'Para mudar ou cancelar, abra o painel e clique em <b>Meus alertas</b>.<br>' +
+          'Notícias são fontes públicas e servem de complemento; a estatística oficial é a do Sinesp/MJSP. Uso interno da Shopee: não encaminhe para fora da empresa.') +
     '</td></tr></table></td></tr></table></body></html>';
 
   const texto = titulo + '\n' + resumo + '\n\n' + blocos.map(b => b.titulo + '\n' + b.itens.map(i => '- [' + i.rotulo + '] ' + i.titulo + ' (' + [i.veiculo, i.data, i.local, i.unidade].filter(Boolean).join(' · ') + ') ' + (i.link || '')).join('\n')).join('\n\n') +
-    '\n\nAbrir o Mapa da Segurança: ' + url + '\nPara mudar ou cancelar: painel → Meus alertas.';
-  const assunto = (teste ? '[Teste] ' : '') + (total ? '[Alerta] ' + resumo : titulo + ' — Mapa da Segurança');
+    L_(p, '\n\nAbrir o Mapa da Segurança: ', '\n\nOpen the Security Map: ') + url + L_(p, '\nPara mudar ou cancelar: painel → Meus alertas.', '\nTo change or cancel: dashboard → My email alerts.');
+  const assunto = (teste ? L_(p, '[Teste] ', '[Test] ') : '') + (total ? L_(p, '[Alerta] ', '[Alert] ') + resumo : titulo + ' — ' + L_(p, 'Mapa da Segurança', 'Security Map'));
   return { assunto: assunto.slice(0, 180), html: html, texto: texto };
 }
 

@@ -102,7 +102,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
             <summary>{{ leg.semLocal }} sem bairro identificado</summary>
             <ul>
               @for (o of leg.listaSem; track o.id) {
-                <li><a [href]="o.link" target="_blank" rel="noopener">{{ o.titulo }}</a> <small>{{ o.data }}</small></li>
+                <li><a [href]="o.link" target="_blank" rel="noopener" translate="no">{{ o.titulo }}</a> <small>{{ o.data }}</small></li>
               }
             </ul>
           </details>
@@ -467,7 +467,7 @@ export class MapaComponent implements OnDestroy {
     const cat = CATEGORIA_POR_ID[o.cat], prec = ROTULOS_PRECISAO[o.precisao] || ROTULOS_PRECISAO['PENDENTE'];
     return `<div class="popup"><span class="popup-cat" style="color:${cat.cor}">${esc(cat.nome)}</span> · ${esc(o.data)}` +
       ` · <span class="popup-grau" title="${esc(explicarGrau(grauDe(o)))}">${esc(grauDe(o))}</span>` +
-      `<div class="popup-titulo">${esc(o.titulo)}</div><div class="popup-meta">${esc(o.bairro)} · ${esc(prec.nome)}</div>` +
+      `<div class="popup-titulo" translate="no">${esc(o.titulo)}</div><div class="popup-meta">${esc(o.bairro)} · ${esc(prec.nome)}</div>` +
       `<a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener"><b>Abrir notícia</b> (${esc(o.veiculo || 'fonte')})</a>` +
       (o.fontes ? `<div class="popup-meta">Também em: ${o.fontes.filter((f) => f.link !== o.link).slice(0, 4).map((f) => `<a href="${esc(urlSegura(f.link))}" target="_blank" rel="noopener">${esc(f.veiculo)}</a>`).join(', ')}</div>` : '') + '</div>';
   }
@@ -564,7 +564,7 @@ export class MapaComponent implements OnDestroy {
       const m = L.marker([r.lat, r.lng], { icon: icone, pane: 'paneUnidades', keyboard: false, title: tipos[r.tipo] || r.tipo });
       m.bindPopup(`<div class="popup"><span class="popup-cat" style="color:#EE4D2D">Relato da equipe Shopee</span> · ${esc(r.data.split('-').reverse().join('/'))}${r.hora ? ' ' + esc(r.hora) : ''}` +
         ` · <span class="popup-grau" title="${esc(explicarGrau('B2'))}">B2</span>` +
-        `<div class="popup-titulo">${esc(tipos[r.tipo] || r.tipo)}</div><div>${esc(r.descricao)}</div>` +
+        `<div class="popup-titulo">${esc(tipos[r.tipo] || r.tipo)}</div><div translate="no">${esc(r.descricao)}</div>` +
         `<div class="popup-meta">${esc([r.unidade && 'Unidade ' + r.unidade, r.bairro && 'Bairro ' + r.bairro].filter(Boolean).join(' · '))}</div>` +
         `<div class="popup-meta">${r.meu ? 'Registrado por você' : 'Registrado por equipe Shopee'} · visível só para contas @shopee.com</div></div>`, { maxWidth: 320 });
       this.layerRelatos.addLayer(m);
@@ -602,7 +602,7 @@ export class MapaComponent implements OnDestroy {
   private resumoPerto(u: UnidadeShopee): string {
     if (u.origem !== 'planilha') return '';
     const p = ocorrenciasPerto(u.lat, u.lng, this.store.recentes30());
-    const ult = p.ultimas.map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)}, ${String(o.km).replace('.', ',')} km)</small></li>`).join('');
+    const ult = p.ultimas.map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>(${esc(o.data)}, ${String(o.km).replace('.', ',')} km)</small></li>`).join('');
     return `<div class="perto-unidade"><b>Num raio de ${RAIO_UNIDADE_KM} km</b>` +
       `<div class="perto-numeros"><span><b>${fmt(p.h24)}</b>24 h</span><span><b>${fmt(p.d7)}</b>7 dias</span><span><b>${fmt(p.d30)}</b>30 dias</span><span class="${p.graves30 ? 'grave' : ''}"><b>${fmt(p.graves30)}</b>graves (30 dias)</span></div>` +
       (ult ? `<ul class="lista-sem-local">${ult}</ul>` : '<small>Nenhuma ocorrência com local preciso no raio nos últimos 30 dias.</small>') + `</div>`;
@@ -620,7 +620,7 @@ export class MapaComponent implements OnDestroy {
       ? z.nome.split(', ').map((n) => `<span class="nome-bairro">Bairro ${esc(n)}</span>`).join(' ') : '<small>Área sem bairro citado nas notícias</small>';
     const risco = this.store.compilado().risco;
     const ultimas = (z.ultimas || []).map((o) =>
-      `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('');
+      `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('');
     return `<div class="popup popup-zona">` +
       `<div class="zona-topo" style="border-color:${cor}"><span class="zona-rank" style="background:${cor}">${z.rank}</span>` +
       `<div><b>Zona vermelha ${z.rank} de ${total}</b><br><small>${esc(NOME_NIVEL[z.nivel])}</small></div></div>` +
@@ -643,7 +643,7 @@ export class MapaComponent implements OnDestroy {
     const corpo = b.qtd
       ? `${fmt(b.qtd)} ocorrências noticiadas (${total ? Math.round((b.qtd / total) * 100) : 0}% da cidade) · ${fmt(b.graves)} graves · ${fmt(b.recentes)} nos últimos 30 dias` +
         `<div class="popup-tags">${tipos}</div><ul class="lista-sem-local">` +
-        lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
+        lista.slice(0, 6).map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('') + '</ul>'
       : 'Nenhuma ocorrência noticiada no período escolhido.';
     const ob = this.camadas().oficial ? this.store.oficialBairros() : null;
     const of = ob?.porBairro.get(b.nome);

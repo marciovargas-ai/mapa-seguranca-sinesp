@@ -36,6 +36,12 @@ const INSTRUCOES_AGENTE_ = [
   '- Se pedirem a comparação com um lugar que não está no JSON, diga que não recebeu os dados dele e peça para escrever o nome da cidade e a sigla do estado (ex.: "Compare com Porto Alegre RS").'
 ].join('\n');
 
+/** Com o painel em inglês, a resposta sai em inglês americano (os dados do painel continuam em português). */
+const INSTRUCAO_INGLES_ = 'IMPORTANT: the user is reading the dashboard in American English. Answer in American English, clearly and objectively, ' +
+  'even though the dashboard data and these instructions are in Portuguese. Translate crime names, labels and table headers into English ' +
+  '(e.g. "mortes violentas" = violent deaths, "roubo" = robbery, "taxa por 100 mil" = rate per 100k). Keep place names and news headlines as they are. ' +
+  'Use US number format (1,234.5).';
+
 /** Diz ao painel se o agente está configurado (sem expor a chave). */
 function statusAgenteIA() {
   return { configurado: !!PropertiesService.getScriptProperties().getProperty('INSEA_API_KEY') };
@@ -44,9 +50,10 @@ function statusAgenteIA() {
 /**
  * pergunta: texto do usuário. contexto: JSON (texto) com o que o painel está mostrando.
  * conversaId: id da conversa anterior (mantém o histórico no Super Agent).
+ * idioma: 'pt' (padrão) ou 'en' (resposta em inglês americano).
  * Devolve { ok, resposta, conversaId } ou { ok:false, erro, configurado }.
  */
-function perguntarAgenteIA(pergunta, contexto, conversaId) {
+function perguntarAgenteIA(pergunta, contexto, conversaId, idioma) {
   const props = PropertiesService.getScriptProperties();
   const chave = props.getProperty('INSEA_API_KEY');
   if (!chave) return { ok: false, configurado: false, erro: 'O agente ainda não foi configurado: falta gravar INSEA_API_KEY nas propriedades do script.' };
@@ -62,7 +69,10 @@ function perguntarAgenteIA(pergunta, contexto, conversaId) {
 
   let ctx = String(contexto || '');
   if (ctx.length > AGENTE_IA_MAX_CONTEXTO_) ctx = ctx.slice(0, AGENTE_IA_MAX_CONTEXTO_) + '…(cortado)';
-  const consulta = INSTRUCOES_AGENTE_ + '\n\nDADOS DO PAINEL (JSON, gerado agora pelo painel):\n' + ctx + '\n\nPERGUNTA DO USUÁRIO:\n' + texto;
+  const instrucoes = idioma === 'en'
+    ? INSTRUCOES_AGENTE_.replace('Responda sempre em português do Brasil, de forma clara e objetiva.', INSTRUCAO_INGLES_)
+    : INSTRUCOES_AGENTE_;
+  const consulta = instrucoes + (idioma === 'en' ? '\n\n' + INSTRUCAO_INGLES_ : '') + '\n\nDADOS DO PAINEL (JSON, gerado agora pelo painel):\n' + ctx + '\n\nPERGUNTA DO USUÁRIO:\n' + texto;
 
   const corpo = { query: consulta };
   if (conversaId) corpo.conversation_id = String(conversaId);
@@ -80,7 +90,7 @@ function perguntarAgenteIA(pergunta, contexto, conversaId) {
   let json = null;
   try { json = JSON.parse(resp.getContentText()); } catch (e) {}
   // Conversa expirada: tenta de novo sem o id antigo
-  if (codigo === 410 && conversaId) return perguntarAgenteIA(pergunta, contexto, '');
+  if (codigo === 410 && conversaId) return perguntarAgenteIA(pergunta, contexto, '', idioma);
   if (codigo !== 200 || !json || (json.error && json.error.code)) {
     const cod = json && json.error && json.error.code || ('HTTP_' + codigo);
     return { ok: false, configurado: true, erro: mensagemErroAgente_(cod, codigo) };

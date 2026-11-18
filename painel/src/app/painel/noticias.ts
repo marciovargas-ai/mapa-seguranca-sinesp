@@ -33,7 +33,7 @@ import { explicarGrau, grauDe } from '../core/confianca';
           <span class="grau" [class.g1]="grau(o).endsWith('1')" [title]="explicar(o)">{{ grau(o) }}</span>
           <small>{{ o.data }}</small>
         </div>
-        <a class="titulo" [href]="url(o.link)" target="_blank" rel="noopener">{{ o.titulo }}</a>
+        <a class="titulo" [href]="url(o.link)" target="_blank" rel="noopener" translate="no">{{ o.titulo }}</a>
         <div class="meta">
           <button type="button" class="pilula" [disabled]="!o.precisa" (click)="store.focar(o.lat!, o.lng!)">
             <span class="material-symbols-outlined">location_on</span>{{ store.escopo() === 'ESTADO' ? o.cidade + ' — ' + o.bairro : o.bairro }}
@@ -48,7 +48,7 @@ import { explicarGrau, grauDe } from '../core/confianca';
         </div>
         @if (o.fontes && aberto() === o.id) {
           <ul class="outras">
-            @for (f of o.fontes; track f.link) { <li><a [href]="url(f.link)" target="_blank" rel="noopener">{{ f.veiculo }}</a>: {{ f.titulo }}</li> }
+            @for (f of o.fontes; track f.link) { <li><a [href]="url(f.link)" target="_blank" rel="noopener">{{ f.veiculo }}</a>: <span translate="no">{{ f.titulo }}</span></li> }
           </ul>
         }
       </article>

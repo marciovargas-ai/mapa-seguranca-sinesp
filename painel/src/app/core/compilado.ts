@@ -220,7 +220,7 @@ export function compilar(c: Entrada): Compilado {
     const z = f.zonas;
     indicadores.push({
       id: 'bairros', titulo: 'Bairros com ocorrência', valor: fmt(comBairro.length), unidade: c.bairrosOsm ? `de ${fmt(c.bairrosOsm)}` : '',
-      sub: (comBairro[0] ? `mais citado: ${comBairro[0].nome} (${fmt(comBairro[0].qtd)})` : 'nenhum bairro citado') + ` · ${fmt(z.length)} zonas vermelhas`,
+      sub: (comBairro[0] ? `mais citado: ${comBairro[0].nome} (${fmt(comBairro[0].qtd)})` : 'nenhum bairro citado') + ` · ${fmt(z.length)} ${z.length === 1 ? 'zona vermelha' : 'zonas vermelhas'}`,
       tom: z.some((x) => x.nivel === 'critica') ? 'alerta' : 'neutro', fonte: 'Notícias + IBGE',
       dica: 'Cada notícia é ligada ao bairro pelo contorno oficial do IBGE (OpenStreetMap onde o IBGE não tem) ou pelo nome citado. Zonas vermelhas = concentrações de ocorrências graves e recentes.',
     });

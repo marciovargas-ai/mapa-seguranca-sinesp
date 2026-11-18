@@ -64,7 +64,7 @@ const hoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d
           <div class="relato">
             <div class="topo"><b>{{ r.tipos[x.tipo] || x.tipo }}</b><span class="grau" title="Fonte própria, geralmente confiável; sem confirmação externa (escala Admiralty)">B2</span>
               <small>{{ dataBr(x.data) }}{{ x.hora ? ' ' + x.hora : '' }}{{ store.escopo() === 'ESTADO' ? ' · ' + x.cidade : '' }}</small></div>
-            <div>{{ x.descricao }}</div>
+            <div translate="no">{{ x.descricao }}</div>
             <small>{{ [x.unidade && 'Unidade ' + x.unidade, x.bairro && 'Bairro ' + x.bairro, x.meu ? 'registrado por você' : 'equipe Shopee'].filter(ok).join(' · ') }}</small>
             @if (x.meu) { <button mat-button class="apagar" (click)="apagar(x)" [disabled]="ocupado()"><mat-icon>delete</mat-icon> Apagar</button> }
           </div>

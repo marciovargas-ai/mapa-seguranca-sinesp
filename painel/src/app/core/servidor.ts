@@ -1,3 +1,4 @@
+import { idioma } from './i18n';
 import { Panorama } from './modelos';
 
 /**
@@ -27,16 +28,17 @@ export const Servidor = {
   fogoCruzado: (uf: string, cidade: string) =>
     chamar<any>('obterFogoCruzado', uf, cidade).then((r) => r || null, (e) => ({ configurado: true, erro: String(e?.message || e), itens: [] })),
   agenteStatus: () => chamar<{ configurado: boolean }>('statusAgenteIA'),
-  agente: (pergunta: string, contexto: string, conversaId: string) =>
-    chamar<{ ok: boolean; resposta?: string; conversaId?: string; erro?: string; configurado?: boolean }>('perguntarAgenteIA', pergunta, contexto, conversaId),
+  agente: (pergunta: string, contexto: string, conversaId: string, idioma = 'pt') =>
+    chamar<{ ok: boolean; resposta?: string; conversaId?: string; erro?: string; configurado?: boolean }>('perguntarAgenteIA', pergunta, contexto, conversaId, idioma),
   exportar: (formato: 'pdf' | 'sheets', titulo: string, local: string, pergunta: string, resposta: string) =>
     chamar<{ ok: boolean; url: string; nome: string }>('exportarRespostaIA', formato, titulo, local, pergunta, resposta),
   unidadesShopee: () => chamar<any>('obterUnidadesShopee', false),
   favoritos: () => chamar<{ ok: boolean; conta: string; favoritos: { uf: string; nome: string }[] | null }>('obterFavoritos'),
   salvarFavoritos: (lista: { uf: string; nome: string }[]) => chamar<any>('salvarFavoritos', lista),
   alertas: () => chamar<any>('obterAlertas'),
-  salvarAlertas: (prefs: unknown) => chamar<any>('salvarAlertas', prefs),
-  testarAlertas: (prefs: unknown) => chamar<any>('testarAlertas', prefs),
+  salvarAlertas: (prefs: object) => chamar<any>('salvarAlertas', { ...prefs, idioma: idioma() }),
+  testarAlertas: (prefs: object) => chamar<any>('testarAlertas', { ...prefs, idioma: idioma() }),
+  idiomaAlertas: (i: string) => chamar<any>('definirIdiomaAlertas', i),
   relatos: (uf: string, cidade: string) => chamar<any>('obterRelatos', uf, cidade),
   salvarRelato: (r: unknown) => chamar<any>('salvarRelato', r),
   apagarRelato: (id: string) => chamar<any>('apagarRelato', id),

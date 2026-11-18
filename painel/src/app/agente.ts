@@ -55,7 +55,7 @@ const SELETOR_CARTOES = '.conteudo .cartao:not(.zona):not(.noticia), .kpis .kpi'
             <div class="msg" [class.usuario]="m.papel === 'usuario'" [class.erro]="m.erro">
               @if (m.papel === 'usuario') { {{ m.texto }} }
               @else {
-                <div class="md" [innerHTML]="html(m.texto)"></div>
+                <div class="md" [innerHTML]="html(m.texto)" [attr.translate]="m.erro ? null : 'no'"></div>
                 @if (!m.erro) {
                   <div class="acoes">
                     <button type="button" (click)="ia.exportar(m, 'pdf')" [disabled]="!!m.exportando">
