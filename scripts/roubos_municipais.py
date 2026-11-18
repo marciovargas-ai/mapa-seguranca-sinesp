@@ -7,6 +7,7 @@ Os números são anualizados (12 meses) para comparar estados com períodos dife
 
 SP: dados/oficial/<ibge7>.json (SSP-SP, boletins): roubo + roubo de veículo + roubo de carga.
 RJ: dados/isp_rj_cisp.json (ISP-RJ): total de roubos (ou, se faltar, roubos de rua + veículo + carga).
+RS e MG: dados/roubos_rs_mg.json (robô roubos_rs_mg.py, SSP-RS e Sejusp-MG).
 """
 import datetime, glob, json, os
 
@@ -50,6 +51,12 @@ def main():
         estados['RJ'] = {'fonte': 'ISP-RJ, ocorrências registradas por delegacia', 'periodo': f"{p.get('de', '')} a {p.get('ate', '')}",
                          'definicao': 'total de roubos registrados' if any('total_roubos' in a['u12'] for v in isp['municipios'].values() for a in v)
                          else 'roubos de rua, de veículo e de carga'}
+
+    # RS e MG: robô roubos_rs_mg.py (SSP-RS e Sejusp-MG)
+    if os.path.exists('dados/roubos_rs_mg.json'):
+        extra = json.load(open('dados/roubos_rs_mg.json', encoding='utf-8'))
+        estados.update(extra.get('estados', {}))
+        municipios.update(extra.get('municipios', {}))
 
     with open(SAIDA, 'w', encoding='utf-8') as f:
         json.dump({'atualizado': datetime.date.today().isoformat(), 'estados': estados, 'municipios': municipios},
