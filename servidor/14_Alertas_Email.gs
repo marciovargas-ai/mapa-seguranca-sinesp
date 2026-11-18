@@ -4,7 +4,9 @@
  * Cada pessoa (conta @shopee.com) escolhe cidades/estados, temas e frequência no painel.
  * O gatilho alertasEmailGatilho (a cada 15 min) junta o que é novo desde o último envio:
  *  - ocorrências das cidades escolhidas (arquivos cidade_<IBGE>.json / uf_<UF>.json);
- *  - notícias que citam a Shopee (shopee_noticias.json, do 11_Monitor_Shopee).
+ *  - notícias que citam a Shopee (shopee_noticias.json, do 11_Monitor_Shopee);
+ *  - avisos do INMET de perigo e grande perigo (16_Avisos_Inmet).
+ * Frequências: assim que sair, resumo diário ou resumo semanal (segunda-feira).
  * Envia pelo remetente security.br@shopee.com (alias do Gmail da conta dona do script);
  * sem o alias, envia pela própria conta com o nome "Shopee Security Brasil" e resposta para o remetente.
  * As cidades com alerta entram na fila do robô (roboAtualizacao), que as mantém atualizadas.
@@ -50,11 +52,13 @@ function limparPreferenciasAlerta_(p, anterior) {
     shopee: !!p.shopee,
     shopeeEscopo: p.shopeeEscopo === 'brasil' ? 'brasil' : 'locais',
     shopeeSoSeguranca: p.shopeeSoSeguranca !== false,
-    frequencia: p.frequencia === 'diario' ? 'diario' : 'imediato',
+    inmet: p.inmet !== false,
+    frequencia: p.frequencia === 'diario' || p.frequencia === 'semanal' ? p.frequencia : 'imediato',
     hora: Math.max(5, Math.min(22, Number(p.hora) || 7)),
     criado: (anterior && anterior.criado) || Date.now(),
     ultimoEnvio: (anterior && anterior.ultimoEnvio) || Date.now(),
-    ultimoDiario: (anterior && anterior.ultimoDiario) || ''
+    ultimoDiario: (anterior && anterior.ultimoDiario) || '',
+    ultimoSemanal: (anterior && anterior.ultimoSemanal) || ''
   };
 }
 
@@ -122,17 +126,20 @@ function alertasEmailGatilho() {
     const agora = Date.now();
     const hoje = Utilities.formatDate(new Date(), CONFIG.FUSO, 'yyyy-MM-dd');
     const hora = Number(Utilities.formatDate(new Date(), CONFIG.FUSO, 'H'));
+    const segunda = Utilities.formatDate(new Date(), CONFIG.FUSO, 'u') === '1';
     const cache = {};
     lerIndiceAlertas_().forEach(email => {
       const p = lerPreferenciasAlerta_(email);
       if (!p || !p.ativo || (!p.locais.length && !p.shopee)) return;
       manterCidadesNoRobo_(p);
       if (p.frequencia === 'diario' && (hora < p.hora || p.ultimoDiario === hoje)) return;
-      const desde = Math.max(p.ultimoEnvio || 0, p.criado || 0, agora - 3 * 86400000);
+      if (p.frequencia === 'semanal' && (!segunda || hora < p.hora || p.ultimoSemanal === hoje)) return;
+      const desde = Math.max(p.ultimoEnvio || 0, p.criado || 0, agora - (p.frequencia === 'semanal' ? 7 : 3) * 86400000);
       const enviados = lerEnviadosAlerta_(email);
       const blocos = juntarNovidadesAlerta_(p, desde, cache, enviados);
       const total = contarItensBlocos_(blocos);
       if (p.frequencia === 'diario') p.ultimoDiario = hoje;
+      if (p.frequencia === 'semanal') p.ultimoSemanal = hoje;
       if (total) {
         if (MailApp.getRemainingDailyQuota() < 1) return;
         enviarEmailAlerta_(email, p, blocos, false);
@@ -174,6 +181,12 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
   const limiteData = Utilities.formatDate(new Date(desde - 86400000), CONFIG.FUSO, 'yyyy-MM-dd');
   const blocos = [];
   const ler = nome => (nome in cache ? cache[nome] : (cache[nome] = lerJson_(nome)));
+  // Unidades Shopee com endereço exato: o alerta diz quando a ocorrência foi a menos de 3 km de uma delas
+  if (!cache.__unidades) {
+    try { cache.__unidades = ((obterUnidadesShopee() || {}).unidades || []).filter(u => u.origem === 'planilha' && !/closed|cancel/i.test(u.status || '')); }
+    catch (e) { cache.__unidades = []; }
+  }
+  const unidades = cache.__unidades;
   const novo = (o, ehUf) => temas.has(o.c) && !ja.has(o.id) && String(o.d || '') >= limiteData && (ehUf || !o.m || o.m > desde) && !ehNoticiaPolitica_(o.t || '');
 
   p.locais.forEach(f => {
@@ -183,16 +196,38 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
       const resumo = ler(nomeArquivoUf_(f.uf));
       Object.keys((resumo && resumo.cidades) || {}).forEach(ibge => {
         const c = resumo.cidades[ibge];
-        (c.ocorrencias || []).forEach(o => { if (novo(o, true)) itens.push(itemAlerta_(o, c.cidade)); });
+        (c.ocorrencias || []).forEach(o => { if (novo(o, true)) itens.push(itemAlerta_(o, c.cidade, unidades)); });
       });
     } else {
       const mun = obterMunicipioBase_(f.uf, f.nome);
       const reg = mun ? ler(nomeArquivoCidade_(mun.ibge)) : null;
-      ((reg && reg.ocorrencias) || []).forEach(o => { if (novo(o, false)) itens.push(itemAlerta_(o, mun.nome)); });
+      ((reg && reg.ocorrencias) || []).forEach(o => { if (novo(o, false)) itens.push(itemAlerta_(o, mun.nome, unidades)); });
     }
-    itens.sort((a, b) => (ALERTAS_ORDEM_[a.tema] - ALERTAS_ORDEM_[b.tema]) || (b.data < a.data ? -1 : 1));
-    if (itens.length) blocos.push({ titulo: f.nome === 'ESTADO_INTEIRO' ? 'Estado: ' + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')', itens: itens.slice(0, 15) });
+    // Primeiro o que aconteceu perto de unidade Shopee, depois por gravidade e data
+    itens.sort((a, b) => ((a.unidade ? 0 : 1) - (b.unidade ? 0 : 1)) || (ALERTAS_ORDEM_[a.tema] - ALERTAS_ORDEM_[b.tema]) || (b.data < a.data ? -1 : 1));
+    const porTema = {};
+    itens.forEach(i => { porTema[i.tema] = (porTema[i.tema] || 0) + 1; });
+    const max = p.frequencia === 'semanal' ? 20 : 15;
+    if (itens.length) blocos.push({ titulo: f.nome === 'ESTADO_INTEIRO' ? 'Estado: ' + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')', itens: itens.slice(0, max), total: itens.length, porTema: porTema });
   });
+
+  // Avisos do INMET (perigo e grande perigo) que atingem os locais escolhidos
+  if (p.inmet !== false && p.locais.length) {
+    if (!cache.__inmet) { try { cache.__inmet = atualizarAvisosInmet_(false); } catch (e) { cache.__inmet = { avisos: [] }; } }
+    const itens = [];
+    (cache.__inmet.avisos || []).forEach(a => {
+      if (a.nivel < 2 || ja.has('inmet' + a.id) || (a.fim && a.fim < Date.now())) return;
+      const nomes = p.locais.filter(f => {
+        const mun = f.nome === 'ESTADO_INTEIRO' ? null : obterMunicipioBase_(f.uf, f.nome);
+        return avisosInmetDoLocal_({ avisos: [a] }, f.uf, mun ? mun.ibge : '').length > 0;
+      }).map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf);
+      if (!nomes.length) return;
+      const quando = t => (t ? Utilities.formatDate(new Date(t), CONFIG.FUSO, "dd/MM HH'h'mm") : '');
+      itens.push({ id: 'inmet' + a.id, tema: 'INMET', rotulo: 'INMET · ' + a.grau, cor: a.cor || '#F57C00', titulo: 'Aviso de ' + String(a.evento || '').toLowerCase() + ' (' + String(a.grau || '').toLowerCase() + ')',
+        link: a.link, veiculo: 'INMET', data: [quando(a.inicio), quando(a.fim)].filter(Boolean).join(' a '), local: juntarComE_(nomes) });
+    });
+    if (itens.length) blocos.push({ titulo: 'Avisos do INMET', itens: itens.slice(0, 6) });
+  }
 
   if (p.shopee) {
     const ufs = new Set(p.locais.map(f => f.uf));
@@ -212,12 +247,26 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
   return blocos.filter(b => b.itens.length);
 }
 
-const ALERTAS_ORDEM_ = { CVLI: 0, CONFRONTO: 1, CARGA: 2, PATRIMONIO: 3, TRAFICO: 4, BLOQUEIO: 5, SHOPEE: 6 };
+const ALERTAS_ORDEM_ = { CVLI: 0, CONFRONTO: 1, CARGA: 2, PATRIMONIO: 3, TRAFICO: 4, BLOQUEIO: 5, SHOPEE: 6, INMET: 7 };
 
-function itemAlerta_(o, cidade) {
+const ALERTAS_RAIO_UNIDADE_KM_ = 3;
+
+/** Unidade Shopee mais próxima a até 3 km da ocorrência (só ocorrências com local preciso). */
+function unidadeProximaAlerta_(o, unidades) {
+  if (!unidades || !unidades.length || !o.lat || !o.lng || !PRECISOES_NO_MAPA_.has(o.p)) return '';
+  let melhor = null, dist = ALERTAS_RAIO_UNIDADE_KM_;
+  unidades.forEach(u => {
+    if (Math.abs(u.lat - o.lat) > 0.05 || Math.abs(u.lng - o.lng) > 0.05) return;
+    const d = distanciaKm_(o.lat, o.lng, u.lat, u.lng);
+    if (d <= dist) { dist = d; melhor = u; }
+  });
+  return melhor ? 'A ' + String(Math.round(dist * 10) / 10).replace('.', ',') + ' km da unidade ' + melhor.codigo + (melhor.nome ? ' · ' + melhor.nome : '') : '';
+}
+
+function itemAlerta_(o, cidade, unidades) {
   const t = ALERTAS_TEMAS_[o.c] || { nome: o.c, cor: '#64748b' };
   const partes = String(o.d || '').split('-');
-  return { id: o.id, tema: o.c, rotulo: t.nome, cor: t.cor, titulo: o.t, link: o.u, veiculo: o.v,
+  return { id: o.id, tema: o.c, rotulo: t.nome, cor: t.cor, titulo: o.t, link: o.u, veiculo: o.v, unidade: unidadeProximaAlerta_(o, unidades),
     data: partes.length === 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : '', local: [o.b ? 'Bairro ' + o.b : '', cidade].filter(Boolean).join(' · ') };
 }
 
@@ -236,9 +285,9 @@ function linkSeguroAlerta_(u) { return /^https?:\/\//i.test(String(u || '')) ? S
 function montarEmailAlerta_(p, blocos, teste) {
   const total = contarItensBlocos_(blocos);
   const quando = Utilities.formatDate(new Date(), CONFIG.FUSO, "dd/MM/yyyy 'às' HH:mm");
-  const titulo = teste ? 'E-mail de teste dos seus alertas' : (p.frequencia === 'diario' ? 'Resumo diário de segurança' : 'Novo alerta de segurança');
+  const titulo = teste ? 'E-mail de teste dos seus alertas' : (p.frequencia === 'diario' ? 'Resumo diário de segurança' : p.frequencia === 'semanal' ? 'Resumo semanal de segurança' : 'Novo alerta de segurança');
   const resumo = total
-    ? total + (total === 1 ? ' novidade: ' : ' novidades: ') + juntarComE_(blocos.map(b => b.itens.length + (b.shopee ? ' sobre a Shopee' : ' em ' + b.titulo)))
+    ? total + (total === 1 ? ' novidade: ' : ' novidades: ') + juntarComE_(blocos.map(b => (b.total || b.itens.length) + (b.shopee ? ' sobre a Shopee' : b.titulo === 'Avisos do INMET' ? (b.itens.length === 1 ? ' aviso do INMET' : ' avisos do INMET') : ' em ' + b.titulo)))
     : 'Nada novo nos locais e temas escolhidos' + (teste ? ' nos últimos 7 dias.' : '.');
   const url = urlPainelAlertas_();
 
@@ -250,9 +299,13 @@ function montarEmailAlerta_(p, blocos, teste) {
         '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:' + i.cor + ';color:#fff;font-size:11px;font-weight:700;letter-spacing:.2px">' + escAlerta_(i.rotulo) + '</span>' +
         '<div style="margin-top:6px;font-size:15px;line-height:1.4">' + tituloItem + '</div>' +
         '<div style="margin-top:4px;font-size:12px;color:#6b7280">' + escAlerta_([i.veiculo, i.data, i.local].filter(Boolean).join(' · ')) + '</div>' +
+        (i.unidade ? '<div style="margin-top:6px;display:inline-block;padding:3px 8px;border-radius:6px;background:#FDE7E2;color:#B3261E;font-size:12px;font-weight:700">' + escAlerta_(i.unidade) + '</div>' : '') +
         '</td></tr>';
     }).join('');
-    return '<tr><td style="padding:20px 28px 4px"><div style="font-size:13px;font-weight:700;color:' + (b.shopee ? '#EE4D2D' : '#113366') + ';text-transform:uppercase;letter-spacing:.6px">' + escAlerta_(b.titulo) + ' (' + b.itens.length + ')</div>' +
+    const contagem = b.porTema && (p.frequencia !== 'imediato' || b.total > b.itens.length)
+      ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">' + escAlerta_((b.total > b.itens.length ? b.total + ' no período, as ' + b.itens.length + ' mais relevantes abaixo: ' : '') +
+        Object.keys(b.porTema).sort((x, y) => ALERTAS_ORDEM_[x] - ALERTAS_ORDEM_[y]).map(t => b.porTema[t] + ' ' + ((ALERTAS_TEMAS_[t] || {}).nome || t).toLowerCase()).join(', ')) + '</div>' : '';
+    return '<tr><td style="padding:20px 28px 4px"><div style="font-size:13px;font-weight:700;color:' + (b.shopee ? '#EE4D2D' : '#113366') + ';text-transform:uppercase;letter-spacing:.6px">' + escAlerta_(b.titulo) + ' (' + (b.total || b.itens.length) + ')</div>' + contagem +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + itens + '</table></td></tr>';
   }).join('');
 
@@ -274,12 +327,12 @@ function montarEmailAlerta_(p, blocos, teste) {
     linhas +
     '<tr><td align="center" style="padding:24px 28px 8px"><a href="' + escAlerta_(url) + '" style="display:inline-block;background:#EE4D2D;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px">Abrir o Mapa da Segurança</a></td></tr>' +
     '<tr><td style="padding:16px 28px 24px;font-size:11px;line-height:1.6;color:#9ca3af;border-top:1px solid #eef0f3">' +
-      'Você recebe este e-mail porque ativou os alertas no Mapa da Segurança. Locais: ' + escAlerta_(locais) + '. Temas: ' + escAlerta_(temas) + (p.shopee ? '; notícias da Shopee' : '') + '. ' +
+      'Você recebe este e-mail porque ativou os alertas no Mapa da Segurança. Locais: ' + escAlerta_(locais) + '. Temas: ' + escAlerta_(temas) + (p.shopee ? '; notícias da Shopee' : '') + (p.inmet !== false ? '; avisos do INMET' : '') + '. ' +
       'Para mudar ou cancelar, abra o painel e clique em <b>Meus alertas</b>.<br>' +
       'Notícias são fontes públicas e servem de complemento; a estatística oficial é a do Sinesp/MJSP. Uso interno da Shopee: não encaminhe para fora da empresa.' +
     '</td></tr></table></td></tr></table></body></html>';
 
-  const texto = titulo + '\n' + resumo + '\n\n' + blocos.map(b => b.titulo + '\n' + b.itens.map(i => '- [' + i.rotulo + '] ' + i.titulo + ' (' + [i.veiculo, i.data, i.local].filter(Boolean).join(' · ') + ') ' + (i.link || '')).join('\n')).join('\n\n') +
+  const texto = titulo + '\n' + resumo + '\n\n' + blocos.map(b => b.titulo + '\n' + b.itens.map(i => '- [' + i.rotulo + '] ' + i.titulo + ' (' + [i.veiculo, i.data, i.local, i.unidade].filter(Boolean).join(' · ') + ') ' + (i.link || '')).join('\n')).join('\n\n') +
     '\n\nAbrir o Mapa da Segurança: ' + url + '\nPara mudar ou cancelar: painel → Meus alertas.';
   const assunto = (teste ? '[Teste] ' : '') + (total ? '[Alerta] ' + resumo : titulo + ' — Mapa da Segurança');
   return { assunto: assunto.slice(0, 180), html: html, texto: texto };

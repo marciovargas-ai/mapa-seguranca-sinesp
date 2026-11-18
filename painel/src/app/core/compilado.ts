@@ -240,7 +240,7 @@ export function compilar(c: Entrada): Compilado {
     const linhaRef = c.ibge ? ref?.municipios[c.ibge] : undefined;
     const minhaTaxa: number | null = linhaRef?.[2] ?? posMvi.pos?.taxa ?? (mvi ? taxa(mvi.total12, popLocal) : null);
     // Régua única: só entram dados que existem para os 5.570 municípios (Sinesp, DATASUS, IBGE).
-    // Fogo Cruzado, ISP-RJ e secretarias aparecem como contexto local, fora da nota.
+    // Instituto Fogo Cruzado, ISP-RJ e secretarias aparecem como contexto local, fora da nota.
     const metodo: string[] = [];
     let confianca: Risco['confianca'] = null;
     const simTxt = ref?.sim ? `DATASUS ${ref.sim.ano}${ref.sim.preliminar ? ' (preliminar)' : ''}` : 'DATASUS';

@@ -37,6 +37,10 @@ export const Servidor = {
   alertas: () => chamar<any>('obterAlertas'),
   salvarAlertas: (prefs: unknown) => chamar<any>('salvarAlertas', prefs),
   testarAlertas: (prefs: unknown) => chamar<any>('testarAlertas', prefs),
+  relatos: (uf: string, cidade: string) => chamar<any>('obterRelatos', uf, cidade),
+  salvarRelato: (r: unknown) => chamar<any>('salvarRelato', r),
+  apagarRelato: (id: string) => chamar<any>('apagarRelato', id),
+  avisosInmet: (uf: string, ibge: string) => chamar<any>('obterAvisosInmet', uf, ibge),
   shopee: (desde: number) => chamar<any>('obterNoticiasShopee', desde || 0),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),

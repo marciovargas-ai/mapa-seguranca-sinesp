@@ -4,6 +4,8 @@ export interface Ocorrencia {
   id: string; data: string; ts: number; cidade: string; bairro: string; cat: string;
   titulo: string; veiculo: string; link: string; lat: number | null; lng: number | null;
   precisao: string; precisa: boolean; orgaos: string[]; local: boolean;
+  /** Grau de confiança Admiralty (ex.: B2) e, quando o mesmo fato saiu em vários veículos, a lista deles. */
+  grau?: string; fontes?: { veiculo: string; link: string; titulo: string }[];
 }
 
 export interface EventoOficial {

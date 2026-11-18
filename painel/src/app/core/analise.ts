@@ -1,5 +1,6 @@
 import { CATEGORIA_POR_ID, CFG, ORGAO_POR_ID, PRECISOES_NO_MAPA } from './dados';
 import { ehNoticiaPolitica } from './politica';
+import { agruparOcorrencias } from './confianca';
 import { Filtrados, Local, Ocorrencia, Oficial, Pacote, Panorama, ResumoOrgao, Zona } from './modelos';
 import { distanciaKm, idadeDias, MESES, normalizar, tsDiasAtras, tsParaData } from './util';
 
@@ -16,7 +17,7 @@ function idCategoria(valor: string): string {
 
 export function normalizarPacote(res: any): Pacote {
   // Notícias de política ficam de fora, inclusive as que já estavam guardadas antes do filtro do servidor
-  const ocorrencias: Ocorrencia[] = (res.ocorrencias || []).filter((o: any) => !ehNoticiaPolitica(o.titulo)).map((o: any) => {
+  const ocorrencias: Ocorrencia[] = agruparOcorrencias((res.ocorrencias || []).filter((o: any) => !ehNoticiaPolitica(o.titulo)).map((o: any) => {
     const lat = Number(o.lat) || null;
     const lng = Number(o.lng) || null;
     return {
@@ -25,7 +26,7 @@ export function normalizarPacote(res: any): Pacote {
       precisao: o.precisao || 'PENDENTE', precisa: !!(PRECISOES_NO_MAPA[o.precisao] && lat && lng),
       orgaos: (o.orgaos || []).filter((id: string) => ORGAO_POR_ID[id]), local: !!o.local,
     };
-  });
+  }));
   return {
     uf: res.uf, cidade: res.cidade, codigoIbge: res.codigoIbge || '', centroLat: Number(res.centroLat), centroLng: Number(res.centroLng),
     ocorrencias, totalNaBase: Number(res.totalNaBase) || ocorrencias.length, cidadesMonitoradas: res.cidadesMonitoradas || 0,

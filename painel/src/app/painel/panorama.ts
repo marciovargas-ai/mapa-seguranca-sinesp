@@ -15,7 +15,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 
 /**
  * Panorama: retrato compilado do local com todas as fontes. Sinesp (polícias do
- * estado, PRF e PF), ISP-RJ, Fogo Cruzado e IBGE na frente; notícias como complemento.
+ * estado, PRF e PF), ISP-RJ, Instituto Fogo Cruzado e IBGE na frente; notícias como complemento.
  */
 @Component({
   selector: 'app-panorama',
@@ -28,7 +28,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     <section class="topo">
       <article class="cartao parecer">
         <header><mat-icon>summarize</mat-icon><h3>Parecer</h3>
-          <span class="selo" matTooltip="Texto gerado por regras a partir do Sinesp, ISP-RJ, Fogo Cruzado, IBGE e notícias. Atualiza a cada consulta.">automático</span>
+          <span class="selo" matTooltip="Texto gerado por regras a partir do Sinesp, ISP-RJ, Instituto Fogo Cruzado, IBGE e notícias. Atualiza a cada consulta.">automático</span>
         </header>
         @for (p of c.parecer; track $index) { <p>{{ p }}</p> }
       </article>
@@ -113,7 +113,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       }
       <section class="cartao trafico">
         <div class="titulo-bloco">
-          <h3 matTooltip="Junta tudo o que existe sobre drogas e grupos criminosos para o local escolhido: notícias (todas as cidades), Sinesp (só por estado), ISP (RJ, por delegacia) e Fogo Cruzado (Rio, Recife, Salvador e Belém).">
+          <h3 matTooltip="Junta tudo o que existe sobre drogas e grupos criminosos para o local escolhido: notícias (todas as cidades), Sinesp (só por estado), ISP (RJ, por delegacia) e Instituto Fogo Cruzado (Rio, Recife, Salvador e Belém).">
             <mat-icon>local_police</mat-icon> Tráfico de drogas e facções <mat-icon class="info">info</mat-icon></h3>
           <span class="nota">{{ tf().periodo }}</span>
         </div>
@@ -127,7 +127,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
             <div><b>{{ fmt(ix.apreensoes) }}</b><span>apreensões de drogas na cidade (ISP-RJ, 12 meses)</span></div>
           }
           @if (tf().disputas !== null) {
-            <div><b class="perigo">{{ fmt(tf().disputas) }}</b><span>tiroteios em disputa entre grupos armados (Fogo Cruzado)</span></div>
+            <div><b class="perigo">{{ fmt(tf().disputas) }}</b><span>tiroteios em disputa entre grupos armados (Instituto Fogo Cruzado)</span></div>
           }
         </div>
         @if (tf().faccoes) { <div class="nota">Grupos citados nas notícias: {{ tf().faccoes }}</div> }
@@ -138,7 +138,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
         <section class="cartao">
           <div class="titulo-bloco">
             <h3 matTooltip="Tiroteios registrados e checados pelo Instituto Fogo Cruzado, com local exato, nos últimos 12 meses. Aparecem no mapa como pontos vermelhos com borda preta.">
-              <mat-icon>my_location</mat-icon> Tiroteios verificados <span class="fonte">Fogo Cruzado</span> <mat-icon class="info">info</mat-icon></h3>
+              <mat-icon>my_location</mat-icon> Tiroteios verificados <span class="fonte">Instituto Fogo Cruzado</span> <mat-icon class="info">info</mat-icon></h3>
             <span class="nota">12 meses</span>
           </div>
           @if (f.texto) {
@@ -154,7 +154,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
               <div class="nota">Bairros com mais tiroteios: {{ f.bairros }}</div>
             }
             @if (f.detalhado) {
-              <h4 class="sub-bloco" matTooltip="Tiroteios que o Fogo Cruzado classificou como disputa entre facções e/ou milícia (sem agentes de segurança em serviço), ou com motivo complementar ligado a facção, milícia ou tráfico.">
+              <h4 class="sub-bloco" matTooltip="Tiroteios que o Instituto Fogo Cruzado classificou como disputa entre facções e/ou milícia (sem agentes de segurança em serviço), ou com motivo complementar ligado a facção, milícia ou tráfico.">
                 <mat-icon>groups</mat-icon> Facções e milícias</h4>
               <div class="fc">
                 <div><b class="perigo">{{ fmt(f.disputas) }}</b><span>tiroteios em disputa entre grupos armados</span></div>
@@ -171,7 +171,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
                 <div><b>{{ fmt(f.animais) }}</b><span>animais atingidos</span></div>
               </div>
               @if (f.motivos) { <div class="nota">Motivos registrados: {{ f.motivos }}</div> }
-              <div class="nota">No mapa, tiroteios em disputa entre grupos armados têm borda roxa. O território de cada facção não vem na API do Fogo Cruzado.</div>
+              <div class="nota">No mapa, tiroteios em disputa entre grupos armados têm borda roxa. O território de cada facção não vem na API do Instituto Fogo Cruzado.</div>
             }
           }
         </section>
@@ -345,7 +345,7 @@ export class PanoramaComponent {
     return { fonte: i.fonte, periodo: i.periodo, linhas };
   });
 
-  /** Tráfico e facções: notícias (todas as cidades), Sinesp por estado, ISP-RJ e Fogo Cruzado, respeitando os filtros. */
+  /** Tráfico e facções: notícias (todas as cidades), Sinesp por estado, ISP-RJ e Instituto Fogo Cruzado, respeitando os filtros. */
   protected readonly tf = computed(() => {
     const f = this.store.filtrados();
     const dias = this.store.periodoDias();
@@ -377,8 +377,8 @@ export class PanoramaComponent {
       disputas: temDetalhe ? fogo!.itens.filter((t) => t.gp).length : null,
       aviso: 'O Sinesp não publica tráfico por município, só por estado. ' +
         (isp ? 'No RJ, o ISP publica apreensões de drogas por delegacia. ' : '') +
-        (temDetalhe ? 'Disputas entre facções/milícia vêm do Fogo Cruzado (motivo "Disputa"). ' :
-          ufFogo ? 'Disputas entre facções aparecem aqui depois de recopiar 7_Fontes_Area no Apps Script. ' : 'O Fogo Cruzado cobre só Rio, Recife, Salvador e Belém (regiões metropolitanas). ') +
+        (temDetalhe ? 'Disputas entre facções/milícia vêm do Instituto Fogo Cruzado (motivo "Disputa"). ' :
+          ufFogo ? 'Disputas entre facções aparecem aqui depois de recopiar 7_Fontes_Area no Apps Script. ' : 'O Instituto Fogo Cruzado cobre só Rio, Recife, Salvador e Belém (regiões metropolitanas). ') +
         'Os grupos citados vêm das manchetes das notícias.',
     };
   });
@@ -387,11 +387,11 @@ export class PanoramaComponent {
     const v = this.store.fogoCidade();
     if (!v) return null;
     const vazio = { total: 0, mortos: 0, feridos: 0, policia: 0, bairros: '', detalhado: false } as any;
-    if (v.carregando) return { ...vazio, texto: 'Carregando tiroteios do Fogo Cruzado…' };
+    if (v.carregando) return { ...vazio, texto: 'Carregando tiroteios do Instituto Fogo Cruzado…' };
     const d = v.dado;
     if (!d) return null;
-    if (!d.configurado) return { ...vazio, texto: 'Fonte disponível para esta cidade. Falta gravar a conta do Fogo Cruzado nas propriedades do script (FOGO_CRUZADO_EMAIL e FOGO_CRUZADO_SENHA).' };
-    if (d.erro) return { ...vazio, texto: 'Fogo Cruzado não respondeu agora: ' + d.erro };
+    if (!d.configurado) return { ...vazio, texto: 'Fonte disponível para esta cidade. Falta gravar a conta do Instituto Fogo Cruzado nas propriedades do script (FOGO_CRUZADO_EMAIL e FOGO_CRUZADO_SENHA).' };
+    if (d.erro) return { ...vazio, texto: 'Instituto Fogo Cruzado não respondeu agora: ' + d.erro };
     const porBairro: Record<string, number> = {};
     d.itens.forEach((t) => { if (t.bairro) porBairro[t.bairro] = (porBairro[t.bairro] || 0) + 1; });
     const top = Object.entries(porBairro).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, q]) => `${n} (${q})`).join(', ');
@@ -447,7 +447,7 @@ export class PanoramaComponent {
   });
 }
 
-/** Resumo de facções/milícias e do contexto dos tiroteios (campos detalhados do Fogo Cruzado). */
+/** Resumo de facções/milícias e do contexto dos tiroteios (campos detalhados do Instituto Fogo Cruzado). */
 function resumoFaccoes(itens: Tiroteio[]) {
   const detalhado = itens.some((t) => t.gp !== undefined);
   const disputa = itens.filter((t) => t.gp);

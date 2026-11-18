@@ -6,7 +6,7 @@ import { fetchComTimeout } from './util';
 /**
  * Dados oficiais e verificados abaixo do município:
  *  - ISP-RJ: ocorrências por área de delegacia (CISP), publicado pelo robô do GitHub;
- *  - Fogo Cruzado: tiroteios com coordenada exata (Grande Rio, Recife, Salvador, Belém),
+ *  - Instituto Fogo Cruzado: tiroteios com coordenada exata (Grande Rio, Recife, Salvador, Belém),
  *    buscado pelo servidor com a conta gravada nas propriedades do script.
  */
 export interface AreaIsp { cisp: number; aisp: number; u12: Record<string, number>; a12: Record<string, number>; aneis?: [number, number][][]; lat?: number; lng?: number }
@@ -15,7 +15,7 @@ export interface IspMunicipio { fonte: string; periodo: { de: string; ate: strin
 export interface Tiroteio {
   id: string; d: string; lat: number; lng: number; bairro: string; endereco: string;
   mortos: number; feridos: number; policia: boolean; motivo: string;
-  /** Detalhes do Fogo Cruzado (servidor v5.3+): disputa entre grupos armados, motivos, recortes, chacina, agentes, jovens, bala perdida, transporte, animais. */
+  /** Detalhes do Instituto Fogo Cruzado (servidor v5.3+): disputa entre grupos armados, motivos, recortes, chacina, agentes, jovens, bala perdida, transporte, animais. */
   gp?: number; mc?: string[]; rc?: string[]; ch?: number; ag?: { m: number; f: number } | null; cr?: number; bp?: number;
   tr?: string[]; an?: number; un?: string; tipoAcao?: string;
 }
@@ -60,7 +60,7 @@ export async function carregarIsp(uf: string, ibge: string): Promise<IspMunicipi
   return areas.length ? { fonte: j.fonte, periodo: j.periodo, campos: j.campos, areas } : null;
 }
 
-/** Tiroteios dos últimos 12 meses na cidade (Fogo Cruzado). */
+/** Tiroteios dos últimos 12 meses na cidade (Instituto Fogo Cruzado). */
 export async function carregarFogoCruzado(uf: string, cidade: string, ignorarCache = false): Promise<FogoCruzado | null> {
   if (!UFS_FOGO_CRUZADO.includes(uf) || !cidade) return null;
   const chave = 'FOGO_' + uf + '_' + cidade;

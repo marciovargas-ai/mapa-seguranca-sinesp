@@ -14,7 +14,7 @@ import { normalizar } from './core/util';
 
 interface PrefsAlerta {
   ativo: boolean; locais: Favorito[]; temas: string[]; shopee: boolean; shopeeEscopo: 'locais' | 'brasil';
-  shopeeSoSeguranca: boolean; frequencia: 'imediato' | 'diario'; hora: number;
+  shopeeSoSeguranca: boolean; inmet: boolean; frequencia: 'imediato' | 'diario' | 'semanal'; hora: number;
 }
 const TEMAS_PADRAO = [
   { id: 'CVLI', nome: 'Homicídio e latrocínio' }, { id: 'CONFRONTO', nome: 'Tiroteio e arma de fogo' },
@@ -75,10 +75,14 @@ const igual = (a: Favorito, b: Favorito) => a.uf === b.uf && normalizar(a.nome) 
             </div>
           }
 
+          <h3>Clima</h3>
+          <mat-checkbox [checked]="p().inmet" (change)="mudar({ inmet: $event.checked })">Avisos do INMET de perigo (laranja) e grande perigo (vermelho) nos meus locais</mat-checkbox>
+
           <h3>Frequência</h3>
           <mat-button-toggle-group [value]="p().frequencia" (change)="mudar({ frequencia: $event.value })" aria-label="Frequência">
             <mat-button-toggle value="imediato">Assim que sair (a cada 15 min)</mat-button-toggle>
             <mat-button-toggle value="diario">Resumo diário às {{ p().hora }}h</mat-button-toggle>
+            <mat-button-toggle value="semanal">Resumo semanal (segunda às {{ p().hora }}h)</mat-button-toggle>
           </mat-button-toggle-group>
         </section>
         @if (mensagem()) { <p class="mensagem" [class.erro]="erro()">{{ mensagem() }}</p> }
@@ -127,7 +131,7 @@ export class AlertasComponent {
   protected readonly erro = signal(false);
   protected readonly p = signal<PrefsAlerta>({
     ativo: true, locais: [], temas: ['CVLI', 'CONFRONTO', 'CARGA'], shopee: true, shopeeEscopo: 'locais',
-    shopeeSoSeguranca: true, frequencia: 'imediato', hora: 7,
+    shopeeSoSeguranca: true, inmet: true, frequencia: 'imediato', hora: 7,
   });
 
   protected readonly atual = computed<Favorito>(() => ({ uf: this.store.uf(), nome: this.store.escopo() === 'ESTADO' ? 'ESTADO_INTEIRO' : this.store.cidade() }));

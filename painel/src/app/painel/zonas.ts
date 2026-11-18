@@ -12,7 +12,27 @@ import { fmt, rotuloPeriodo } from '../core/util';
   imports: [MatIconModule],
   template: `
     @let f = store.filtrados();
-    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.@if (f.tiroteiosZonas) { Inclui {{ fmt(f.tiroteiosZonas) }} tiroteios verificados pelo Fogo Cruzado@if (f.duplicadasFogo) {; {{ fmt(f.duplicadasFogo) }} notícias do mesmo caso não foram contadas de novo}. }</p>
+    <p class="nota"><span class="material-symbols-outlined">info</span> Áreas com maior concentração de ocorrências nos últimos {{ periodo() }}, ponderadas pela gravidade e pela data. Índice 100 = zona mais intensa do local.@if (f.tiroteiosZonas) { Inclui {{ fmt(f.tiroteiosZonas) }} tiroteios verificados pelo Instituto Fogo Cruzado@if (f.duplicadasFogo) {; {{ fmt(f.duplicadasFogo) }} notícias do mesmo caso não foram contadas de novo}. }</p>
+    @let up = store.unidadesPerto();
+    @if (up?.length) {
+      <div class="cartao unidades-perto">
+        <h3><span class="material-symbols-outlined">warehouse</span> Unidades Shopee: ocorrências num raio de 3 km</h3>
+        <table>
+          <thead><tr><th>Unidade</th><th>24 h</th><th>7 dias</th><th>30 dias</th><th>Graves</th></tr></thead>
+          <tbody>
+            @for (x of up.slice(0, 12); track x.u.codigo) {
+              <tr (click)="store.focar(x.u.lat, x.u.lng, 14, 3000)" [class.alerta]="x.perto.graves30 > 0">
+                <td><b>{{ x.u.codigo }}</b> <small>{{ x.u.nome }}</small></td>
+                <td>{{ x.perto.h24 }}</td><td>{{ x.perto.d7 }}</td><td>{{ x.perto.d30 }}</td><td>{{ x.perto.graves30 }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        <small>Graves = homicídio, tiroteio e roubo de carga. Só ocorrências com endereço, bairro ou rodovia identificados.</small>
+      </div>
+    } @else if (!store.camadas().unidades) {
+      <button type="button" class="cartao ver-unidades" (click)="store.alternarCamada('unidades')"><span class="material-symbols-outlined">warehouse</span> Ver as unidades Shopee e as ocorrências num raio de 3 km</button>
+    }
     @for (z of f.zonas; track z.rank) {
       <button type="button" class="cartao zona" (click)="store.focar(z.lat, z.lng, 16, z.raio)">
         <div class="topo">
@@ -41,6 +61,18 @@ import { fmt, rotuloPeriodo } from '../core/util';
     }
   `,
   styles: `
+    .unidades-perto { display: grid; gap: 8px; padding: 12px; }
+    .unidades-perto h3 { display: flex; align-items: center; gap: 6px; margin: 0; font: var(--mat-sys-title-small); }
+    .unidades-perto h3 span { color: #EE4D2D; font-size: 20px; }
+    .unidades-perto table { width: 100%; border-collapse: collapse; font: var(--mat-sys-body-small); }
+    .unidades-perto th, .unidades-perto td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--borda-suave); }
+    .unidades-perto th:first-child, .unidades-perto td:first-child { text-align: left; }
+    .unidades-perto tbody tr { cursor: pointer; }
+    .unidades-perto tbody tr:hover { background: var(--mat-sys-surface-container-high); }
+    .unidades-perto tr.alerta td:last-child { color: #dc2626; font-weight: 700; }
+    .unidades-perto small { color: var(--mat-sys-on-surface-variant); }
+    .ver-unidades { display: flex; align-items: center; gap: 8px; padding: 12px; cursor: pointer; text-align: left; font: var(--mat-sys-body-medium); color: inherit; }
+    .ver-unidades span { color: #EE4D2D; }
     :host { display: grid; gap: 10px; }
     .nota { display: flex; gap: 6px; align-items: flex-start; margin: 0; }
     .nota .material-symbols-outlined { font-size: 18px; }

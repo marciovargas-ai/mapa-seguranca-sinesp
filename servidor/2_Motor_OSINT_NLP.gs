@@ -423,6 +423,14 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
     muteHttpExceptions: true
   }));
 
+  // GDELT (DOC 2.0): segunda fonte de notícias, com o link original da matéria. Cobre só os últimos 3 meses.
+  // O GDELT limita IPs compartilhados (responde 429); depois de um 429, fica 15 minutos sem consultar.
+  const diasJanela = parseInt(janela, 10) || 3;
+  const cacheScript = CacheService.getScriptCache();
+  const usarGdelt = !cacheScript.get('GDELT_PAUSA');
+  if (usarGdelt) requests.push({ url: urlGdelt_(nome, diasJanela), method: 'get', muteHttpExceptions: true });
+  const indiceGdelt = usarGdelt ? requests.length - 1 : Infinity;
+
   let respostas = [];
   try {
     respostas = UrlFetchApp.fetchAll(requests);
@@ -434,6 +442,8 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
   const limiteData = Date.now() - CONFIG.DIAS_JANELA_NOTICIAS * 86400000;
   const candidatos = [];
   const linksVistos = new Set();
+  const gdelt = respostas.length > indiceGdelt ? respostas.pop() : null;
+  if (gdelt && gdelt.getResponseCode() === 429) cacheScript.put('GDELT_PAUSA', '1', 900);
   respostas.forEach(resposta => {
     if (resposta.getResponseCode() !== 200) return;
     let itens = [];
@@ -481,9 +491,64 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
       });
     });
   });
+  // GDELT por último: a mesma manchete já achada no Google Notícias cai na deduplicação por título
+  const doGdelt = gdelt ? candidatosGdelt_(gdelt, mun, uf, bairrosOsm, linksVistos, limiteData) : [];
   // Feeds RSS diretos dos jornais do estado (9_Feeds_RSS) vêm primeiro: link real e
   // publicação mais recente; a mesma matéria achada no Google Notícias cai na deduplicação
-  return candidatosFeedsDiretos_(mun, bairrosOsm, linksVistos, limiteData).concat(candidatos);
+  return candidatosFeedsDiretos_(mun, bairrosOsm, linksVistos, limiteData).concat(candidatos, doGdelt);
+}
+
+/** Busca no GDELT DOC 2.0: notícias em português de veículos brasileiros que citam a cidade e um crime. */
+function urlGdelt_(nome, dias) {
+  const q = `"${nome}" (assalto OR roubo OR homicídio OR tiroteio OR baleado OR latrocínio OR "morto a tiros" OR furto OR "roubo de carga") sourcecountry:brazil sourcelang:portuguese`;
+  const span = dias > 90 ? '3months' : Math.max(1, dias) + 'd';
+  return 'https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&format=json&sort=datedesc&maxrecords=75&timespan=' + span + '&query=' + encodeURIComponent(q);
+}
+
+/** Itens do GDELT no mesmo formato dos candidatos do Google Notícias. Resposta com erro ou fora do ar: nenhum item. */
+function candidatosGdelt_(resposta, mun, uf, bairrosOsm, linksVistos, limiteData) {
+  const saida = [];
+  if (!resposta || resposta.getResponseCode() !== 200) return saida;
+  let artigos = [];
+  try { artigos = (JSON.parse(resposta.getContentText()) || {}).articles || []; } catch (e) { return saida; }
+  artigos.forEach(a => {
+    const link = String(a.url || '');
+    const manchete = String(a.title || '').replace(/\s+/g, ' ').trim();
+    if (!link || !manchete || linksVistos.has(link)) return;
+    linksVistos.add(link);
+    const m = String(a.seendate || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+    const data = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])) : null;
+    if (!data || data.getTime() < limiteData) return;
+    const dominio = String(a.domain || '').replace(/^www\./, '');
+    const urlFonte = 'https://' + dominio;
+    const veiculo = nomeVeiculoDominio_(dominio);
+    const imprensaLocal = ehImprensaLocal_(urlFonte, uf);
+    if (!noticiaDaCidade_(mun, manchete, veiculo, imprensaLocal, urlFonte, bairrosOsm)) return;
+    const classificacao = classificarCrimeNLP_(manchete);
+    if (!classificacao.valido) return;
+    saida.push({
+      dataIso: Utilities.formatDate(data, CONFIG.FUSO, 'yyyy-MM-dd'), manchete: manchete, veiculo: veiculo, link: link, texto: manchete,
+      classificacao: classificacao, orgaos: detectarOrgaos_(manchete, uf), imprensaLocal: imprensaLocal
+    });
+  });
+  return saida;
+}
+
+/** "g1.globo.com" → "g1"; "gauchazh.clicrbs.com.br" → "GZH"; outros: o nome do site. */
+const VEICULOS_POR_DOMINIO_ = {
+  'g1.globo.com': 'g1', 'oglobo.globo.com': 'O Globo', 'extra.globo.com': 'Extra', 'folha.uol.com.br': 'Folha de S.Paulo',
+  'estadao.com.br': 'Estadão', 'noticias.uol.com.br': 'UOL', 'metropoles.com': 'Metrópoles', 'r7.com': 'R7', 'cnnbrasil.com.br': 'CNN Brasil',
+  'band.uol.com.br': 'Band', 'sbtnews.sbt.com.br': 'SBT News', 'gauchazh.clicrbs.com.br': 'GZH', 'correiobraziliense.com.br': 'Correio Braziliense',
+  'otempo.com.br': 'O Tempo', 'em.com.br': 'Estado de Minas', 'odia.ig.com.br': 'O Dia', 'agenciabrasil.ebc.com.br': 'Agência Brasil',
+  'tribunaonline.com.br': 'Tribuna Online', 'diariodepernambuco.com.br': 'Diario de Pernambuco', 'jc.com.br': 'Jornal do Commercio',
+  'atarde.com.br': 'A Tarde', 'correio24horas.com.br': 'Correio', 'opovo.com.br': 'O Povo', 'diariodonordeste.verdesmares.com.br': 'Diário do Nordeste',
+  'ndmais.com.br': 'ND+', 'nsctotal.com.br': 'NSC Total', 'bnews.com.br': 'BNews', 'terra.com.br': 'Terra', 'poder360.com.br': 'Poder360'
+};
+function nomeVeiculoDominio_(dominio) {
+  const d = String(dominio || '').toLowerCase();
+  if (VEICULOS_POR_DOMINIO_[d]) return VEICULOS_POR_DOMINIO_[d];
+  const partes = d.replace(/\.(com|net|org|gov|jor|tv|ig)?\.?br$|\.com$/, '').split('.');
+  return partes[partes.length - 1] || d;
 }
 
 /**

@@ -17,6 +17,8 @@ import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
 import { ShopeeComponent } from './shopee';
 import { FavoritosComponent } from './favoritos';
+import { FontesComponent } from './fontes';
+import { RelatosComponent } from './relatos';
 import { AlertasComponent } from './alertas';
 import { Favoritos } from './core/favoritos';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
@@ -81,6 +83,8 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
         <app-favoritos />
         <button mat-icon-button matTooltip="Meus alertas por e-mail" aria-label="Meus alertas por e-mail" (click)="abrirAlertas()"><mat-icon>mark_email_unread</mat-icon></button>
+        <button mat-icon-button matTooltip="Relatos das equipes Shopee" aria-label="Relatos das equipes Shopee" (click)="abrirRelatos()"><mat-icon>campaign</mat-icon></button>
+        <button mat-icon-button matTooltip="Saúde das fontes" aria-label="Saúde das fontes" (click)="abrirFontes()"><mat-icon>monitor_heart</mat-icon></button>
         <app-shopee />
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
@@ -112,6 +116,14 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
             </span>
           </div>
 
+          @if (inmet(); as av) {
+            <a class="faixa-inmet" [href]="av.aviso.link" target="_blank" rel="noopener" [style.border-left-color]="av.aviso.cor"
+              [matTooltip]="av.aviso.descricao || 'Abrir o aviso no site do INMET'">
+              <mat-icon [style.color]="av.aviso.cor">thunderstorm</mat-icon>
+              <span><b>INMET: {{ av.aviso.evento }}</b> · {{ av.aviso.grau }} · {{ av.quando }}{{ av.mais ? ' · +' + av.mais + (av.mais === 1 ? ' aviso' : ' avisos') : '' }}</span>
+              <mat-icon class="abrir">open_in_new</mat-icon>
+            </a>
+          }
           @if (avisoOficial(); as aviso) {
             <div class="aviso-oficial" role="status">
               <mat-icon>{{ aviso.icone }}</mat-icon>
@@ -233,6 +245,11 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .kpi-rotulo mat-icon { font-size: 14px; width: 14px; height: 14px; color: var(--mat-sys-primary); flex: none; }
     .kpi b { font: var(--mat-sys-headline-small); font-weight: 600; font-variant-numeric: tabular-nums; }
     .kpi-sub { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; min-height: 20px; }
+    .faixa-inmet { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px; border-radius: var(--raio-m); border-left: 4px solid;
+      background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface); text-decoration: none; font: var(--mat-sys-body-small); }
+    .faixa-inmet span { flex: 1; min-width: 0; }
+    .faixa-inmet mat-icon { flex: none; font-size: 20px; width: 20px; height: 20px; }
+    .faixa-inmet .abrir { font-size: 16px; width: 16px; height: 16px; opacity: .6; }
     .aviso-oficial { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--raio-m); margin-top: 10px;
       background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
     .aviso-oficial div { display: flex; flex-direction: column; gap: 2px; font: var(--mat-sys-body-medium); }
@@ -360,6 +377,16 @@ export class App {
   });
 
   /** Aviso no lugar dos indicadores quando o Sinesp ainda carrega ou não respondeu. */
+  /** Aviso do INMET mais grave em vigor no local (faixa no topo do painel). */
+  protected readonly inmet = computed(() => {
+    const l = this.store.inmet()?.avisos || [];
+    if (!l.length) return null;
+    const aviso = l[0];
+    const h = (t: number) => { const d = new Date(t); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`; };
+    const quando = aviso.inicio > Date.now() ? 'a partir de ' + h(aviso.inicio) : aviso.fim ? 'até ' + h(aviso.fim) : 'em vigor';
+    return { aviso, quando: quando + (this.store.escopo() === 'ESTADO' && aviso.municipiosNoEstado ? ` · ${aviso.municipiosNoEstado} municípios` : ''), mais: l.length - 1 };
+  });
+
   protected readonly avisoOficial = computed(() => {
     const o = this.store.oficial();
     if (o?.disponivel && o.eventos.length) return null;
@@ -416,6 +443,8 @@ export class App {
   /** Como ler o painel: tour que passa por cada parte da tela. */
   protected readonly tourAberto = signal(false);
   protected ajuda(): void { this.tourAberto.set(true); }
+  protected abrirRelatos(): void { this.dialog.open(RelatosComponent, { width: '680px', maxWidth: '96vw', autoFocus: false }); }
+  protected abrirFontes(): void { this.dialog.open(FontesComponent, { width: '680px', maxWidth: '96vw', autoFocus: false }); }
   protected abrirAlertas(): void { this.dialog.open(AlertasComponent, { width: '640px', maxWidth: '96vw', autoFocus: false }); }
   protected fecharTour(naoMostrar: boolean): void {
     this.tourAberto.set(false);

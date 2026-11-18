@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, OnDestroy, signal, untracked, viewChild } from '@angular/core';
+import { ocorrenciasPerto, RAIO_UNIDADE_KM } from '../core/proximidade';
+import { explicarGrau, grauDe } from '../core/confianca';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
@@ -9,10 +11,10 @@ import { CATEGORIA_POR_ID, CATEGORIAS, CFG, COR_NIVEL, ESTADOS, NOME_NIVEL, ROTU
 import { BairroResumo } from '../core/bairros';
 import { Ocorrencia, Zona } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
-import { Camadas, PainelStore, UnidadeShopee } from '../core/painel.store';
+import { Camadas, PainelStore, Relato, UnidadeShopee } from '../core/painel.store';
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
-import { AreaIsp, IspMunicipio, Tiroteio } from '../core/areas';
+import { AreaIsp, baixarDadosPublicos, IspMunicipio, Tiroteio } from '../core/areas';
 import { esc, fetchComTimeout, fmt, fmt1, normalizar, urlSegura } from '../core/util';
 
 declare const L: any;
@@ -88,7 +90,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         @if (leg.delegacias) { <div class="legenda-fogo"><i class="area"></i>Áreas de delegacia: cor = mortes violentas (ISP-RJ, oficial)</div> }
         @if (leg.fogo; as fc) {
           <div class="legenda-fogo-bloco">
-            <b>{{ fc.total }} tiroteios · Fogo Cruzado · 12 meses</b>
+            <b>{{ fc.total }} tiroteios · Instituto Fogo Cruzado · 12 meses</b>
             <span><i style="background:#7f1d1d"></i>{{ fc.mortes }} com morte</span>
             <span><i style="background:#ef4444"></i>{{ fc.feridos }} com feridos</span>
             <span><i style="background:#f59e0b"></i>{{ fc.sem }} sem vítimas</span>
@@ -193,6 +195,8 @@ export class MapaComponent implements OnDestroy {
     { id: 'vizinhos', nome: 'Municípios vizinhos (taxa oficial)', icone: 'grid_view' },
     { id: 'coropletico', nome: 'Taxa por município (aba Estado)', icone: 'map' },
     { id: 'unidades', nome: 'Unidades Shopee', icone: 'warehouse' },
+    { id: 'relatos', nome: 'Relatos das equipes Shopee', icone: 'campaign' },
+    { id: 'prf', nome: 'Trechos com mais acidentes nas BRs (PRF)', icone: 'add_road' },
     { id: 'satelite', nome: 'Satélite', icone: 'satellite_alt' },
     { id: 'mapaEscuro', nome: 'Mapa escuro', icone: 'dark_mode' },
   ];
@@ -205,6 +209,11 @@ export class MapaComponent implements OnDestroy {
   private layerSemLocal: any;
   private layerFogo: any;
   private layerUnidades: any;
+  private layerRelatos: any;
+  private layerPrf: any;
+  /** Trechos críticos das rodovias federais (robô prf_trechos.py): só baixa quando a camada é ligada. */
+  private readonly prf = signal<{ periodo: string; fonte: string; trechos: (string | number)[][] } | null>(null);
+  private prfPedido = false;
   private layerDelegacias: any;
   private layerOficial: any;
   /** Contorno do município aberto (IBGE): pontos fora dele não entram no mapa. */
@@ -335,6 +344,21 @@ export class MapaComponent implements OnDestroy {
       const ver = this.camadas().unidades; const lista = this.unidadesVisiveis();
       untracked(() => this.desenharUnidades(ver ? lista : []));
     });
+    effect(() => {
+      const ver = this.camadas().relatos; this.store.uf(); this.store.cidade(); this.store.escopo();
+      untracked(() => { if (ver) this.store.carregarRelatos(); });
+    });
+    effect(() => {
+      const ver = this.camadas().relatos; const r = this.store.relatos();
+      untracked(() => this.desenharRelatos(ver ? r?.lista || [] : [], r?.tipos || {}));
+    });
+    effect(() => {
+      const ver = this.camadas().prf; const dado = this.prf(); const uf = this.store.uf();
+      untracked(() => {
+        if (ver && !dado && !this.prfPedido) { this.prfPedido = true; baixarDadosPublicos('prf_trechos.json', 'PRF_TRECHOS1', 7).then((d) => this.prf.set(d), () => (this.prfPedido = false)); }
+        this.desenharPrf(ver && dado ? dado.trechos.filter((t) => t[0] === uf) : [], dado);
+      });
+    });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
 
@@ -442,8 +466,10 @@ export class MapaComponent implements OnDestroy {
   private popup(o: Ocorrencia): string {
     const cat = CATEGORIA_POR_ID[o.cat], prec = ROTULOS_PRECISAO[o.precisao] || ROTULOS_PRECISAO['PENDENTE'];
     return `<div class="popup"><span class="popup-cat" style="color:${cat.cor}">${esc(cat.nome)}</span> · ${esc(o.data)}` +
+      ` · <span class="popup-grau" title="${esc(explicarGrau(grauDe(o)))}">${esc(grauDe(o))}</span>` +
       `<div class="popup-titulo">${esc(o.titulo)}</div><div class="popup-meta">${esc(o.bairro)} · ${esc(prec.nome)}</div>` +
-      `<a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener"><b>Abrir notícia</b> (${esc(o.veiculo || 'fonte')})</a></div>`;
+      `<a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener"><b>Abrir notícia</b> (${esc(o.veiculo || 'fonte')})</a>` +
+      (o.fontes ? `<div class="popup-meta">Também em: ${o.fontes.filter((f) => f.link !== o.link).slice(0, 4).map((f) => `<a href="${esc(urlSegura(f.link))}" target="_blank" rel="noopener">${esc(f.veiculo)}</a>`).join(', ')}</div>` : '') + '</div>';
   }
 
   /** Resumo do bairro: quantidade por tipo, gravidade e as notícias mais recentes. */
@@ -476,7 +502,7 @@ export class MapaComponent implements OnDestroy {
     }
   }
 
-  /** Tiroteios do Fogo Cruzado: local exato, checado pelo instituto (ponto vermelho com borda preta). */
+  /** Tiroteios do Instituto Fogo Cruzado: local exato, checado pelo instituto (ponto vermelho com borda preta). */
   private desenharFogo(itens: Tiroteio[], visivel: boolean): void {
     if (!this.map) return;
     this.layerFogo.clearLayers();
@@ -518,9 +544,46 @@ export class MapaComponent implements OnDestroy {
         html: '<span>S</span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
       const m = L.marker([u0.lat, u0.lng], { icon: icone, pane: 'paneUnidades', keyboard: false,
         title: g.map((u) => u.codigo + ' · ' + u.nome).join('\n') });
-      m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 360 });
+      m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 380, maxWidth: 340 });
+      // Raio de 3 km em volta das unidades com endereço exato
+      if (exato) this.layerUnidades.addLayer(L.circle([u0.lat, u0.lng], { radius: RAIO_UNIDADE_KM * 1000, pane: 'paneUnidades', interactive: false,
+        color: '#EE4D2D', weight: 1.2, dashArray: '4 6', fillColor: '#EE4D2D', fillOpacity: 0.04 }));
       m.on('click', () => this.map.flyTo([u0.lat, u0.lng], Math.max(this.map.getZoom(), exato ? 14 : u0.origem === 'cidade' ? 11 : 6), { duration: 0.5 }));
       this.layerUnidades.addLayer(m);
+    }
+  }
+
+  /** Relatos internos com ponto (unidade escolhida no relato): triângulo laranja com "!". */
+  private desenharRelatos(lista: Relato[], tipos: Record<string, string>): void {
+    if (!this.map) return;
+    if (!this.layerRelatos) this.layerRelatos = L.layerGroup().addTo(this.map);
+    this.layerRelatos.clearLayers();
+    for (const r of lista) {
+      if (r.lat == null || r.lng == null) continue;
+      const icone = L.divIcon({ className: 'pino-relato', html: '<span>!</span>', iconSize: [24, 24], iconAnchor: [12, 20], popupAnchor: [0, -18] });
+      const m = L.marker([r.lat, r.lng], { icon: icone, pane: 'paneUnidades', keyboard: false, title: tipos[r.tipo] || r.tipo });
+      m.bindPopup(`<div class="popup"><span class="popup-cat" style="color:#EE4D2D">Relato da equipe Shopee</span> · ${esc(r.data.split('-').reverse().join('/'))}${r.hora ? ' ' + esc(r.hora) : ''}` +
+        ` · <span class="popup-grau" title="${esc(explicarGrau('B2'))}">B2</span>` +
+        `<div class="popup-titulo">${esc(tipos[r.tipo] || r.tipo)}</div><div>${esc(r.descricao)}</div>` +
+        `<div class="popup-meta">${esc([r.unidade && 'Unidade ' + r.unidade, r.bairro && 'Bairro ' + r.bairro].filter(Boolean).join(' · '))}</div>` +
+        `<div class="popup-meta">${r.meu ? 'Registrado por você' : 'Registrado por equipe Shopee'} · visível só para contas @shopee.com</div></div>`, { maxWidth: 320 });
+      this.layerRelatos.addLayer(m);
+    }
+  }
+
+  /** Trechos de 5 km com mais acidentes (PRF): círculo maior = mais acidentes; vermelho = com mortes. */
+  private desenharPrf(lista: (string | number)[][], dado: { periodo: string; fonte: string } | null): void {
+    if (!this.map) return;
+    if (!this.layerPrf) this.layerPrf = L.layerGroup().addTo(this.map);
+    this.layerPrf.clearLayers();
+    for (const [uf, br, km, lat, lng, n, mortos, graves] of lista as [string, number, number, number, number, number, number, number][]) {
+      const cor = mortos >= 3 ? '#7f1d1d' : mortos ? '#dc2626' : '#f59e0b';
+      const c = L.circleMarker([lat, lng], { radius: Math.min(16, 5 + Math.sqrt(n)), color: '#fff', weight: 1.5, fillColor: cor, fillOpacity: 0.85, renderer: this.renderer });
+      c.bindPopup(`<div class="popup"><span class="popup-cat" style="color:${cor}">Rodovia federal · PRF</span>` +
+        `<div class="popup-titulo">BR-${esc(String(br))}, km ${km} a ${km + 5} (${esc(uf)})</div>` +
+        `<div>${fmt(n)} ${n === 1 ? 'acidente' : 'acidentes'}, ${fmt(mortos)} ${mortos === 1 ? 'morte' : 'mortes'} e ${fmt(graves)} ${graves === 1 ? 'ferido grave' : 'feridos graves'} em 12 meses</div>` +
+        `<div class="popup-meta">${esc(dado?.fonte || 'PRF')} · ${esc(dado?.periodo || '')}. Acidentes de trânsito, não crimes.</div></div>`, { maxWidth: 300 });
+      this.layerPrf.addLayer(c);
     }
   }
 
@@ -532,7 +595,17 @@ export class MapaComponent implements OnDestroy {
     return `<span class="popup-cat" style="color:#EE4D2D">Unidade Shopee</span> · ${esc(u.status || 'sem status')}` +
       `<div class="popup-titulo">${esc(u.codigo)} · ${esc(u.nome)}</div>` +
       `<div class="popup-meta">${esc([u.cidade, u.uf].filter(Boolean).join(' / '))}${u.endereco ? ' · ' + esc(u.endereco) : ''}</div>` +
-      `${extra}${analistas ? '<ul class="lista-sem-local">' + analistas + '</ul>' : ''}<div class="popup-meta">${origem}</div>`;
+      `${extra}${analistas ? '<ul class="lista-sem-local">' + analistas + '</ul>' : ''}<div class="popup-meta">${origem}</div>` + this.resumoPerto(u);
+  }
+
+  /** Ocorrências num raio de 3 km da unidade (só com endereço exato). */
+  private resumoPerto(u: UnidadeShopee): string {
+    if (u.origem !== 'planilha') return '';
+    const p = ocorrenciasPerto(u.lat, u.lng, this.store.recentes30());
+    const ult = p.ultimas.map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)}, ${String(o.km).replace('.', ',')} km)</small></li>`).join('');
+    return `<div class="perto-unidade"><b>Num raio de ${RAIO_UNIDADE_KM} km</b>` +
+      `<div class="perto-numeros"><span><b>${fmt(p.h24)}</b>24 h</span><span><b>${fmt(p.d7)}</b>7 dias</span><span><b>${fmt(p.d30)}</b>30 dias</span><span class="${p.graves30 ? 'grave' : ''}"><b>${fmt(p.graves30)}</b>graves (30 dias)</span></div>` +
+      (ult ? `<ul class="lista-sem-local">${ult}</ul>` : '<small>Nenhuma ocorrência com local preciso no raio nos últimos 30 dias.</small>') + `</div>`;
   }
 
   /** Balão da zona vermelha: índice 0–100 (100 = zona mais intensa da cidade), tipos, tendência e últimas notícias. */

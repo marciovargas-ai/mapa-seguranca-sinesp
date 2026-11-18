@@ -20,7 +20,7 @@ const PESO = { disputa: 3, morto: 2, tiroteio: 1, faccao: 2, trafico: 1, oficial
 
 /**
  * Facções e disputas: só dados reais e verificáveis.
- * Fogo Cruzado (tiroteios checados, com motivo "disputa entre grupos armados"), notícias que citam facção
+ * Instituto Fogo Cruzado (tiroteios checados, com motivo "disputa entre grupos armados"), notícias que citam facção
  * ou tráfico, ligadas ao bairro pelo contorno oficial, e tráfico registrado pela secretaria (SSP-SP).
  */
 @Component({
@@ -41,7 +41,7 @@ const PESO = { disputa: 3, morto: 2, tiroteio: 1, faccao: 2, trafico: 1, oficial
           <div><b class="perigo">{{ fmt(r.noticiasFaccao) }}</b><span>notícias que citam facção ou milícia</span></div>
           <div><b>{{ fmt(r.noticiasTrafico) }}</b><span>notícias de tráfico de drogas</span></div>
           @if (r.fogo) {
-            <div><b class="perigo">{{ fmt(r.fogo.disputas) }}</b><span>tiroteios em disputa entre grupos armados (Fogo Cruzado)</span></div>
+            <div><b class="perigo">{{ fmt(r.fogo.disputas) }}</b><span>tiroteios em disputa entre grupos armados (Instituto Fogo Cruzado)</span></div>
             <div><b>{{ fmt(r.fogo.mortos) }}</b><span>mortos nessas disputas</span></div>
             <div><b>{{ fmt(r.fogo.policia) }}</b><span>tiroteios com ação policial</span></div>
             <div><b>{{ fmt(r.fogo.chacinas) }}</b><span>chacinas (3 ou mais mortos)</span></div>
@@ -134,7 +134,7 @@ export class FaccoesComponent {
   protected readonly peso = PESO;
   protected readonly periodo = computed(() => 'últimos ' + rotuloPeriodo(this.store.periodoDias()));
 
-  /** Tiroteios do Fogo Cruzado dentro do período escolhido. */
+  /** Tiroteios do Instituto Fogo Cruzado dentro do período escolhido. */
   private readonly tiroteios = computed(() => {
     const itens = this.store.fogoCidade()?.dado?.itens || [];
     const limite = new Date(Date.now() - this.store.periodoDias() * 86400000).toISOString().slice(0, 10);
@@ -162,7 +162,7 @@ export class FaccoesComponent {
       fogo: temFogo ? { disputas: disputa.length, mortos: disputa.reduce((a, x) => a + x.mortos, 0), policia: t.filter((x) => x.policia).length, chacinas: t.filter((x) => x.ch).length } : null,
       oficialTrafico: ofTraf, orgao: of?.orgao || '',
       fontes: 'Fontes: notícias do Google Notícias e da imprensa local (grupos citados pelo nome na manchete)' +
-        (temFogo ? '; Instituto Fogo Cruzado (tiroteios checados, com o motivo registrado)' : '; o Fogo Cruzado só cobre as regiões de Rio, Recife, Salvador e Belém') +
+        (temFogo ? '; Instituto Fogo Cruzado (tiroteios checados, com o motivo registrado)' : '; o Instituto Fogo Cruzado só cobre as regiões de Rio, Recife, Salvador e Belém') +
         (of ? `; ${of.orgao} (boletins de ocorrência de tráfico de drogas)` : '') + '.',
     };
   });
@@ -207,7 +207,7 @@ export class FaccoesComponent {
         mapa.set(b.nome, a);
       }
     }
-    // Tiroteios do Fogo Cruzado: pelo contorno do bairro; sem contorno, pelo nome que o Fogo Cruzado registra
+    // Tiroteios do Instituto Fogo Cruzado: pelo contorno do bairro; sem contorno, pelo nome que o Instituto Fogo Cruzado registra
     const bairros = (this.store.listaBairros() as Bairro[]).filter((b) => b.aneis?.length);
     for (const t of this.tiroteios()) {
       const b = bairros.find((x) => dentro(t.lat, t.lng, x.aneis!));

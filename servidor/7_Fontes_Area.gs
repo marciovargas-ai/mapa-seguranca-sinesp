@@ -1,7 +1,7 @@
 /**
  * Fontes verificadas abaixo do município.
  *
- * Fogo Cruzado (https://fogocruzado.org.br): tiroteios checados pelo instituto,
+ * Instituto Fogo Cruzado (https://fogocruzado.org.br): tiroteios checados pelo instituto,
  * com coordenada exata, bairro, vítimas e ação policial. Cobre Grande Rio,
  * Recife, Salvador e Belém. Precisa de conta gratuita no site da API:
  *   Extensões > Apps Script > Configurações do projeto > Propriedades do script
@@ -74,7 +74,7 @@ function obterFogoCruzado(uf, nomeCidade) {
     gravarJson_(arquivo, { em: Date.now(), resposta: resposta });
     return resposta;
   } catch (e) {
-    Logger.log('Fogo Cruzado (' + nomeCidade + '): ' + e.message);
+    Logger.log('Instituto Fogo Cruzado (' + nomeCidade + '): ' + e.message);
     if (salvo) return salvo.resposta;  // mostra o último resultado bom
     return { configurado: true, erro: String(e.message).slice(0, 160), itens: [] };
   }
@@ -93,10 +93,10 @@ function tokenFogoCruzado_(email, senha) {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     payload: JSON.stringify({ email: email, password: senha })
   });
-  if (resp.getResponseCode() >= 300) throw new Error('login recusado pelo Fogo Cruzado (' + resp.getResponseCode() + '): confira e-mail e senha nas propriedades do script');
+  if (resp.getResponseCode() >= 300) throw new Error('login recusado pelo Instituto Fogo Cruzado (' + resp.getResponseCode() + '): confira e-mail e senha nas propriedades do script');
   const j = JSON.parse(resp.getContentText());
   const token = (j.data && (j.data.accessToken || j.data.access_token)) || j.accessToken;
-  if (!token) throw new Error('Fogo Cruzado não devolveu o token de acesso');
+  if (!token) throw new Error('Instituto Fogo Cruzado não devolveu o token de acesso');
   cache.put('FOGO_TOKEN', token, 3000);
   return token;
 }
@@ -105,11 +105,11 @@ function getFogoCruzado_(url, token) {
   const resp = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
   const codigo = resp.getResponseCode();
   if (codigo === 401) { CacheService.getScriptCache().remove('FOGO_TOKEN'); throw new Error('token expirado; tente de novo'); }
-  if (codigo >= 300) throw new Error('Fogo Cruzado respondeu ' + codigo);
+  if (codigo >= 300) throw new Error('Instituto Fogo Cruzado respondeu ' + codigo);
   return JSON.parse(resp.getContentText());
 }
 
-/** Ids de estado e cidade do Fogo Cruzado, guardados 30 dias. */
+/** Ids de estado e cidade do Instituto Fogo Cruzado, guardados 30 dias. */
 function idEstadoFogoCruzado_(token, sigla) {
   const salvo = lerJson_('fogocruzado_estados.json');
   let estados = salvo && Date.now() - salvo.em < 30 * 86400000 ? salvo.itens : null;
@@ -137,7 +137,7 @@ function idCidadeFogoCruzado_(token, idEstado, nomeCidade) {
 
 
 /**
- * Tudo o que a API do Fogo Cruzado traz além do ponto, em campos curtos:
+ * Tudo o que a API do Instituto Fogo Cruzado traz além do ponto, em campos curtos:
  * gp  = disputa entre grupos armados (facções e/ou milícia), pelo motivo "Disputa"
  *       ou por motivo complementar que cite facção, milícia ou tráfico;
  * mc  = motivos complementares; rc = recortes (clippings, ex.: "Chacina", "Bala perdida");
@@ -173,7 +173,7 @@ function detalhesFogoCruzado_(o, vitimas, situacao) {
 }
 
 /**
- * Teste da conexão com o Fogo Cruzado: no editor, escolha "testarFogoCruzado" e clique em Executar.
+ * Teste da conexão com o Instituto Fogo Cruzado: no editor, escolha "testarFogoCruzado" e clique em Executar.
  * O resultado aparece no Registro de execução. A senha nunca é mostrada.
  */
 function testarFogoCruzado() {

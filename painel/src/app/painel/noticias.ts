@@ -7,6 +7,7 @@ import { CATEGORIA_POR_ID, CFG, ORGAO_POR_ID, ROTULOS_PRECISAO } from '../core/d
 import { Ocorrencia } from '../core/modelos';
 import { PainelStore } from '../core/painel.store';
 import { fmt, normalizar, urlSegura } from '../core/util';
+import { explicarGrau, grauDe } from '../core/confianca';
 
 /** Lista das notícias do período, com filtro por texto. */
 @Component({
@@ -29,6 +30,7 @@ import { fmt, normalizar, urlSegura } from '../core/util';
           <span class="tag" [style.color]="cat(o).cor">{{ cat(o).curto }}</span>
           @for (g of o.orgaos; track g) { <span class="tag" [style.color]="orgao(g).cor" [title]="orgao(g).nome">{{ orgao(g).curto }}</span> }
           @if (o.local) { <span class="pilula">imprensa local</span> }
+          <span class="grau" [class.g1]="grau(o).endsWith('1')" [title]="explicar(o)">{{ grau(o) }}</span>
           <small>{{ o.data }}</small>
         </div>
         <a class="titulo" [href]="url(o.link)" target="_blank" rel="noopener">{{ o.titulo }}</a>
@@ -38,7 +40,17 @@ import { fmt, normalizar, urlSegura } from '../core/util';
           </button>
           <span [style.color]="precisao(o).cor">{{ precisao(o).nome }}</span>
           <span class="veiculo">{{ o.veiculo || 'Fonte' }}</span>
+          @if (o.fontes) {
+            <button type="button" class="pilula fontes" (click)="alternar(o.id)" [attr.aria-expanded]="aberto() === o.id">
+              <span class="material-symbols-outlined">library_books</span>{{ o.fontes.length }} fontes
+            </button>
+          }
         </div>
+        @if (o.fontes && aberto() === o.id) {
+          <ul class="outras">
+            @for (f of o.fontes; track f.link) { <li><a [href]="url(f.link)" target="_blank" rel="noopener">{{ f.veiculo }}</a>: {{ f.titulo }}</li> }
+          </ul>
+        }
       </article>
     } @empty {
       <div class="vazio"><mat-icon>newspaper</mat-icon>{{ store.carregando() ? 'Carregando notícias…' : 'Nenhuma notícia para os filtros escolhidos.' }}</div>
@@ -55,6 +67,11 @@ import { fmt, normalizar, urlSegura } from '../core/util';
     .noticia { display: grid; gap: 6px; padding: 12px; }
     .topo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .topo small { margin-left: auto; color: var(--mat-sys-on-surface-variant); }
+    .grau { font: 700 11px/1 var(--mat-sys-body-small-font, Roboto); padding: 3px 6px; border-radius: 6px; border: 1px solid var(--borda-suave); color: var(--mat-sys-on-surface-variant); cursor: help; }
+    .grau.g1 { border-color: #16a34a; color: #16a34a; }
+    .fontes { cursor: pointer; }
+    .outras { margin: 0; padding-left: 18px; font: var(--mat-sys-body-small); display: grid; gap: 4px; }
+    .outras a { color: var(--mat-sys-primary); }
     .titulo { font: var(--mat-sys-title-small); color: var(--mat-sys-on-surface); text-decoration: none; }
     .titulo:hover { text-decoration: underline; color: var(--mat-sys-primary); }
     .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font: var(--mat-sys-body-small); }
@@ -99,6 +116,10 @@ export class NoticiasComponent {
     this.timer = setTimeout(() => { this.filtroAplicado.set(v); this.pagina.set(1); }, 180);
   }
 
+  protected readonly aberto = signal('');
+  protected alternar(id: string): void { this.aberto.set(this.aberto() === id ? '' : id); }
+  protected grau = (o: Ocorrencia) => grauDe(o);
+  protected explicar = (o: Ocorrencia) => explicarGrau(grauDe(o)) + (o.fontes ? ' Veículos: ' + o.fontes.map((f) => f.veiculo).join(', ') + '.' : '');
   protected cat = (o: Ocorrencia) => CATEGORIA_POR_ID[o.cat];
   protected orgao = (id: string) => ORGAO_POR_ID[id];
   protected precisao = (o: Ocorrencia) => ROTULOS_PRECISAO[o.precisao] || ROTULOS_PRECISAO['PENDENTE'];

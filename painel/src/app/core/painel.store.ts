@@ -1,4 +1,5 @@
 import { computed, Injectable, signal } from '@angular/core';
+import { ocorrenciasPerto } from './proximidade';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
 import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './oficial';
 import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, carregarRoubos, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
@@ -17,17 +18,25 @@ import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsPara
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'FACCOES' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
-export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean; unidades: boolean }
+export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean; unidades: boolean; relatos: boolean; prf: boolean }
 export interface UnidadeShopee {
   codigo: string; nome: string; status: string; uf: string; cidade: string; endereco: string; tipo: string; operacao: string;
   regiao: string; gestor: string; classe: string; analistas: { nome: string; email: string; telefone: string }[];
   lat: number; lng: number; origem: 'planilha' | 'cidade' | 'uf';
 }
+export interface AvisoInmet {
+  id: string; evento: string; grau: string; nivel: number; cor: string; inicio: number; fim: number; descricao: string; link: string; municipiosNoEstado: number;
+}
+
+export interface Relato {
+  id: string; uf: string; cidade: string; data: string; hora: string; tipo: string; descricao: string;
+  unidade: string; bairro: string; lat: number | null; lng: number | null; criadoEm: number; meu: boolean;
+}
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
 const CHAVE_CAMADAS = 'MAPA_SEG_CAMADAS';
-const CAMADAS_PADRAO: Camadas = { zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true, unidades: false };
+const CAMADAS_PADRAO: Camadas = { zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true, unidades: false, relatos: true, prf: false };
 function lerCamadas(): Camadas {
   try {
     const g = JSON.parse(lerLocal(CHAVE_CAMADAS) || '{}');
@@ -35,6 +44,10 @@ function lerCamadas(): Camadas {
     (Object.keys(c) as (keyof Camadas)[]).forEach((k) => { if (typeof g[k] === 'boolean') c[k] = g[k]; });
     return { ...c, unidades: false };
   } catch { return { ...CAMADAS_PADRAO }; }
+}
+/** Sem escolha guardada para o fundo do mapa: ele segue o tema claro/escuro do painel. */
+function mapaEscuroAutomatico(): boolean {
+  try { return typeof JSON.parse(lerLocal(CHAVE_CAMADAS) || '{}').mapaEscuro !== 'boolean'; } catch { return true; }
 }
 const chaveLocal = (uf: string, cidade: string) => uf + '|' + normalizar(cidade);
 
@@ -70,12 +83,23 @@ export class PainelStore {
     const f = filtrar(this.dados(), this.periodoDias(), this.categorias(), this.orgao(), this.escopo() === 'ESTADO');
     return this.orgao() ? f : this.comTiroteios(f, this.periodoDias(), this.categorias());
   });
-  /** Zonas vermelhas usam também os tiroteios verificados (Fogo Cruzado), onde houver. */
+  /** Ocorrências dos últimos 30 dias (todas as categorias, com os tiroteios do Instituto Fogo Cruzado), para o raio das unidades. */
+  readonly recentes30 = computed(() => [...(this.dados()?.ocorrencias || []), ...tiroteiosComoOcorrencias(this.fogoCidade()?.dado?.itens, this.cidade(), 30, [])]);
+  /** Unidades Shopee com endereço exato no local aberto, com as ocorrências num raio de 3 km. */
+  readonly unidadesPerto = computed(() => {
+    const u = this.unidades(); if (!u?.lista.length) return null;
+    const uf = this.uf(), cid = normalizar(this.cidade()), estado = this.escopo() === 'ESTADO';
+    const lista = this.recentes30();
+    return u.lista.filter((x) => x.origem === 'planilha' && x.uf === uf && (estado || normalizar(x.cidade) === cid))
+      .map((x) => ({ u: x, perto: ocorrenciasPerto(x.lat, x.lng, lista) }))
+      .sort((a, b) => b.perto.graves30 - a.perto.graves30 || b.perto.d30 - a.perto.d30);
+  });
+  /** Zonas vermelhas usam também os tiroteios verificados (Instituto Fogo Cruzado), onde houver. */
   private comTiroteios(f: Filtrados, dias: number, categorias: string[]): Filtrados {
     const extra = tiroteiosComoOcorrencias(this.fogoCidade()?.dado?.itens, this.cidade(), dias, categorias);
     if (!extra.length) return f;
     // Não contar o mesmo fato duas vezes: notícia de homicídio/tiroteio a menos de 1 km e 1 dia de um
-    // tiroteio do Fogo Cruzado é tratada como o mesmo caso e fica só o registro verificado.
+    // tiroteio do Instituto Fogo Cruzado é tratada como o mesmo caso e fica só o registro verificado.
     const dia = (ts: number) => Math.round(tsParaData(ts).getTime() / 86400000);
     const noticias = f.precisas.filter((o) => !((o.cat === 'CVLI' || o.cat === 'CONFRONTO') &&
       extra.some((t) => Math.abs(dia(t.ts) - dia(o.ts)) <= 1 && distanciaKm(o.lat!, o.lng!, t.lat!, t.lng!) < 1)));
@@ -95,7 +119,7 @@ export class PainelStore {
     if (this.escopo() !== 'CIDADE' || !d) return [] as Bairro[];
     return b?.ibge === this.ibgeCidade() && b.lista.length ? b.lista : d.bairros || [];
   });
-  /** Dados oficiais e verificados abaixo do município (ISP-RJ por delegacia, Fogo Cruzado). */
+  /** Dados oficiais e verificados abaixo do município (ISP-RJ por delegacia, Instituto Fogo Cruzado). */
   readonly isp = signal<{ ibge: string; dado: IspMunicipio | null } | null>(null);
   readonly fogo = signal<{ chave: string; dado: FogoCruzado | null; carregando: boolean } | null>(null);
   readonly referencia = signal<ReferenciaNacional | null>(null);
@@ -195,14 +219,44 @@ export class PainelStore {
   definirTema(escuro: boolean, salvar = true): void {
     this.escuro.set(escuro);
     document.documentElement.classList.toggle('tema-escuro', escuro);
+    // O mapa acompanha o tema até a pessoa escolher o fundo do mapa por conta própria
+    if (mapaEscuroAutomatico() && this.camadas().mapaEscuro !== escuro) this.camadas.update((c) => ({ ...c, mapaEscuro: escuro }));
     if (salvar) gravarLocal(CFG.CHAVE_TEMA, escuro ? 'escuro' : 'claro');
   }
 
   alternarCamada(nome: keyof Camadas): void {
     this.camadas.update((c) => ({ ...c, [nome]: !c[nome] }));
     const { unidades, ...guardar } = this.camadas();
-    gravarLocal(CHAVE_CAMADAS, JSON.stringify(guardar));
+    const salvo: Record<string, boolean> = { ...guardar };
+    if (nome !== 'mapaEscuro' && mapaEscuroAutomatico()) delete salvo['mapaEscuro'];
+    gravarLocal(CHAVE_CAMADAS, JSON.stringify(salvo));
     if (nome === 'unidades' && this.camadas().unidades) this.carregarUnidades();
+  }
+
+  /** Relatos internos das equipes Shopee do local aberto (só contas @shopee.com recebem algo). */
+  readonly relatos = signal<{ chave: string; conta: string; lista: Relato[]; tipos: Record<string, string>; carregando: boolean } | null>(null);
+  carregarRelatos(forcar = false): void {
+    const uf = this.uf(), cidade = this.escopo() === 'ESTADO' ? '' : this.cidade();
+    const chave = uf + '|' + cidade;
+    const atual = this.relatos();
+    if (!forcar && atual?.chave === chave) return;
+    this.relatos.set({ chave, conta: atual?.conta || '', lista: atual?.chave === chave ? atual.lista : [], tipos: atual?.tipos || {}, carregando: true });
+    Servidor.relatos(uf, cidade).then((r) => {
+      if (this.relatos()?.chave !== chave) return;
+      this.relatos.set({ chave, conta: r?.conta || '', lista: r?.relatos || [], tipos: r?.tipos || {}, carregando: false });
+    }).catch(() => { if (this.relatos()?.chave === chave) this.relatos.update((v) => v && { ...v, carregando: false }); });
+  }
+
+  /** Avisos meteorológicos do INMET em vigor no local aberto (carregam depois dos dados principais). */
+  readonly inmet = signal<{ chave: string; avisos: AvisoInmet[] } | null>(null);
+  carregarInmet(): void {
+    const uf = this.uf(), ibge = this.ibgeCidade();
+    const chave = uf + '|' + ibge;
+    if (this.inmet()?.chave === chave) return;
+    this.inmet.set({ chave, avisos: [] });
+    Servidor.avisosInmet(uf, ibge).then((r) => {
+      if (this.inmet()?.chave === chave) this.inmet.set({ chave, avisos: (r?.avisos || []).filter((a: AvisoInmet) => !a.fim || a.fim > Date.now()) });
+    }).catch(() => {});
   }
 
   /** Unidades Shopee (planilha UNIDADES PADRAO): só carregam quando a camada é ligada. */
@@ -289,6 +343,8 @@ export class PainelStore {
         .catch(() => { if (vale()) this.bairrosOsm.set({ ...this.bairrosOsm()!, carregando: false }); });
     }
     if (!ehEstado) this.carregarAreas(uf, mun!.nome, mun!.ibge);
+    // Avisos do INMET depois do essencial
+    setTimeout(() => this.carregarInmet(), 2000);
     if (this.populacao()?.uf !== uf) {
       this.populacao.set(null);
       carregarPopulacao(uf).then((p) => { if (p && this.uf() === uf) this.populacao.set(p); });
@@ -480,7 +536,7 @@ function mesclarDelta(base: any, res: any): any {
   return { ...res, delta: false, ids: undefined, ocorrencias, totalNaBase: ocorrencias.length };
 }
 
-/** Tiroteios do Fogo Cruzado no formato de ocorrência, para entrarem no cálculo das zonas vermelhas. */
+/** Tiroteios do Instituto Fogo Cruzado no formato de ocorrência, para entrarem no cálculo das zonas vermelhas. */
 function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string, periodoDias: number, categorias: string[]): Ocorrencia[] {
   if (!itens?.length) return [];
   const d = new Date(Date.now() - periodoDias * 86400000);
@@ -493,8 +549,8 @@ function tiroteiosComoOcorrencias(itens: Tiroteio[] | undefined, cidade: string,
     const cat = t.mortos ? 'CVLI' : 'CONFRONTO';
     if (ts < limite || (categorias.length && !categorias.includes(cat))) continue;
     lista.push({
-      id: 'fc' + t.id, data: t.d, ts, cidade, bairro: t.bairro || '', cat, titulo: 'Tiroteio (Fogo Cruzado)',
-      veiculo: 'Fogo Cruzado', link: '', lat: t.lat, lng: t.lng, precisao: 'ENDERECO', precisa: true, orgaos: [], local: false,
+      id: 'fc' + t.id, data: t.d, ts, cidade, bairro: t.bairro || '', cat, titulo: 'Tiroteio (Instituto Fogo Cruzado)',
+      veiculo: 'Instituto Fogo Cruzado', link: '', lat: t.lat, lng: t.lng, precisao: 'ENDERECO', precisa: true, orgaos: [], local: false,
     });
   }
   return lista;

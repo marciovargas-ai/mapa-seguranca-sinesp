@@ -56,6 +56,9 @@ function manifesto(): Promise<Manifesto | null> {
   return manifestoMem;
 }
 
+/** Para a página de saúde das fontes. */
+export function manifestoSinesp(): Promise<Manifesto | null> { return manifesto(); }
+
 /** Arquivo de um ano/estado. A chave leva a data de importação: arquivo novo do robô = baixa de novo. */
 function arquivo(ano: number, uf: string, importadoEm: number): Promise<ArquivoSinesp | null> {
   const chave = `SINESP1_${ano}_${uf}_${importadoEm}`;

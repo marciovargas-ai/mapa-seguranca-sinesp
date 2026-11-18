@@ -25,7 +25,7 @@ const INSTRUCOES_AGENTE_ = [
   'Você é o assistente do Mapa da Segurança, um painel de dados de segurança pública do Brasil.',
   'Responda sempre em português do Brasil, de forma clara e objetiva.',
   'Use SOMENTE os dados do painel enviados abaixo. Se a resposta não estiver nos dados, diga isso com franqueza e sugira onde olhar no painel. Nunca invente números.',
-  'Sempre diga de qual fonte vem cada número (Sinesp, DATASUS, SSP, ISP-RJ, Fogo Cruzado, notícias) e o período.',
+  'Sempre diga de qual fonte vem cada número (Sinesp, DATASUS, SSP, ISP-RJ, Instituto Fogo Cruzado, notícias) e o período.',
   'Notícias são complemento: não trate contagem de notícias como estatística oficial.',
   'Quando houver vários números, organize em tabela Markdown. Seja breve: no máximo uns 15 itens ou linhas.',
   'COMPARAÇÕES E ANÁLISES:',
@@ -177,7 +177,7 @@ function preencherPlanilhaResposta_(ss, titulo, local, pergunta, resposta) {
   });
   aba.setColumnWidth(1, 320);
   for (let c = 2; c <= largura; c++) aba.setColumnWidth(c, 160);
-  aba.getRange(r + 1, 1).setValue('Fonte: Mapa da Segurança (dados do Sinesp, DATASUS, IBGE, secretarias estaduais, Fogo Cruzado e notícias), resposta gerada por IA.').setFontColor('#666666');
+  aba.getRange(r + 1, 1).setValue('Fonte: Mapa da Segurança (dados do Sinesp, DATASUS, IBGE, secretarias estaduais, Instituto Fogo Cruzado e notícias), resposta gerada por IA.').setFontColor('#666666');
 }
 
 function escHtml_(s) {
@@ -224,6 +224,6 @@ function htmlPdfResposta_(titulo, local, pergunta, resposta) {
     '<div class="meta">' + escHtml_(local) + ' · gerado em ' + Utilities.formatDate(new Date(), CONFIG.FUSO, 'dd/MM/yyyy HH:mm') + '</div></div>' +
     (pergunta ? '<div class="pergunta"><b>Pergunta:</b> ' + escHtml_(pergunta) + '</div>' : '') +
     markdownParaHtml_(resposta) +
-    '<div class="rodape">Fonte: Mapa da Segurança (Sinesp, DATASUS, IBGE, secretarias estaduais, Fogo Cruzado e notícias). Resposta gerada por IA a partir dos dados do painel; confira os números no painel.</div>' +
+    '<div class="rodape">Fonte: Mapa da Segurança (Sinesp, DATASUS, IBGE, secretarias estaduais, Instituto Fogo Cruzado e notícias). Resposta gerada por IA a partir dos dados do painel; confira os números no painel.</div>' +
     '</body></html>';
 }
