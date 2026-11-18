@@ -121,7 +121,8 @@ export class AgenteIA {
       parecer: c.parecer,
       indicadores: c.indicadores.map((i) => ({ titulo: i.titulo, valor: i.valor + (i.unidade ? ' ' + i.unidade : ''), detalhe: i.sub, fonte: i.fonte })),
     };
-    if (c.risco) ctx['indice'] = { titulo: c.risco.titulo, valor: c.risco.valor, nivel: c.risco.nivel, partes: c.risco.componentes.map((k) => ({ nome: k.nome, peso: k.peso, nota: k.valor, detalhe: k.texto })), como: c.risco.metodo, confianca: c.risco.confianca?.texto };
+    if (c.risco?.semNota) ctx['indice'] = { titulo: c.risco.titulo, semNota: true, motivo: c.risco.resumo.join(' '), como: c.risco.metodo };
+    else if (c.risco) ctx['indice'] = { titulo: c.risco.titulo, valor: c.risco.valor, faixaProvavel: c.risco.faixa || undefined, nivel: c.risco.nivel, partes: c.risco.componentes.map((k) => ({ nome: k.nome, peso: k.peso, nota: k.valor, detalhe: k.texto })), como: c.risco.metodo, confianca: c.risco.confianca?.texto };
     if (c.posicao) ctx['posicaoNoEstado'] = c.posicao;
     if (oficial?.disponivel && oficial.eventos) ctx['resumoOficial'] = resumirOficial(s.nomeLocal(), oficial.eventos, oficial.periodo || '', oficial.populacao || null);
     const ref = s.referencia();

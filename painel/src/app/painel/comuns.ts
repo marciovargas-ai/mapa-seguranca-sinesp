@@ -25,6 +25,10 @@ if (!chartPronto()) {
       @case ('igual') { <span class="delta igual">= estável</span> }
       @case ('sobe') { <span class="delta sobe"><mat-icon>arrow_upward</mat-icon>{{ estado().v }}%</span> }
       @case ('desce') { <span class="delta desce"><mat-icon>arrow_downward</mat-icon>{{ estado().v }}%</span> }
+      @case ('poucos') {
+        <span class="delta" [class.sobe]="estado().v > 0" [class.desce]="estado().v < 0" [class.igual]="!estado().v"
+          title="Poucos casos: mostra os números em vez da porcentagem, que oscila muito">{{ anterior() }} → {{ atual() }}</span>
+      }
     }
   `,
   styles: `
@@ -44,6 +48,8 @@ export class DeltaComponent {
     const a = this.atual(), b = this.anterior();
     if (a == null || b == null) return { tipo: 'sem', v: 0 };
     if (!a && !b) return { tipo: 'igual', v: 0 };
+    // Base pequena (menos de 10 casos): 2 → 12 diz mais que "+500%", que oscila com um caso a mais ou a menos
+    if (Math.max(a, b) < 10) return { tipo: a === b ? 'igual' : 'poucos', v: a - b };
     if (!b) return { tipo: 'novo', v: 0 };
     const v = Math.round(((a - b) / b) * 100);
     return v === 0 ? { tipo: 'igual', v } : { tipo: v > 0 ? 'sobe' : 'desce', v: Math.abs(v) };

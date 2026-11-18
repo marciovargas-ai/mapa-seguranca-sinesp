@@ -643,7 +643,8 @@ export class MapaComponent implements OnDestroy {
       `<div>${fmt(z.qtd)} ocorrências · ${fmt(z.graves)} homicídio/tiroteio · ${tendTxt}</div>` +
       `<div class="popup-tags">${tipos}</div>` +
       (ultimas ? `<b class="zona-sub">Últimas notícias na zona</b><ul class="lista-sem-local">${ultimas}</ul>` : '') +
-      (risco ? `<small>Cidade inteira: ${esc(risco.titulo)} ${risco.valor}/100 (${esc(risco.nivel.toLowerCase())}), na comparação com o Brasil.</small>` : '') +
+      (risco?.semNota ? `<small>Cidade inteira: poucas mortes no período para dar nota de violência.</small>`
+        : risco ? `<small>Cidade inteira: ${esc(risco.titulo)} ${risco.valor}/100 (${esc(risco.nivel.toLowerCase())}), na comparação com o Brasil.</small>` : '') +
       `</div>`;
   }
 

@@ -36,26 +36,31 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       @if (c.risco; as r) {
         <article class="cartao risco" [matTooltip]="r.dica" matTooltipClass="dica-larga">
           <header><mat-icon>speed</mat-icon><h3>{{ r.titulo }}</h3><mat-icon class="info">info</mat-icon></header>
-          <div class="medidor">
-            <svg viewBox="0 0 120 68" aria-hidden="true">
-              <path d="M10 62 A50 50 0 0 1 110 62" class="trilho" />
-              <path d="M10 62 A50 50 0 0 1 110 62" class="arco" [style.stroke]="r.cor" [attr.stroke-dasharray]="arco(r.valor)" />
-            </svg>
-            <div class="valor"><b [style.color]="r.cor">{{ r.valor }}</b><span>de 100 · {{ r.nivel }}</span>
-              @if (r.confianca; as cf) { <span class="confianca" [class.media]="cf.nivel === 'média'" [class.baixa]="cf.nivel === 'baixa'" [matTooltip]="cf.texto">Confiança {{ cf.nivel }}</span> }
+          @if (r.semNota) {
+            <div class="sem-nota"><mat-icon>info</mat-icon><div><b>Sem nota</b><span>{{ r.nivel }}</span></div></div>
+          } @else {
+            <div class="medidor">
+              <svg viewBox="0 0 120 68" aria-hidden="true">
+                <path d="M10 62 A50 50 0 0 1 110 62" class="trilho" />
+                <path d="M10 62 A50 50 0 0 1 110 62" class="arco" [style.stroke]="r.cor" [attr.stroke-dasharray]="arco(r.valor)" />
+              </svg>
+              <div class="valor"><b [style.color]="r.cor">{{ r.valor }}</b><span>de 100 · {{ r.nivel }}</span>
+                @if (r.faixa; as fx) { <span class="faixa">provável: {{ fx[0] }} a {{ fx[1] }}</span> }
+                @if (r.confianca; as cf) { <span class="confianca" [class.media]="cf.nivel === 'média'" [class.baixa]="cf.nivel === 'baixa'" [matTooltip]="cf.texto">Confiança {{ cf.nivel }}</span> }
+              </div>
             </div>
-          </div>
-          <ul class="componentes">
-            @for (k of r.componentes; track k.nome) {
-              <li [matTooltip]="k.texto">
-                <span class="k-nome">{{ k.nome }}</span>
-                <span class="k-barra"><span [style.width.%]="k.valor" [style.background]="corValor(k.valor)"></span></span>
-                <span class="k-num">{{ k.valor }}</span>
-              </li>
-            }
-          </ul>
+            <ul class="componentes">
+              @for (k of r.componentes; track k.nome) {
+                <li [matTooltip]="k.texto">
+                  <span class="k-nome">{{ k.nome }}</span>
+                  <span class="k-barra"><span [style.width.%]="k.valor" [style.background]="corValor(k.valor)"></span></span>
+                  <span class="k-num">{{ k.valor }}</span>
+                </li>
+              }
+            </ul>
+          }
           <div class="resumo-indice">@for (l of r.resumo; track $index) { <p>{{ l }}</p> }</div>
-          @if (r.confianca?.nivel === 'baixa') { <p class="aviso-baixa">{{ r.confianca!.texto }}</p> }
+          @if (r.confianca?.nivel === 'baixa' && !r.semNota) { <p class="aviso-baixa">{{ r.confianca!.texto }}</p> }
           <details class="metodo">
             <summary>Ver os números de cada parte</summary>
             <ol>@for (l of r.metodo; track $index) { <li>{{ l }}</li> }</ol>
@@ -243,6 +248,13 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       border-radius: 6px; padding: 2px 8px; cursor: help; }
     .parecer p { margin: 0 0 6px; font: var(--mat-sys-body-medium); line-height: 1.55; }
     .risco { cursor: help; }
+    .sem-nota { display: flex; gap: 10px; align-items: center; padding: 10px 12px; margin: 4px 0 8px; border-radius: var(--raio-m);
+      background: var(--mat-sys-surface-container-high); }
+    .sem-nota mat-icon { color: var(--mat-sys-on-surface-variant); flex: none; }
+    .sem-nota div { display: flex; flex-direction: column; }
+    .sem-nota b { font: var(--mat-sys-title-large); }
+    .sem-nota span { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
+    .faixa { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
     .confianca { margin-top: 6px; align-self: flex-start; font: var(--mat-sys-label-small); font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
     .confianca.media { background: #fef3c7; color: #92400e; }
     .confianca.baixa { background: #fee2e2; color: #991b1b; }

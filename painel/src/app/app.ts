@@ -384,8 +384,11 @@ export class App {
     const resto = o.eventos.filter((e) => !m.partes.includes(e) || /^feminic/i.test(e.nome));
     lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
     if (m.taxa != null) {
+      // Cidade pequena: mostra a população, para a taxa "por 100 mil" não parecer o tamanho da cidade
+      const hab = this.store.escopo() !== 'ESTADO' && o.populacao && o.populacao < 100000 ? o.populacao : 0;
       lista.push({ rotulo: 'Mortes violentas por 100 mil hab.', valor: fmt1(m.taxa),
-        sub: (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)}` + (m.taxaEstadoMvi ? ` (${fmt1(m.taxaEstadoMvi)} com mortes por policiais)` : '') + ' · ' : '') + 'últimos 12 meses' });
+        sub: (hab ? `${fmt(hab)} habitantes · ` : '') +
+          (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)}` + (m.taxaEstadoMvi && !hab ? ` (${fmt1(m.taxaEstadoMvi)} com mortes por policiais)` : '') + ' · ' : '') + (hab ? '12 meses' : 'últimos 12 meses') });
     }
     for (const e of resto) {
       if (lista.length >= 4) break;

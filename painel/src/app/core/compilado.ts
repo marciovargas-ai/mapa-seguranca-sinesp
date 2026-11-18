@@ -42,7 +42,8 @@ export interface Indicador {
 }
 
 export interface Componente { nome: string; peso: number; valor: number; texto: string }
-export interface Risco { valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string; metodo: string[]; confianca: { nivel: 'alta' | 'média' | 'baixa'; texto: string } | null; contexto: string[]; resumo: string[]; titulo: string }
+/** semNota: menos de 10 mortes no período, a nota não é mostrada. faixa: nota mínima e máxima prováveis (intervalo de 90%). */
+export interface Risco { semNota?: boolean; faixa?: [number, number] | null; valor: number; nivel: string; cor: string; componentes: Componente[]; dica: string; metodo: string[]; confianca: { nivel: 'alta' | 'média' | 'baixa'; texto: string } | null; contexto: string[]; resumo: string[]; titulo: string }
 export interface Posicao { rank: number; total: number; taxa: number; mediana: number; taxaEstado: number | null }
 export interface Fonte { nome: string; estado: 'ok' | 'parcial' | 'sem'; detalhe: string; dica: string }
 export interface Municipal { nome: string; ibge: string | null; pop: number | null; total: number; anterior: number; taxa: number | null }
@@ -101,8 +102,9 @@ function posicionar(linhas: Municipal[], pop: PopulacaoUf | null, ibgeCidade: st
   if (!pop || !ibgeCidade) return { pos: null, percentil: null };
   const porIbge = new Map(linhas.filter((l) => l.ibge).map((l) => [l.ibge!, l]));
   const popCidade = pop.porCodigo[ibgeCidade];
-  if (!popCidade) return { pos: null, percentil: null };
-  const elegiveis = Object.entries(pop.porCodigo).filter(([c, h]) => h >= MIN_POP || c === ibgeCidade)
+  // Abaixo de 20 mil hab. a cidade fica fora do ranking: uma morte a mais ou a menos muda a posição inteira
+  if (!popCidade || popCidade < MIN_POP) return { pos: null, percentil: null };
+  const elegiveis = Object.entries(pop.porCodigo).filter(([c, h]) => h >= MIN_POP)
     .map(([c, h]) => ({ c, t: taxa(porIbge.get(c)?.total || 0, h) || 0 }));
   if (elegiveis.length < 5) return { pos: null, percentil: null };
   const minha = elegiveis.find((e) => e.c === ibgeCidade)!.t;
@@ -123,6 +125,14 @@ interface Entrada {
   oficial: Oficial | null; panorama: Panorama | null; pop: PopulacaoUf | null;
   f12: Filtrados; periodoDias: number; bairros: BairroResumo[]; bairrosOsm: number; bairrosCarregando: boolean; ultimaColeta: string;
   referencia: ReferenciaNacional | null; isp: IspMunicipio | null; tiroteios: Tiroteio[] | null;
+}
+
+/** Intervalo de 90% para uma contagem de Poisson (aproximação de Byar, a mesma usada em estatísticas de mortalidade). */
+function intervaloPoisson(x: number): [number, number] {
+  const z = 1.645;
+  const lo = x <= 0 ? 0 : x * (1 - 1 / (9 * x) - z / (3 * Math.sqrt(x))) ** 3;
+  const hi = (x + 1) * (1 - 1 / (9 * (x + 1)) + z / (3 * Math.sqrt(x + 1))) ** 3;
+  return [Math.max(0, lo), hi];
 }
 
 /** Abaixo disto, com menos de 10 casos, o selo de confiança fica "baixa". */
@@ -181,6 +191,13 @@ export function compilar(c: Entrada): Compilado {
         sub: `taxa ${fmt1(posicao.taxa)} · mediana ${fmt1(posicao.mediana)} · estado ${fmt1(posicao.taxaEstado)}`,
         tom: acima ? 'alerta' : 'positivo', fonte: 'Sinesp + IBGE',
         dica: `Ordem decrescente da taxa de mortes violentas intencionais (12 meses) entre os municípios do estado com ${fmt(MIN_POP)} habitantes ou mais. 1º = mais violento.`,
+      });
+    }
+    if (!c.ehEstado && !posicao && popLocal && popLocal < MIN_POP) {
+      indicadores.push({
+        id: 'populacao', titulo: 'População (IBGE)', valor: fmt(popLocal), unidade: 'hab.',
+        sub: `fora do ranking do estado · 1 morte = ${fmt1(1e5 / popLocal)} por 100 mil`, tom: 'neutro', fonte: 'IBGE',
+        dica: `O ranking do estado compara só municípios com ${fmt(MIN_POP)} habitantes ou mais. Em cidades menores, uma única morte muda a taxa em ${fmt1(1e5 / popLocal)} por 100 mil e a posição no ranking oscila de um ano para o outro.`,
       });
     }
     cartao('tentativas');
@@ -246,6 +263,7 @@ export function compilar(c: Entrada): Compilado {
     const simTxt = ref?.sim ? `DATASUS ${ref.sim.ano}${ref.sim.preliminar ? ' (preliminar)' : ''}` : 'DATASUS';
     const resumo: string[] = [];
     let comRoubos = false;
+    let txLo = 0, txHi = 0, pLo = 0, pHi = 0, casosJanela = -1, textoJanela = '', habRef = 0, txBrutaRef = 0;
     if (ref && linhaRef && minhaTaxa != null) {
       const [usado, hab, , cvli, dSim, tentTx, cAnt, media3, roubTx, txBruta, casos, roubAno] = linhaRef;
       comRoubos = roubTx != null && roubTx >= 0 && ref.taxasRoubo.length >= 50;
@@ -277,7 +295,15 @@ export function compilar(c: Entrada): Compilado {
       if (media3) metodo.push(`Cidade com menos de 100 mil habitantes: usa a média de 3 anos e aproxima a taxa da média das cidades do estado com menos de 100 mil habitantes, porque poucos casos fazem a taxa por 100 mil oscilar muito (sem esse ajuste: ${fmt1(txBruta)} por 100 mil).`);
       // Confiança
       const maior = Math.max(cvli, dSim), menor = Math.min(cvli, dSim);
-      if (hab < CIDADE_PEQUENA_CONF && casos < 10) confianca = { nivel: 'baixa', texto: `Poucos casos (${fmt(casos)} ${casos === 1 ? 'morte' : 'mortes'} em ${media3 ? '3 anos' : '12 meses'}): a taxa foi aproximada da média das cidades do estado com menos de 100 mil habitantes.` };
+      // Quantidade de casos decide se a nota é confiável (mesma regra de órgãos de estatística como o CDC/NCHS:
+      // taxa com menos de 20 casos é instável). Faixa provável: intervalo de 90% de Poisson (aproximação de Byar).
+      const anosJanela = media3 ? 3 : 1, expo = hab * anosJanela;
+      const [cLo, cHi] = intervaloPoisson(casos);
+      txLo = (cLo / expo) * 1e5; txHi = (cHi / expo) * 1e5;
+      pLo = percentil(ref.taxas, txLo)!; pHi = percentil(ref.taxas, txHi)!;
+      casosJanela = casos; textoJanela = media3 ? '3 anos' : '12 meses'; habRef = hab; txBrutaRef = txBruta;
+      if (casos < 20) confianca = { nivel: 'baixa', texto: `Poucos casos (${fmt(casos)} ${casos === 1 ? 'morte' : 'mortes'} em ${textoJanela}): só por acaso, a taxa poderia estar entre ${fmt1(txLo)} e ${fmt1(txHi)} por 100 mil.` +
+        (hab < CIDADE_PEQUENA_CONF ? ' Por isso ela foi aproximada da média das cidades do estado com menos de 100 mil habitantes.' : '') };
       else if (!ref.sim) confianca = null;
       else if (maior - menor <= 5 || menor >= maior * 0.75) confianca = { nivel: 'alta', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) contam números parecidos.` };
       else confianca = { nivel: 'média', texto: `Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}) divergem; o índice usa o maior. ${dSim > cvli ? 'O Sinesp deste estado costuma deixar casos de fora.' : 'Parte dos óbitos ainda está sem causa definida no DATASUS.'}` };
@@ -300,9 +326,28 @@ export function compilar(c: Entrada): Compilado {
     if (contexto.length) metodo.push('Contexto local, fora da nota (dado que não existe para todos os municípios): ' + contexto.join(' '));
     const pesoTotal = soma(comps.map((x) => x.peso));
     if (pesoTotal >= 60) {
-      const valor = Math.round(soma(comps.map((x) => x.valor * x.peso)) / pesoTotal);
-      const [nivel, cor] = valor >= 75 ? ['Muito alto', '#b91c1c'] : valor >= 55 ? ['Alto', '#ea580c'] : valor >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a'];
+      const nota = (lista: Componente[]) => Math.round(soma(lista.map((x) => x.valor * x.peso)) / pesoTotal);
+      const valor = nota(comps);
+      const nivelDe = (v: number) => (v >= 75 ? ['Muito alto', '#b91c1c'] : v >= 55 ? ['Alto', '#ea580c'] : v >= 35 ? ['Moderado', '#ca8a04'] : ['Baixo', '#16a34a']);
+      let [nivel, cor] = nivelDe(valor);
+      // Nota com a taxa no mínimo e no máximo prováveis (só a parte "mortes" muda)
+      const comMortes = (p: number) => comps.map((x) => (x.nome === 'Mortes violentas' ? { ...x, valor: p } : x));
+      let faixa: [number, number] | null = null, semNota = false;
+      if (casosJanela >= 0 && casosJanela < 20) {
+        faixa = [Math.min(valor, nota(comMortes(pLo))), Math.max(valor, nota(comMortes(pHi)))];
+        if (casosJanela < 10) {
+          semNota = true; nivel = 'Poucos casos para dar nota'; cor = '#64748b';
+          resumo.length = 0;
+          resumo.push(casosJanela === 0
+            ? `${c.nomeLocal} não teve nenhuma morte violenta registrada em ${textoJanela} (Sinesp e DATASUS).`
+            : `Mortes violentas em ${textoJanela}: ${fmt(casosJanela)} (Sinesp e DATASUS; vale o maior número). Com ${fmt(habRef)} habitantes, isso dá ${fmt1(txBrutaRef)} por 100 mil por ano; o Brasil tem ${fmt1(ref?.brasil.taxa ?? MVI_BRASIL_100MIL)}.`);
+          resumo.push(`Com tão poucos casos, a taxa poderia estar entre ${fmt1(txLo)} e ${fmt1(txHi)} por 100 mil só por acaso, e a nota iria de ${faixa[0]} (${nivelDe(faixa[0])[0].toLowerCase()}) a ${faixa[1]} (${nivelDe(faixa[1])[0].toLowerCase()}). Por isso o painel não dá nota.`);
+          resumo.push('Regra: com menos de 10 mortes no período não há nota, e de 10 a 19 a nota sai com a faixa provável (órgãos de estatística como o CDC tratam como instável toda taxa com menos de 20 casos).');
+          resumo.push('Use os números oficiais dos cartões e as notícias da cidade para acompanhar o local.');
+        }
+      }
       risco = {
+        semNota, faixa,
         valor, nivel, cor, componentes: comps, confianca, contexto,
         resumo, titulo: comRoubos ? 'Índice de criminalidade' : 'Índice de violência letal',
         metodo: [...metodo, 'Nota final: média ponderada das partes (0–34 baixo, 35–54 moderado, 55–74 alto, 75 ou mais muito alto).'],
@@ -324,6 +369,9 @@ export function compilar(c: Entrada): Compilado {
       parecer.push(`Em 12 meses, a taxa é de ${fmt1(tx)} por 100 mil habitantes` +
         (r ? `, ${r >= 1.1 ? fmt1(r) + ' vezes a do estado' : r <= 0.9 ? 'abaixo da do estado' : 'próxima da do estado'} (${fmt1(posicao.taxaEstado)})` : '') +
         `, o que põe o município em ${posicao.rank}º entre ${posicao.total} municípios com mais de 20 mil habitantes.`);
+    } else if (tx != null && !c.ehEstado && popLocal && popLocal < MIN_POP) {
+      parecer.push(`Em 12 meses, a taxa é de ${fmt1(tx)} por 100 mil habitantes. Com ${fmt(popLocal)} habitantes, cada morte muda essa taxa em ${fmt1(1e5 / popLocal)}; ` +
+        `por isso a cidade não entra no ranking do estado, que compara só municípios com ${fmt(MIN_POP)} habitantes ou mais.`);
     } else if (tx != null) parecer.push(`Em 12 meses, a taxa é de ${fmt1(tx)} por 100 mil habitantes.`);
     const lr = !c.ehEstado && c.ibge ? c.referencia?.municipios[c.ibge] : undefined;
     if (lr && c.referencia?.sim && lr[4] > lr[3] * 1.15 && lr[4] - lr[3] >= 5)
@@ -345,7 +393,9 @@ export function compilar(c: Entrada): Compilado {
       (top.length ? `; os bairros mais citados são ${top.map((b) => `${b.nome} (${fmt(b.qtd)})`).join(', ')}` : '') +
       (f.zonas[0] ? ` e a principal zona vermelha fica em ${f.zonas[0].nome.split(',')[0]}` : '') + '.');
   }
-  if (risco) parecer.push(`${risco.titulo}: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o Brasil.`);
+  if (risco?.semNota) parecer.push(`${risco.titulo}: sem nota, porque há poucas mortes no período para comparar a cidade com segurança.`);
+  else if (risco) parecer.push(`${risco.titulo}: ${risco.valor} de 100 (${risco.nivel.toLowerCase()}) na comparação com o Brasil` +
+    (risco.faixa ? `; com poucos casos, a nota provável fica entre ${risco.faixa[0]} e ${risco.faixa[1]}.` : '.'));
 
   // Série: MVI mês a mês (36 meses) com as notícias dos últimos 12 meses no mesmo eixo de tempo
   let serie: Compilado['serie'] = null;

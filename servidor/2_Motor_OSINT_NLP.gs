@@ -235,8 +235,9 @@ function coletarNoticiasCidade_(mun, modo) {
     // Histórico já feito (outra aba ou o robô chegou antes): nada a buscar nesta etapa
     if (modo === 'historico' && !primeiraColeta) { resultado.registro = atual; return resultado; }
     const etapaRapida = modo === 'busca' && primeiraColeta;
-    const partes = etapaRapida ? { fatias: false, bairros: false, feeds: false }
-      : modo === 'historico' ? { base: false, imprensa: false, gdelt: false } : {};
+    // GDELT fica fora da etapa rápida: responde devagar (ou 429 em IP compartilhado) e a busca espera a mais lenta
+    const partes = etapaRapida ? { fatias: false, bairros: false, feeds: false, gdelt: false }
+      : modo === 'historico' ? { base: false, imprensa: false } : {};
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
     const janela = primeiraColeta ? CONFIG.DIAS_JANELA_NOTICIAS + 'd'
