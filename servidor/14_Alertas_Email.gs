@@ -149,8 +149,7 @@ function desativarAlertasEmail() {
 
 /** Gatilho (15 min): envia a cada pessoa o que é novo nos locais e temas dela. */
 function alertasEmailGatilho() {
-  const trava = LockService.getScriptLock();
-  if (!trava.tryLock(1000)) return;
+  if (!pegarTravaTarefa_('alertas', 900)) return;
   try {
     const agora = Date.now();
     const hoje = Utilities.formatDate(new Date(), CONFIG.FUSO, 'yyyy-MM-dd');
@@ -179,7 +178,7 @@ function alertasEmailGatilho() {
       PropertiesService.getScriptProperties().setProperty(chaveAlerta_(email), JSON.stringify(p));
     });
   } finally {
-    trava.releaseLock();
+    soltarTravaTarefa_('alertas');
   }
 }
 

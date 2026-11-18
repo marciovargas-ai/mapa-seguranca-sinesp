@@ -89,9 +89,11 @@ function gravarJson_(nome, valor) {
  * Lê, altera e grava um arquivo sob trava, sempre a partir da versão mais nova
  * (evita que duas execuções simultâneas apaguem o trabalho uma da outra).
  */
-function atualizarJsonComTrava_(nome, alterar) {
+function atualizarJsonComTrava_(nome, alterar, esperaMs) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  // esperaMs: gravações que podem ser puladas (estatística de consultas) não esperam a trava inteira
+  if (esperaMs) { if (!lock.tryLock(esperaMs)) return undefined; }
+  else lock.waitLock(30000);
   try {
     delete memoriaArquivos_[nome];
     cacheRemoverGrande_('ARQ3|' + nome);
@@ -103,6 +105,27 @@ function atualizarJsonComTrava_(nome, alterar) {
     lock.releaseLock();
   }
 }
+
+/**
+ * Trava de uma tarefa longa (alertas, monitor da Shopee, INMET): impede duas execuções da MESMA tarefa
+ * sem segurar a trava geral do script. A trava geral é usada pelas gravações rápidas de arquivo
+ * (coleta do painel, índice de cidades); se uma tarefa de minutos ficasse com ela, a primeira
+ * consulta de uma cidade esperava a tarefa acabar.
+ */
+function pegarTravaTarefa_(nome, segundos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return false;
+  try {
+    const cache = CacheService.getScriptCache();
+    const chave = 'TAREFA|' + nome;
+    if (cache.get(chave)) return false;
+    cache.put(chave, String(Date.now()), Math.max(60, Math.min(21600, segundos)));
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
+function soltarTravaTarefa_(nome) { CacheService.getScriptCache().remove('TAREFA|' + nome); }
 
 function nomeArquivoCidade_(ibge) { return 'cidade_' + ibge + '.json'; }
 function nomeArquivoUf_(uf) { return 'uf_' + String(uf).toUpperCase() + '.json'; }

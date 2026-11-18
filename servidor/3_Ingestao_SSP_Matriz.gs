@@ -73,11 +73,16 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
   let registro = lerJson_(nomeArquivoCidade_(mun.ibge));
   let coleta = null;
   const idadeMs = registro && registro.coletadoEm ? Date.now() - registro.coletadoEm : Infinity;
+  const primeiraConsulta = !registro || !registro.coletadoEm;
   if (forcarColeta === true) {
     if (idadeMs > CONFIG.MINUTOS_MIN_ENTRE_COLETAS * 60000) {
       coleta = coletarNoticiasCidade_(mun, 'busca');
       if (coleta.registro) registro = coleta.registro;
     }
+  } else if (forcarColeta === 'historico') {
+    // 2ª etapa da primeira consulta: o histórico de 12 meses mês a mês e as buscas por bairro
+    coleta = coletarNoticiasCidade_(mun, 'historico');
+    if (coleta.registro) registro = coleta.registro;
   } else if (forcarColeta === 'materias') {
     // 2ª etapa: lê o texto das matérias para achar o bairro (o painel já mostra as notícias)
     coleta = coletarNoticiasCidade_(mun, 'materias');
@@ -103,7 +108,10 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
     novasCapturadasAgora: coleta ? coleta.novasOcorrencias : 0,
     coletaEmAndamento: !!(coleta && coleta.erro === 'EM_ANDAMENTO'),
     materiasPendentes: coleta && coleta.materiasPendentes || 0,
-    precisaColeta: forcarColeta !== true && idadeMs > MINUTOS_VALIDADE_TEMPO_REAL_ * 60000,
+    historicoPendente: !!(coleta && coleta.historicoPendente),
+    primeiraConsulta: primeiraConsulta,
+    tempos: coleta && coleta.tempos || undefined,
+    precisaColeta: forcarColeta !== true && forcarColeta !== 'historico' && idadeMs > MINUTOS_VALIDADE_TEMPO_REAL_ * 60000,
     ultimaColeta: registro && registro.coletadoEm ? Utilities.formatDate(new Date(registro.coletadoEm), CONFIG.FUSO, 'dd/MM/yyyy HH:mm') : '',
     ultimaColetaMs: registro && registro.coletadoEm ? registro.coletadoEm : 0,
     atualizadoEm: Utilities.formatDate(new Date(), CONFIG.FUSO, 'HH:mm'),
@@ -204,13 +212,14 @@ function registrarConsulta_(mun) {
   if (cache.get(chave)) return; // no máximo 1 gravação por cidade a cada 30 min
   cache.put(chave, '1', 1800);
   try {
-    atualizarIndiceCidade_(mun, { consultadoEm: Date.now(), somarConsulta: true });
+    // Só estatística: não segura a abertura da cidade esperando a trava (no máximo 2 s)
+    atualizarIndiceCidade_(mun, { consultadoEm: Date.now(), somarConsulta: true }, 2000);
   } catch (e) {
     Logger.log('Índice não atualizado: ' + e.message);
   }
 }
 
-function atualizarIndiceCidade_(mun, campos) {
+function atualizarIndiceCidade_(mun, campos, esperaMs) {
   atualizarJsonComTrava_(NOME_ARQUIVO_INDICE_, indice => {
     indice = indice || { v: 3, cidades: {} };
     const item = indice.cidades[mun.ibge] || { uf: mun.uf, cidade: mun.nome, consultadoEm: 0, coletadoEm: 0, consultas: 0 };
@@ -219,7 +228,7 @@ function atualizarIndiceCidade_(mun, campos) {
     if (campos.somarConsulta) item.consultas = (item.consultas || 0) + 1;
     indice.cidades[mun.ibge] = item;
     return indice;
-  });
+  }, esperaMs);
 }
 
 /**

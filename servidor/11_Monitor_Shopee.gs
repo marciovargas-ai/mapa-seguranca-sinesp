@@ -40,10 +40,9 @@ function obterNoticiasShopee(desde) {
   let dado = lerJson_(ARQUIVO_SHOPEE_);
   const velho = !dado || !dado.atualizado || Date.now() - dado.atualizado > MINUTOS_ENTRE_BUSCAS_SHOPEE_ * 60000;
   if (velho) {
-    const lock = LockService.getScriptLock();
-    if (lock.tryLock(1000)) {
+    if (pegarTravaTarefa_('shopee', 300)) {
       try { dado = atualizarMonitorShopee_(); } catch (e) { Logger.log('Monitor Shopee: ' + e.message); }
-      finally { lock.releaseLock(); }
+      finally { soltarTravaTarefa_('shopee'); }
     }
   }
   dado = dado || { atualizado: 0, itens: [] };
@@ -59,9 +58,8 @@ function obterNoticiasShopee(desde) {
 
 /** Gatilho de tempo (ver ativarMonitorShopee). */
 function monitorShopeeGatilho() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return;
-  try { atualizarMonitorShopee_(); } finally { lock.releaseLock(); }
+  if (!pegarTravaTarefa_('shopee', 300)) return;
+  try { atualizarMonitorShopee_(); } finally { soltarTravaTarefa_('shopee'); }
 }
 
 /** Rode uma vez no editor: busca de 15 em 15 minutos, mesmo sem ninguém no portal. */

@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatMenuModule } from '@angular/material/menu';
 import { definirIdioma, idioma, iniciarTraducao } from './core/i18n';
 import { Servidor } from './core/servidor';
+import { PrimeiraCargaComponent } from './primeira-carga';
 import { TourComponent } from './tour';
 import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
@@ -50,7 +51,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
+  imports: [PrimeiraCargaComponent, 
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule, MatMenuModule,
     MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, FavoritosComponent, NoticiasComponent, DeltaComponent, TourComponent,
@@ -107,6 +108,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       <section class="area-mapa"><app-mapa /></section>
       @if (tourAberto()) { <app-tour (fechar)="fecharTour($event)" /> }
       <app-agente />
+      <app-primeira-carga />
 
       <div class="divisor" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"
         (pointerdown)="iniciarArraste($event)" (keydown.arrowleft)="ajustar(40)" (keydown.arrowright)="ajustar(-40)" (dblclick)="larguraPadrao()">

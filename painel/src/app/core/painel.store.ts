@@ -52,6 +52,12 @@ function mapaEscuroAutomatico(): boolean {
 const chaveLocal = (uf: string, cidade: string) => uf + '|' + normalizar(cidade);
 
 /** Estado único do painel (signals) e as ações que falam com o servidor. */
+/** Etapas da primeira consulta de uma cidade (aviso na tela). */
+export interface PrimeiraCarga {
+  uf: string; cidade: string; inicio: number; noticias: number;
+  etapa: 'recentes' | 'historico' | 'bairros' | 'pronto' | 'erro';
+}
+
 @Injectable({ providedIn: 'root' })
 export class PainelStore {
   readonly uf = signal(CFG.UF_PADRAO);
@@ -66,6 +72,8 @@ export class PainelStore {
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
+  /** Primeira consulta de uma cidade: andamento das etapas, para o aviso na tela. */
+  readonly primeiraCarga = signal<PrimeiraCarga | null>(null);
   readonly status = signal<Status>({ icone: 'hourglass_empty', texto: 'Iniciando…', tipo: '' });
   /** Panorama como veio do servidor; `panorama` já traz as taxas completadas com a população do IBGE. */
   readonly panoramaBruto = signal<Panorama | null>(null);
@@ -177,6 +185,12 @@ export class PainelStore {
   });
 
   private tokenAbertura = 0;
+
+  private etapaPrimeira(etapa: PrimeiraCarga['etapa'], extra: Partial<PrimeiraCarga> = {}): void {
+    const p = this.primeiraCarga();
+    if (p) this.primeiraCarga.set({ ...p, ...extra, etapa });
+  }
+  fecharPrimeiraCarga(): void { this.primeiraCarga.set(null); }
   private memoria = new Map<string, { em: number; res: any }>();
   private panoramas = new Map<string, Panorama>();
 
@@ -310,6 +324,7 @@ export class PainelStore {
     if (!meta) return;
     const token = ++this.tokenAbertura;
     const ehEstado = nome === 'ESTADO_INTEIRO';
+    if (this.primeiraCarga() && (ehEstado || this.primeiraCarga()!.cidade !== nome || this.primeiraCarga()!.uf !== uf)) this.primeiraCarga.set(null);
     const mun = ehEstado ? null : buscarMunicipio(uf, nome);
     if (!ehEstado && !mun) { this.definirStatus('error', 'Município não encontrado: ' + nome, 'erro'); return; }
 
@@ -374,6 +389,9 @@ export class PainelStore {
     }).then((res) => {
       if (!this.receber(res, token)) return;
       this.carregando.set(false);
+      if (res.primeiraConsulta && !ehEstado) {
+        this.primeiraCarga.set({ uf, cidade: mun!.nome, etapa: 'recentes', inicio: Date.now(), noticias: 0 });
+      }
       if (res.precisaColeta && !ehEstado) { this.coletar(uf, mun!.nome, lat, lng, token); return; }
       this.definirStatus('check_circle', res.ultimaColeta ? 'Dados de ' + res.ultimaColeta : 'Atualizado às ' + res.atualizadoEm, 'ok');
     }).catch((erro) => {
@@ -401,25 +419,45 @@ export class PainelStore {
     Servidor.cidade(uf, cidade, lat, lng, true, desdeDe(base)).then((res) => {
       this.coletando.set(false);
       if (!this.receber(res, token)) return;
-      if (res.coletaEmAndamento) { this.definirStatus('hourglass_top', 'Coleta em andamento; atualize em instantes'); return; }
+      if (res.coletaEmAndamento) {
+        this.definirStatus('hourglass_top', 'Coleta em andamento; atualize em instantes');
+        this.etapaPrimeira('pronto');
+        return;
+      }
       const novas = res.novasCapturadasAgora || 0;
       this.definirStatus('check_circle', (novas ? `Google Notícias: ${novas} ${novas === 1 ? 'notícia nova' : 'notícias novas'} · `
         : 'Google Notícias: nada novo · ') + 'atualizado às ' + res.atualizadoEm, 'ok');
-      if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
+      this.etapaPrimeira(res.historicoPendente ? 'historico' : res.materiasPendentes ? 'bairros' : 'pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
+      if (res.historicoPendente) this.buscarHistorico(uf, cidade, lat, lng, token);
+      else if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
     }).catch(() => {
       this.coletando.set(false);
-      if (token === this.tokenAbertura) this.definirStatus('error', 'Coleta não concluída; mostrando dados salvos', 'erro');
+      if (token !== this.tokenAbertura) return;
+      this.definirStatus('error', 'Coleta não concluída; mostrando dados salvos', 'erro');
+      this.etapaPrimeira('erro');
     });
+  }
+
+  /** Primeira consulta, 2ª etapa (sem travar a tela): 12 meses mês a mês, buscas por bairro e feeds diretos. */
+  private buscarHistorico(uf: string, cidade: string, lat: number, lng: number, token: number): void {
+    const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
+    Servidor.cidade(uf, cidade, lat, lng, 'historico', desdeDe(base)).then((res) => {
+      if (!this.receber(res, token)) return;
+      this.etapaPrimeira(res.materiasPendentes ? 'bairros' : 'pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
+      if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
+    }).catch(() => { if (token === this.tokenAbertura) this.etapaPrimeira('pronto'); });
   }
 
   /** 2ª etapa, sem travar a tela: o servidor lê o texto das matérias para achar o bairro de cada notícia. */
   private lerMaterias(uf: string, cidade: string, lat: number, lng: number, token: number, rodadas: number): void {
-    if (rodadas <= 0 || token !== this.tokenAbertura) return;
+    if (token !== this.tokenAbertura) return;
+    if (rodadas <= 0) { this.etapaPrimeira('pronto'); return; }
     const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
     Servidor.cidade(uf, cidade, lat, lng, 'materias', desdeDe(base)).then((res) => {
       if (!this.receber(res, token)) return;
       if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, rodadas - 1);
-    }).catch(() => undefined);
+      else this.etapaPrimeira('pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
+    }).catch(() => { if (token === this.tokenAbertura) this.etapaPrimeira('pronto'); });
   }
 
   atualizarAgora(): void {

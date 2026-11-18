@@ -210,8 +210,13 @@ function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros)
 function coletarNoticiasCidade_(mun, modo) {
   // modo: 'busca' = só procura notícias novas (rápido, o painel espera); 'materias' = só lê o texto
   // das matérias ainda sem bairro (o painel chama em seguida, sem travar a tela); vazio = tudo (robô)
-  const resultado = { novasOcorrencias: 0, revalidadas: 0, geocodificacoes: 0, erro: '' };
+  // 'historico' = 2ª etapa da primeira consulta (12 meses mês a mês, bairros e feeds diretos).
+  // Na primeira consulta, 'busca' faz só a etapa rápida (as buscas principais dos 12 meses e a imprensa
+  // local) e devolve historicoPendente: o painel mostra o que chegou e pede o histórico em seguida.
+  const resultado = { novasOcorrencias: 0, revalidadas: 0, geocodificacoes: 0, erro: '', tempos: {} };
   const inicioColeta = Date.now();
+  let marco = inicioColeta;
+  const medir = etapa => { const t = Date.now(); resultado.tempos[etapa] = t - marco; marco = t; };
   const nomeArquivo = nomeArquivoCidade_(mun.ibge);
   const cidNorm = normalizarTexto_(mun.nome);
 
@@ -227,17 +232,25 @@ function coletarNoticiasCidade_(mun, modo) {
     // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
     const primeiraColeta = modo !== 'materias' && (!atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_ ||
       ((atual.ocorrencias || []).length < MIN_NOTICIAS_HISTORICO_ && Date.now() - (atual.historicoEm || 0) > 86400000));
+    // Histórico já feito (outra aba ou o robô chegou antes): nada a buscar nesta etapa
+    if (modo === 'historico' && !primeiraColeta) { resultado.registro = atual; return resultado; }
+    const etapaRapida = modo === 'busca' && primeiraColeta;
+    const partes = etapaRapida ? { fatias: false, bairros: false, feeds: false }
+      : modo === 'historico' ? { base: false, imprensa: false, gdelt: false } : {};
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
     const janela = primeiraColeta ? CONFIG.DIAS_JANELA_NOTICIAS + 'd'
       : Math.min(CONFIG.DIAS_JANELA_NOTICIAS, Math.ceil((Date.now() - atual.coletadoEm) / 86400000) + 3) + 'd';
-    const bairrosOsm = obterBairrosOsm_(mun);
-    const candidatos = modo === 'materias' ? [] : buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm);
+    const bairrosOsm = obterBairrosOsm_(mun, etapaRapida);
+    medir('bairros');
+    const candidatos = modo === 'materias' ? [] : buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm, partes);
+    medir('busca');
 
     // 2. Deduplicação contra o que já existe no arquivo
     const idsExistentes = new Set(atual.ocorrencias.map(o => o.id));
     const assinaturas = atual.ocorrencias.map(o => assinaturaTitulo_(o.t));
-    const ctx = criarContextoGeo_(mun, atual.locais, { restantes: CONFIG.MAX_GEOCODING_POR_COLETA });
+    // Etapa rápida: poucas geocodificações (cada uma leva ~1 s); o resto fica pendente para as próximas
+    const ctx = criarContextoGeo_(mun, atual.locais, { restantes: etapaRapida ? 5 : CONFIG.MAX_GEOCODING_POR_COLETA });
     adicionarBairrosOsm_(ctx, bairrosOsm);
     const novas = [];
 
@@ -308,6 +321,7 @@ function coletarNoticiasCidade_(mun, modo) {
       resultado.materiasLidas = semLocal.length;
     }
 
+    medir('localizacao');
     // 4. Gravação: relê a versão mais nova sob trava e mescla
     // `m` = quando o registro entrou ou mudou: o painel pede só o que mudou desde a última abertura
     const agora = Date.now();
@@ -332,12 +346,18 @@ function coletarNoticiasCidade_(mun, modo) {
       if (reg.filtroHomonimos !== 2) reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
       if (modo !== 'materias') reg.coletadoEm = agora;
-      if (primeiraColeta) { reg.historicoEm = agora; reg.versaoFiltro = VERSAO_FILTRO_CIDADE_; }
+      if (primeiraColeta && !etapaRapida) { reg.historicoEm = agora; reg.versaoFiltro = VERSAO_FILTRO_CIDADE_; }
       return podarRegistroCidade_(reg);
     });
 
-    atualizarResumoUf_(mun, salvo);
-    atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm });
+    medir('gravacao');
+    // Resumo do estado e índice: se falharem, as notícias já gravadas continuam valendo para o painel
+    try { atualizarResumoUf_(mun, salvo); } catch (e) { Logger.log('Resumo do estado não atualizado: ' + e.message); }
+    try { atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm }); } catch (e) { Logger.log('Índice não atualizado: ' + e.message); }
+    medir('resumo');
+    resultado.historicoPendente = etapaRapida;
+    resultado.tempos.total = Date.now() - inicioColeta;
+    Logger.log('Coleta ' + mun.nome + '/' + mun.uf + ' (' + (modo || 'robô') + '): ' + JSON.stringify(resultado.tempos));
 
     resultado.novasOcorrencias = novas.length;
     resultado.revalidadas = Object.keys(revalidadas).length;
@@ -373,10 +393,12 @@ function podarRegistroCidade_(reg) {
  * Google News RSS, em paralelo: crimes, polícia, locais, órgãos (PRF, Guarda
  * Municipal, COPOM, SSP) e buscas direcionadas aos sites da imprensa local do estado.
  */
-function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
+function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm, partes) {
+  // partes: { base, fatias, imprensa, bairros, gdelt, feeds } (padrão: tudo)
+  partes = partes || {};
   const nome = mun.nome;
   const uf = mun.uf;
-  const queries = [
+  const queries = partes.base === false ? [] : [
     `("assalto" OR "roubo" OR "homicídio" OR "tiroteio" OR "latrocínio" OR "morto a tiros" OR "furto") "${nome}" ${uf} when:${janela}`,
     `("Polícia Militar" OR "Polícia Civil" OR "PRF" OR "operação policial" OR "preso" OR "tráfico") "${nome}" ${uf} when:${janela}`,
     `("bairro" OR "rua" OR "avenida") ("polícia" OR "crime" OR "baleado" OR "assaltado") "${nome}" ${uf} when:${janela}`,
@@ -385,7 +407,7 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
   // Histórico (12 meses): o Google Notícias devolve no máximo ~100 itens por busca, os mais recentes.
   // Em cidade grande isso cobre poucas semanas; por isso a busca principal é repetida mês a mês e a de
   // polícia trimestre a trimestre. Em cidade pequena as fatias voltam quase vazias, sem custo real.
-  if (janela === CONFIG.DIAS_JANELA_NOTICIAS + 'd') {
+  if (janela === CONFIG.DIAS_JANELA_NOTICIAS + 'd' && partes.fatias !== false) {
     const dia = d => Utilities.formatDate(d, CONFIG.FUSO, 'yyyy-MM-dd');
     const agora = Date.now();
     for (let m = 0; m < 12; m++) {
@@ -398,14 +420,14 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
     }
   }
   const dominios = ['g1.globo.com'].concat(IMPRENSA_LOCAL_UF[uf] || []);
-  for (let i = 0; i < dominios.length && i / DOMINIOS_POR_BUSCA_ < MAX_BUSCAS_IMPRENSA_LOCAL_; i += DOMINIOS_POR_BUSCA_) {
+  for (let i = 0; partes.imprensa !== false && i < dominios.length && i / DOMINIOS_POR_BUSCA_ < MAX_BUSCAS_IMPRENSA_LOCAL_; i += DOMINIOS_POR_BUSCA_) {
     const sites = dominios.slice(i, i + DOMINIOS_POR_BUSCA_).map(d => 'site:' + d).join(' OR ');
     queries.push(`(${sites}) "${nome}" ("polícia" OR "crime" OR "preso" OR "morto" OR "assalto" OR "baleado") when:${janela}`);
   }
   // Busca por bairro: sempre 12 meses, para encher o histórico dos bairros aos poucos
   const nomesBairros = (bairrosOsm || []).map(b => String(b.n || '').trim())
     .filter(n => n.length >= 4 && normalizarTexto_(n) !== cidNorm && n.indexOf('"') === -1);
-  if (nomesBairros.length) {
+  if (nomesBairros.length && partes.bairros !== false) {
     const porColeta = BAIRROS_POR_BUSCA_ * MAX_BUSCAS_BAIRROS_;
     const rodada = Math.floor(Date.now() / (6 * 3600000));
     const inicio = nomesBairros.length > porColeta ? (rodada * porColeta) % nomesBairros.length : 0;
@@ -427,16 +449,16 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
   // O GDELT limita IPs compartilhados (responde 429); depois de um 429, fica 15 minutos sem consultar.
   const diasJanela = parseInt(janela, 10) || 3;
   const cacheScript = CacheService.getScriptCache();
-  const usarGdelt = !cacheScript.get('GDELT_PAUSA');
+  const usarGdelt = partes.gdelt !== false && !cacheScript.get('GDELT_PAUSA');
   if (usarGdelt) requests.push({ url: urlGdelt_(nome, diasJanela), method: 'get', muteHttpExceptions: true });
   const indiceGdelt = usarGdelt ? requests.length - 1 : Infinity;
 
   let respostas = [];
   try {
-    respostas = UrlFetchApp.fetchAll(requests);
+    respostas = requests.length ? UrlFetchApp.fetchAll(requests) : [];
   } catch (erro) {
     Logger.log(`Falha na busca RSS (${nome}/${uf}): ${erro.message}`);
-    return candidatosFeedsDiretos_(mun, bairrosOsm, new Set(), Date.now() - CONFIG.DIAS_JANELA_NOTICIAS * 86400000);
+    return partes.feeds === false ? [] : candidatosFeedsDiretos_(mun, bairrosOsm, new Set(), Date.now() - CONFIG.DIAS_JANELA_NOTICIAS * 86400000);
   }
 
   const limiteData = Date.now() - CONFIG.DIAS_JANELA_NOTICIAS * 86400000;
@@ -495,7 +517,8 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
   const doGdelt = gdelt ? candidatosGdelt_(gdelt, mun, uf, bairrosOsm, linksVistos, limiteData) : [];
   // Feeds RSS diretos dos jornais do estado (9_Feeds_RSS) vêm primeiro: link real e
   // publicação mais recente; a mesma matéria achada no Google Notícias cai na deduplicação
-  return candidatosFeedsDiretos_(mun, bairrosOsm, linksVistos, limiteData).concat(candidatos, doGdelt);
+  const diretos = partes.feeds === false ? [] : candidatosFeedsDiretos_(mun, bairrosOsm, linksVistos, limiteData);
+  return diretos.concat(candidatos, doGdelt);
 }
 
 /** Busca no GDELT DOC 2.0: notícias em português de veículos brasileiros que citam a cidade e um crime. */
@@ -636,7 +659,7 @@ function obterBairrosIbge_(mun) {
  * Bairros do município: primeiro a malha oficial do IBGE; onde o IBGE não tem,
  * o OpenStreetMap. Guardados no Drive por 90 dias.
  */
-function obterBairrosOsm_(mun) {
+function obterBairrosOsm_(mun, semOverpass) {
   const nome = 'bairros_' + mun.ibge + '.json';
   const salvo = lerJson_(nome);
   if (salvo && salvo.fonte === 'IBGE' && Date.now() - salvo.em < DIAS_VALIDADE_BAIRROS_ * 86400000) return salvo.itens;
@@ -654,6 +677,8 @@ function obterBairrosOsm_(mun) {
     return salvo.itens;
   }
 
+  // Primeira etapa da primeira consulta: o Overpass pode levar minutos; fica para a etapa do histórico
+  if (semOverpass) return salvo ? salvo.itens : [];
   // Falhou há pouco: não tenta de novo por 6 h (Overpass fora do ar não atrasa a coleta)
   const cache = CacheService.getScriptCache();
   const chaveFalha = 'OSMFALHA|' + mun.ibge;

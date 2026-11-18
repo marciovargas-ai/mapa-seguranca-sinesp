@@ -21,8 +21,7 @@ const INMET_CORES_ = { 1: '#E6B800', 2: '#F57C00', 3: '#C62828' };
 function atualizarAvisosInmet_(forcar) {
   const atual = lerJson_(ARQUIVO_INMET_) || { atualizado: 0, avisos: [] };
   if (!forcar && Date.now() - (atual.atualizado || 0) < INMET_VALIDADE_MS_) return atual;
-  const trava = LockService.getScriptLock();
-  if (!trava.tryLock(3000)) return atual;
+  if (!pegarTravaTarefa_('inmet', 180)) return atual;
   try {
     const agora = Date.now();
     const resp = UrlFetchApp.fetch(INMET_RSS_, { muteHttpExceptions: true, followRedirects: true });
@@ -77,7 +76,7 @@ function atualizarAvisosInmet_(forcar) {
     try { gravarJson_(ARQUIVO_INMET_, volta); } catch (e2) {}
     return volta;
   } finally {
-    trava.releaseLock();
+    soltarTravaTarefa_('inmet');
   }
 }
 
