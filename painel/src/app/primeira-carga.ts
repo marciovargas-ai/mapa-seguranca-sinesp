@@ -1,10 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { PainelStore, PrimeiraCarga } from './core/painel.store';
+import { PainelStore } from './core/painel.store';
 
-type Estado = 'feito' | 'ativo' | 'espera';
-const ORDEM: PrimeiraCarga['etapa'][] = ['recentes', 'historico', 'bairros', 'pronto'];
 
 /**
  * Aviso da primeira consulta de uma cidade: explica a espera e mostra o andamento de cada etapa.
@@ -23,23 +21,26 @@ const ORDEM: PrimeiraCarga['etapa'][] = ['recentes', 'historico', 'bairros', 'pr
           <button mat-icon-button (click)="store.fecharPrimeiraCarga()" aria-label="Fechar aviso"><mat-icon>close</mat-icon></button>
         </header>
         @if (p.etapa === 'pronto') {
-          <p>Pronto: {{ p.noticias }} notícias encontradas em {{ tempo() }}. Nas próximas vezes a cidade abre na hora.</p>
+          <p>Pronto em {{ tempo() }}: {{ p.noticias }} {{ p.noticias === 1 ? 'notícia encontrada' : 'notícias encontradas' }}. O histórico de 12 meses e o bairro de cada notícia
+            continuam em segundo plano e entram sozinhos no painel. Nas próximas vezes a cidade abre na hora.</p>
         } @else if (p.etapa === 'erro') {
           <p>A busca de notícias não terminou agora. Os dados oficiais continuam valendo, e o robô tenta de novo em segundo plano.</p>
         } @else {
-          <p>Os dados oficiais já estão na tela. Agora o sistema busca 12 meses de notícias em várias fontes e localiza cada uma no mapa.
+          <p>Os dados oficiais já estão na tela. Agora o sistema busca as notícias recentes desta cidade em várias fontes.
             Esta espera só acontece na primeira vez que a cidade é consultada: depois ela fica guardada e abre na hora.</p>
         }
         <ol>
-          <li class="feito"><mat-icon>check</mat-icon>Estatística oficial (Sinesp) e mapa</li>
-          @for (e of etapas(); track e.nome) {
-            <li [class]="e.estado">
-              @if (e.estado === 'ativo') { <span class="girando"></span> } @else { <mat-icon>{{ e.estado === 'feito' ? 'check' : 'radio_button_unchecked' }}</mat-icon> }
-              {{ e.nome }}
-            </li>
+          <li class="feito"><mat-icon>check</mat-icon>Estatística oficial (Sinesp) e mapa @if (seg(p.tempos?.oficial); as s) { <small class="t">{{ s }}</small> }</li>
+          @if (p.etapa === 'recentes') {
+            <li class="ativo"><span class="girando"></span>Notícias recentes e imprensa local</li>
+          } @else {
+            <li [class]="p.etapa === 'erro' ? 'espera' : 'feito'"><mat-icon>{{ p.etapa === 'erro' ? 'radio_button_unchecked' : 'check' }}</mat-icon>Notícias recentes e imprensa local
+              @if (seg(p.tempos?.recentes); as s) { <small class="t">{{ s }}</small> }</li>
           }
+          <li class="espera"><mat-icon>schedule</mat-icon>Histórico de 12 meses e bairros: em segundo plano</li>
         </ol>
-        @if (p.etapa !== 'pronto' && p.etapa !== 'erro') { <small>Tempo: {{ tempo() }} · você pode usar o painel enquanto isso.</small> }
+        @if (p.etapa === 'recentes') { <small>Tempo: {{ tempo() }} · você pode usar o painel enquanto isso.</small> }
+        @if (p.etapa === 'pronto' && servidor(); as sv) { <small class="medicao">No servidor: {{ sv }}</small> }
       </section>
     }
   `,
@@ -62,6 +63,8 @@ const ORDEM: PrimeiraCarga['etapa'][] = ['recentes', 'historico', 'bairros', 'pr
     .girando { width: 14px; height: 14px; margin: 2px; border-radius: 50%; border: 2px solid #fbd0c5; border-top-color: #EE4D2D; animation: girar .8s linear infinite; }
     @keyframes girar { to { transform: rotate(360deg); } }
     small { display: block; margin-top: 8px; color: var(--mat-sys-on-surface-variant, #6b7280); }
+    small.t { display: inline; margin: 0 0 0 auto; font-variant-numeric: tabular-nums; }
+    small.medicao { font-size: 11px; opacity: .8; }
     @media (max-width: 600px) { .cartao-primeira { bottom: 84px; } }
   `,
 })
@@ -74,19 +77,19 @@ export class PrimeiraCargaComponent implements OnDestroy {
 
   protected readonly tempo = computed(() => {
     const p = this.p(); if (!p) return '';
-    const s = Math.max(0, Math.round((this.agora() - p.inicio) / 1000));
+    // Pronto: o tempo para no instante em que as notícias chegaram
+    const ms = p.etapa === 'pronto' && p.tempos?.recentes != null ? p.tempos.recentes : this.agora() - p.inicio;
+    const s = Math.max(0, Math.round(ms / 1000));
     return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
   });
 
-  protected readonly etapas = computed(() => {
-    const p = this.p(); if (!p) return [];
-    const atual = p.etapa === 'erro' ? -1 : ORDEM.indexOf(p.etapa);
-    const estado = (i: number): Estado => (p.etapa === 'erro' ? 'espera' : i < atual ? 'feito' : i === atual ? 'ativo' : 'espera');
-    return [
-      { nome: 'Notícias recentes e imprensa local', estado: estado(0) },
-      { nome: 'Histórico de 12 meses, mês a mês', estado: estado(1) },
-      { nome: 'Bairro de cada notícia (leitura das matérias)', estado: estado(2) },
-    ];
+  protected seg(ms: number | undefined): string { return ms == null ? '' : ms < 10000 ? `${(ms / 1000).toFixed(1).replace('.', ',')} s` : `${Math.round(ms / 1000)} s`; }
+
+  /** Tempos medidos dentro do servidor na busca das notícias recentes (para achar a etapa lenta). */
+  protected readonly servidor = computed(() => {
+    const t = this.p()?.tempos?.servidor; if (!t) return '';
+    const nomes: Record<string, string> = { bairros: 'bairros', busca: 'busca', localizacao: 'localização', gravacao: 'gravação', resumo: 'resumo' };
+    return Object.keys(nomes).filter((k) => t[k] != null).map((k) => `${nomes[k]} ${this.seg(t[k])}`).join(' · ');
   });
 
   constructor() {
@@ -94,7 +97,7 @@ export class PrimeiraCargaComponent implements OnDestroy {
     effect(() => {
       const etapa = this.p()?.etapa;
       clearTimeout(this.fechar);
-      if (etapa === 'pronto' || etapa === 'erro') this.fechar = setTimeout(() => this.store.fecharPrimeiraCarga(), etapa === 'pronto' ? 12000 : 20000);
+      if (etapa === 'pronto' || etapa === 'erro') this.fechar = setTimeout(() => this.store.fecharPrimeiraCarga(), etapa === 'pronto' ? 15000 : 20000);
     });
   }
 

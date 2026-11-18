@@ -1,6 +1,6 @@
 import { CATEGORIA_POR_ID, ORGAO_POR_ID } from './dados';
 import { Filtrados, Insight, Oficial, Panorama } from './modelos';
-import { DIAS_SEMANA, fmt, fmt1, normalizar, pct, rotuloPeriodo, variacao } from './util';
+import { cadaN, DIAS_SEMANA, fmt, fmt1, normalizar, pct, rotuloPeriodo, variacao } from './util';
 
 const DIAS_EXTENSO = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const minusc = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -70,8 +70,8 @@ export function gerarInsights(c: Contexto): Insight[] {
         const acima = destaque.r > 1;
         oficiais.push({
           icone: acima ? 'priority_high' : 'verified', tom: acima ? 'alerta' : 'positivo', fonte: 'Sinesp + IBGE',
-          titulo: acima ? `${fmt1(destaque.r)}× a taxa do estado` : `Taxa ${pct(1 - destaque.r, 1)}% menor que a do estado`,
-          texto: `${destaque.e.nome}: ${fmt1(destaque.e.taxa)} por 100 mil habitantes em ${c.cidade}, contra ${fmt1(destaque.e.taxaEstado)} no estado (12 meses).`,
+          titulo: acima ? `${fmt1(destaque.r)}× a proporção do estado` : `Proporção ${pct(1 - destaque.r, 1)}% menor que a do estado`,
+          texto: `${destaque.e.nome}: 1 caso a cada ${cadaN(destaque.e.taxa)} habitantes em ${c.cidade}, contra 1 a cada ${cadaN(destaque.e.taxaEstado)} no estado (12 meses).`,
         });
       }
     }
@@ -87,7 +87,7 @@ export function gerarInsights(c: Contexto): Insight[] {
             icone: 'leaderboard', tom: posTotal < 3 ? 'alerta' : 'neutro', fonte: 'Sinesp',
             titulo: `${ordinal(posTotal + 1)} do estado em ${minusc(r.evento)}`,
             texto: `Entre ${fmt(r.municipiosComRegistro)} municípios com registro nos últimos 12 meses` +
-              (posTaxa >= 0 ? `; ${ordinal(posTaxa + 1)} na taxa por 100 mil habitantes.` : '.'),
+              (posTaxa >= 0 ? `; ${ordinal(posTaxa + 1)} em proporção à população.` : '.'),
           });
           break;
         }
@@ -146,8 +146,8 @@ export function gerarInsights(c: Contexto): Insight[] {
     if (taxa) {
       oficiais.push({
         icone: 'percent', tom: 'alerta', fonte: 'Sinesp + IBGE',
-        titulo: `Maior taxa: ${taxa.n}`,
-        texto: `${r.evento}: ${fmt1(taxa.taxa)} por 100 mil habitantes (municípios com 20 mil habitantes ou mais).`,
+        titulo: `Maior proporção: ${taxa.n}`,
+        texto: `${r.evento}: 1 caso a cada ${cadaN(taxa.taxa)} habitantes (municípios com 20 mil habitantes ou mais).`,
       });
     }
   }

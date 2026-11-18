@@ -29,8 +29,9 @@ const INSTRUCOES_AGENTE_ = [
   'Notícias são complemento: não trate contagem de notícias como estatística oficial.',
   'Quando houver vários números, organize em tabela Markdown. Seja breve: no máximo uns 15 itens ou linhas.',
   'COMPARAÇÕES E ANÁLISES:',
-  '- Se o JSON tiver "comparacao", ele traz os dados oficiais do Sinesp dos outros locais citados na pergunta (mesmos 12 meses e mesma regra). Use-os junto com "comparacao.localAberto" (ou "resumoOficial") e monte uma tabela lado a lado: mortes violentas em 12 meses, taxa por 100 mil, variação sobre os 12 meses anteriores e os principais crimes.',
-  '- Compare sempre pela taxa por 100 mil habitantes; o total sozinho engana quando as populações são diferentes. Diga quantas vezes uma taxa é maior que a outra.',
+  '- Se o JSON tiver "comparacao", ele traz os dados oficiais do Sinesp dos outros locais citados na pergunta (mesmos 12 meses e mesma regra). Use-os junto com "comparacao.localAberto" (ou "resumoOficial") e monte uma tabela lado a lado: mortes violentas em 12 meses, proporção (1 a cada N habitantes), variação sobre os 12 meses anteriores e os principais crimes.',
+  '- Compare sempre em proporção à população; o total sozinho engana quando as populações são diferentes. Diga quantas vezes uma proporção é maior que a outra.',
+  '- Os campos "taxa" do JSON estão por 100 mil habitantes, mas escreva sempre na forma usada no painel: "1 morte a cada N habitantes" (N = 100.000 ÷ taxa, arredondado: 57,2 vira 1 a cada 1.700). Não escreva "por 100 mil": confunde em cidades com menos de 100 mil moradores. Em cidade pequena, diga também o número absoluto (ex.: 9 mortes para 15.730 moradores).',
   '- Se um local da comparação vier com "semDados", diga que o Sinesp não publicou dados dele e compare só o que existe.',
   '- "brasil" traz a taxa nacional de mortes violentas; "rankingEstado" traz os municípios do estado com maiores e menores taxas e mais mortes; "posicaoNoEstado" traz a posição do local; "serieMensalMortesViolentas" traz a evolução mês a mês. Use esses blocos para comparar com o estado e o país, montar rankings e dizer se a tendência é de alta ou de queda.',
   '- Se pedirem a comparação com um lugar que não está no JSON, diga que não recebeu os dados dele e peça para escrever o nome da cidade e a sigla do estado (ex.: "Compare com Porto Alegre RS").'
@@ -39,7 +40,7 @@ const INSTRUCOES_AGENTE_ = [
 /** Com o painel em inglês, a resposta sai em inglês americano (os dados do painel continuam em português). */
 const INSTRUCAO_INGLES_ = 'IMPORTANT: the user is reading the dashboard in American English. Answer in American English, clearly and objectively, ' +
   'even though the dashboard data and these instructions are in Portuguese. Translate crime names, labels and table headers into English ' +
-  '(e.g. "mortes violentas" = violent deaths, "roubo" = robbery, "taxa por 100 mil" = rate per 100k). Keep place names and news headlines as they are. ' +
+  '(e.g. "mortes violentas" = violent deaths, "roubo" = robbery, "1 a cada N habitantes" = "1 in every N residents"). Keep place names and news headlines as they are. ' +
   'Use US number format (1,234.5).';
 
 /** Diz ao painel se o agente está configurado (sem expor a chave). */

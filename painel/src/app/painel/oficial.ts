@@ -5,7 +5,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ESTADOS, ORGAO_POR_ID } from '../core/dados';
 import { EventoOficial, Oficial } from '../core/modelos';
 import { PainelStore } from '../core/painel.store';
-import { fmt, fmt1, MESES, urlSegura } from '../core/util';
+import { cadaN, fmt, fmt1, MESES, urlSegura } from '../core/util';
 import { DeltaComponent, GraficoComponent, SparklineComponent } from './comuns';
 
 const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
@@ -109,10 +109,10 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
               }
             </div>
             <div class="ind-rodape">
-              @if (e.taxa !== null) {
+              @if (e.taxa) {
                 <span [matTooltip]="'Últimos 12 meses publicados (' + o.periodo + ')'">
-                  <b>{{ f1(e.taxa) }}</b> por 100 mil
-                  @if (e.taxaEstado) { <small class="comparado" [class.acima]="e.taxa > e.taxaEstado * 1.1" [class.abaixo]="e.taxa < e.taxaEstado * 0.9">· estado {{ f1(e.taxaEstado) }}</small> }
+                  1 a cada <b>{{ cadaN(e.taxa) }}</b> hab.
+                  @if (e.taxaEstado) { <small class="comparado" [class.acima]="e.taxa > e.taxaEstado * 1.1" [class.abaixo]="e.taxa < e.taxaEstado * 0.9">· estado: 1 a cada {{ cadaN(e.taxaEstado) }}</small> }
                 </span>
               } @else {
                 <span>12 meses: <b>{{ n(e.total) }}</b></span>
@@ -184,6 +184,7 @@ export class OficialComponent {
   protected readonly coresAnos = CORES_ANOS;
   protected readonly n = (v: number | null | undefined) => (v == null ? '—' : fmt(v));
   protected readonly f1 = fmt1;
+  protected readonly cadaN = cadaN;
   protected readonly url = urlSegura;
 
   protected readonly titulo = computed(() =>

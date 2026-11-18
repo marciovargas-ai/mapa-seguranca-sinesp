@@ -153,7 +153,7 @@ export class AgenteComponent {
     const extra: string[] = [];
     if (est && !ehEstado && normalizar(cidade) !== normalizar(est.capital)) extra.push(`Compare ${cidade} com ${est.capital}`);
     else if (est && !ehEstado) extra.push(`Compare ${cidade} com o estado de ${est.nome} e com o Brasil`);
-    extra.push(ehEstado ? `Quais cidades de ${est?.nome || uf} têm as maiores taxas de mortes violentas?` : 'Como este local está em relação ao estado e ao Brasil?');
+    extra.push(ehEstado ? `Quais cidades de ${est?.nome || uf} têm a maior proporção de mortes violentas?` : 'Como este local está em relação ao estado e ao Brasil?');
     return [SUGESTOES[0], ...extra, ...SUGESTOES.slice(1)];
   });
   protected readonly texto = signal('');

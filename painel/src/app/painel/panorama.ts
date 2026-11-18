@@ -6,7 +6,7 @@ import { corCategoria, nomeCategoria } from '../core/compilado';
 import { Tiroteio, UFS_FOGO_CRUZADO } from '../core/areas';
 import { aplicarPeriodo, mesesDoPeriodo } from '../core/periodo';
 import { PainelStore } from '../core/painel.store';
-import { fmt, fmt1, normalizar, pct, variacao } from '../core/util';
+import { cadaN, fmt, fmt1, normalizar, pct, variacao } from '../core/util';
 import { DeltaComponent, GraficoComponent } from './comuns';
 import { InsightsComponent } from './insights';
 import { FACCOES } from '../core/faccoes';
@@ -207,15 +207,15 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     } @else if (c.municipios.length) {
       <section class="cartao">
         <div class="titulo-bloco">
-          <h3 matTooltip="Taxa de mortes violentas intencionais por 100 mil habitantes nos últimos 12 meses, só municípios com 20 mil habitantes ou mais.">
+          <h3 matTooltip="Mortes violentas intencionais em proporção à população nos últimos 12 meses (1 morte a cada N habitantes), só municípios com 20 mil habitantes ou mais.">
             Municípios mais violentos <mat-icon class="info">info</mat-icon></h3>
-          <span class="nota">MVI por 100 mil · 12 meses</span>
+          <span class="nota">1 morte a cada N habitantes · 12 meses</span>
         </div>
         <div class="tabela" role="table">
-          <div class="linha cabeca m" role="row"><span>Município</span><span>Taxa</span><span>Casos</span><span>Antes</span></div>
+          <div class="linha cabeca m" role="row"><span>Município</span><span>1 a cada</span><span>Casos</span><span>Antes</span></div>
           @for (m of c.municipios; track m.nome; let i = $index) {
             <button type="button" class="linha m" role="row" (click)="store.abrirLocal(store.uf(), m.nome)">
-              <span class="b-nome">{{ i + 1 }}. {{ m.nome }}</span><b>{{ f1(m.taxa) }}</b><span>{{ fmt(m.total) }}</span><span>{{ fmt(m.anterior) }}</span>
+              <span class="b-nome">{{ i + 1 }}. {{ m.nome }}</span><b>{{ m.taxa ? cadaN(m.taxa) : '—' }}</b><span>{{ fmt(m.total) }}</span><span>{{ fmt(m.anterior) }}</span>
             </button>
           }
         </div>
@@ -334,6 +334,7 @@ export class PanoramaComponent {
   protected readonly store = inject(PainelStore);
   protected readonly fmt = fmt;
   protected readonly f1 = fmt1;
+  protected readonly cadaN = cadaN;
   protected readonly cor = corCategoria;
   protected readonly nomeCat = nomeCategoria;
   protected readonly carregando = computed(() => this.store.carregando() && (!this.store.dados() || !!this.store.dados()!.vazio));

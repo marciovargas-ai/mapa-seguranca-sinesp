@@ -156,6 +156,11 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .leaflet-container:not(.zoom-perto) .ponto-oficial { display: none; }
 .popup-tags { margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .popup-tag { font-weight: 600; }
+.marcador-sem-local div { position: absolute; transform: translate(-50%, 10px); white-space: nowrap; padding: 4px 10px; border-radius: 14px;
+  background: #fff; color: #334155; border: 2px dashed #64748b; font: 500 12px/16px Roboto, sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; }
+.marcador-sem-local div b { color: #0f172a; font-weight: 700; }
+html.tema-escuro .marcador-sem-local div { background: #14274c; color: #cbd5e1; border-color: #94a3b8; }
+html.tema-escuro .marcador-sem-local div b { color: #fff; }
 .rotulo-zona div { width: 24px; height: 24px; border-radius: 50%; color: #fff; font: 700 12px/24px Roboto, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 html.tema-escuro .leaflet-popup-content-wrapper, html.tema-escuro .leaflet-popup-tip { background: #14274c; color: #eef2f9; }
 html.tema-escuro .popup-meta { color: #a9b6cf; }

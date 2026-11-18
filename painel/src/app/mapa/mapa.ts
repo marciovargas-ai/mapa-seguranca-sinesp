@@ -15,7 +15,7 @@ import { Camadas, PainelStore, Relato, UnidadeShopee } from '../core/painel.stor
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, baixarDadosPublicos, IspMunicipio, Tiroteio } from '../core/areas';
-import { esc, fetchComTimeout, fmt, fmt1, normalizar, urlSegura } from '../core/util';
+import { cadaN, esc, fetchComTimeout, fmt, normalizar, umACada, urlSegura } from '../core/util';
 
 declare const L: any;
 
@@ -71,7 +71,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     @if (legendaCoropletico(); as leg) {
       <div class="legenda">
         <div class="legenda-titulo">{{ leg.titulo }}</div>
-        <div class="legenda-sub">por 100 mil habitantes · 12 meses</div>
+        <div class="legenda-sub">1 caso a cada N habitantes · 12 meses</div>
         <div class="escala">
           @for (f of leg.faixas; track $index) {
             <span><i [style.background]="f.cor"></i>{{ f.rotulo }}</span>
@@ -192,8 +192,8 @@ export class MapaComponent implements OnDestroy {
     { id: 'delegacias', nome: 'Áreas de delegacia (oficial, RJ)', icone: 'local_police' },
     { id: 'bairros', nome: 'Nomes dos bairros', icone: 'label' },
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
-    { id: 'vizinhos', nome: 'Municípios vizinhos (taxa oficial)', icone: 'grid_view' },
-    { id: 'coropletico', nome: 'Taxa por município (aba Estado)', icone: 'map' },
+    { id: 'vizinhos', nome: 'Municípios vizinhos (proporção oficial)', icone: 'grid_view' },
+    { id: 'coropletico', nome: 'Proporção por município (aba Estado)', icone: 'map' },
     { id: 'unidades', nome: 'Unidades Shopee', icone: 'warehouse' },
     { id: 'relatos', nome: 'Relatos das equipes Shopee', icone: 'campaign' },
     { id: 'prf', nome: 'Trechos com mais acidentes nas BRs (PRF)', icone: 'add_road' },
@@ -262,7 +262,7 @@ export class MapaComponent implements OnDestroy {
     const limites = this.limites(Object.values(r.valoresTaxa));
     if (!limites.length) return null;
     const faixas = ESCALA.slice(0, limites.length + 1).map((cor, i) => ({
-      cor, rotulo: i === 0 ? 'até ' + fmt1(limites[0]) : i === limites.length ? 'acima de ' + fmt1(limites[i - 1]) : fmt1(limites[i - 1]) + '–' + fmt1(limites[i]),
+      cor, rotulo: i === 0 ? 'mais de ' + cadaN(limites[0]) : i === limites.length ? 'menos de ' + cadaN(limites[i - 1]) : cadaN(limites[i]) + '–' + cadaN(limites[i - 1]),
     }));
     return { titulo: r.evento, faixas };
   });
@@ -379,6 +379,8 @@ export class MapaComponent implements OnDestroy {
     // Número da zona acima dos pontos de notícia (senão o agrupamento de pontos no mesmo lugar cobre o número e o clique não abre o balão)
     const pZR = map.createPane('paneZonasRotulo'); pZR.style.zIndex = 630;
     const pR = map.createPane('paneRotulos'); pR.style.zIndex = 640;
+    // Acima dos nomes de bairro, para o marcador de notícias sem endereço continuar clicável no centro da cidade
+    const pSL = map.createPane('paneSemLocal'); pSL.style.zIndex = 645;
 
     // Mapas base da Esri: não exigem chave de API
     const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
@@ -742,13 +744,22 @@ export class MapaComponent implements OnDestroy {
   }
 
   /** Resumo oficial do município ao clicar no contorno. */
+  /** Lista das notícias da cidade que não trazem rua nem bairro reconhecível. */
+  private popupSemLocal(lista: Ocorrencia[]): string {
+    const itens = lista.slice(0, 15).map((o) =>
+      `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>${esc(o.data)}</small></li>`).join('');
+    return `<div class="popup"><b>${esc(this.store.nomeLocal())}: ${fmt(lista.length)} ${lista.length === 1 ? 'notícia' : 'notícias'} sem endereço</b>` +
+      `<br><small>A notícia cita a cidade, mas não a rua nem o bairro. O marcador fica no centro da cidade e não indica o local do fato.</small>` +
+      `<ul class="lista-sem-local">${itens}</ul>` + (lista.length > 15 ? `<small>Mais ${fmt(lista.length - 15)} na aba Notícias.</small>` : '') + '</div>';
+  }
+
   private popupFronteira(): string {
     const o = this.store.oficial();
     const nome = this.store.nomeLocal();
     let corpo = '<br><small>Estatística oficial indisponível para este local.</small>';
     if (o?.disponivel && o.anos) {
       corpo = '<ul class="lista-sem-local">' + o.eventos.slice(0, 5).map((e) =>
-        `<li>${esc(e.nome)}: <b>${e.porAno[2] == null ? '—' : fmt(e.porAno[2])}</b> em ${o.anos![2]}${e.taxa != null ? ` · ${fmt1(e.taxa)} por 100 mil` : ''}</li>`).join('') +
+        `<li>${esc(e.nome)}: <b>${e.porAno[2] == null ? '—' : fmt(e.porAno[2])}</b> em ${o.anos![2]}${e.taxa ? ` · 1 a cada ${cadaN(e.taxa)} hab.` : ''}</li>`).join('') +
         `</ul><small>Sinesp · ${esc(o.periodoTresAnos || '')}</small>`;
     }
     return `<div class="popup"><b>${esc(nome)}</b>${corpo}</div>`;
@@ -768,8 +779,21 @@ export class MapaComponent implements OnDestroy {
       if (this.cluster.addLayers) this.cluster.addLayers(pinos); else pinos.forEach((p) => this.cluster.addLayer(p));
     }
 
-    // Notícias sem local não viram marcador no centro da cidade: ficam listadas na legenda
+    // Notícias sem endereço exato: um único marcador no centro da cidade, com a lista. Não marca o local do crime
+    // (por isso não entra no calor nem nas zonas); só evita que o mapa de cidades pequenas, cujas notícias
+    // raramente trazem a rua, fique vazio. Vale para qualquer município aberto.
     this.layerSemLocal.clearLayers();
+    const d = this.store.dados();
+    if (c.pinos && mostrarNoticias && this.store.escopo() === 'CIDADE' && d && isFinite(d.centroLat) && isFinite(d.centroLng)) {
+      const noBairro = new Set(bairros.peloBairro.map((a) => a.o));
+      const sem = f.semLocal.filter((o) => !noBairro.has(o));
+      if (sem.length) {
+        const icone = L.divIcon({ className: 'marcador-sem-local', iconSize: [0, 0],
+          html: `<div><b>${fmt(sem.length)}</b> ${sem.length === 1 ? 'notícia' : 'notícias'} sem endereço</div>` });
+        this.layerSemLocal.addLayer(L.marker([d.centroLat, d.centroLng], { pane: 'paneSemLocal', icon: icone, keyboard: false })
+          .bindPopup(() => this.popupSemLocal(sem), { maxWidth: 360 }));
+      }
+    }
 
     this.desenharBairros(c.bairros && mostrarNoticias && this.store.escopo() === 'CIDADE' ? bairros.lista : [], f);
 
@@ -931,8 +955,8 @@ export class MapaComponent implements OnDestroy {
         const mun = municipioPorCodigo(cod);
         const taxa = r.valoresTaxa[cod];
         const t = totais[cod];
-        layer.bindTooltip(`<b>${esc(mun?.nome || cod)}</b><br>${taxa ? fmt1(taxa) + ' por 100 mil' : 'sem registro ou população'}`, { sticky: true, direction: 'top' });
-        layer.bindPopup(`<div class="popup"><b>${esc(mun?.nome || cod)}</b><br>${esc(r.evento)}: ${taxa ? fmt1(taxa) + ' por 100 mil habitantes' : 'sem taxa calculada'}` +
+        layer.bindTooltip(`<b>${esc(mun?.nome || cod)}</b><br>${taxa ? umACada(taxa) : 'sem registro ou população'}`, { sticky: true, direction: 'top' });
+        layer.bindPopup(`<div class="popup"><b>${esc(mun?.nome || cod)}</b><br>${esc(r.evento)}: ${taxa ? umACada(taxa) + ' em 12 meses' : 'sem proporção calculada'}` +
           (t ? `<br>${fmt(t.total)} registros nos últimos 12 meses (antes: ${fmt(t.anterior)})` : '') +
           (mun ? `<br><button class="popup-botao" data-abrir="${esc(uf + '|' + mun.nome)}">Abrir município</button>` : '') + '</div>');
         if (vizinhos && cod === codCidade) { layer.options.interactive = false; return; }

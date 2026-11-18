@@ -10,7 +10,7 @@ import { gerarInsights } from '../core/insights';
 import { LinhaRanking } from '../core/modelos';
 import { municipioPorCodigo, municipiosUf } from '../core/municipios';
 import { PainelStore } from '../core/painel.store';
-import { fmt, fmt1 } from '../core/util';
+import { cadaN, fmt, fmt1 } from '../core/util';
 import { DeltaComponent, SparklineComponent } from './comuns';
 import { InsightsComponent } from './insights';
 
@@ -43,7 +43,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
             <span class="kpi-rotulo">{{ e.nome }}</span>
             <b>{{ fmt(e.total) }}</b>
             <span class="kpi-sub"><app-delta [atual]="e.total" [anterior]="e.anterior" /> vs 12 meses anteriores</span>
-            @if (e.taxa !== null) { <span class="kpi-sub">{{ fmt1(e.taxa) }} por 100 mil hab.</span> }
+            @if (e.taxa) { <span class="kpi-sub">1 a cada {{ cadaN(e.taxa) }} habitantes</span> }
             <app-sparkline [valores]="e.serie" [largura]="140" [altura]="26" />
           </div>
         }
@@ -57,7 +57,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
       <section class="bloco">
         <div class="titulo-bloco">
           <h3>Municípios</h3>
-          <span class="nota">Clique num município para abri-lo. O mapa colore cada município pela taxa.</span>
+          <span class="nota">Clique num município para abri-lo. O mapa colore cada município pela proporção de casos.</span>
         </div>
         <mat-chip-listbox aria-label="Indicador" [value]="store.eventoPanorama()" (change)="$event.value !== undefined && store.eventoPanorama.set($event.value)">
           @for (r of p.rankings; track r.evento; let i = $index) { <mat-chip-option [value]="i">{{ r.evento }}</mat-chip-option> }
@@ -65,7 +65,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
 
         <mat-button-toggle-group class="visoes" [value]="visao()" (change)="visao.set($event.value)" aria-label="Ordenação" hideSingleSelectionIndicator>
           <mat-button-toggle value="total">Mais registros</mat-button-toggle>
-          <mat-button-toggle value="taxa">Maior taxa</mat-button-toggle>
+          <mat-button-toggle value="taxa">Maior proporção</mat-button-toggle>
           <mat-button-toggle value="altas">Maiores altas</mat-button-toggle>
           <mat-button-toggle value="quedas">Maiores quedas</mat-button-toggle>
         </mat-button-toggle-group>
@@ -75,7 +75,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
           @if (linhas().length) {
             <div class="tabela-rolagem">
               <table class="tabela">
-                <thead><tr><th>#</th><th>Município</th><th class="num">12 meses</th><th class="num">Anteriores</th><th class="num">Var.</th><th class="num">Por 100 mil</th></tr></thead>
+                <thead><tr><th>#</th><th>Município</th><th class="num">12 meses</th><th class="num">Anteriores</th><th class="num">Var.</th><th class="num">1 a cada</th></tr></thead>
                 <tbody>
                   @for (l of linhas(); track l.n; let i = $index) {
                     <tr (click)="abrir(l)" (keydown.enter)="abrir(l)" tabindex="0" [class.atual]="ehAtual(l)">
@@ -85,7 +85,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
                       <td class="num"><b>{{ fmt(l.total) }}</b></td>
                       <td class="num">{{ fmt(l.anterior) }}</td>
                       <td class="num"><app-delta [atual]="l.total" [anterior]="l.anterior" semTexto="—" /></td>
-                      <td class="num">{{ l.taxa === null ? '—' : fmt1(l.taxa) }}</td>
+                      <td class="num">{{ l.taxa ? cadaN(l.taxa) : '—' }}</td>
                     </tr>
                   }
                 </tbody>
@@ -96,7 +96,7 @@ type Visao = 'total' | 'taxa' | 'altas' | 'quedas';
           }
         }
       </section>
-      <p class="nota">Taxas calculadas com a população do IBGE {{ p.anoPopulacao }}. O ranking por taxa considera só municípios com 20 mil habitantes ou mais, para evitar distorção de cidades muito pequenas.</p>
+      <p class="nota">Proporções calculadas com a população do IBGE {{ p.anoPopulacao }}. O ranking por proporção considera só municípios com 20 mil habitantes ou mais, para evitar distorção de cidades muito pequenas.</p>
     }
   `,
   styles: `
@@ -132,6 +132,7 @@ export class EstadoComponent {
   protected readonly visao = signal<Visao>('total');
   protected readonly fmt = fmt;
   protected readonly fmt1 = fmt1;
+  protected readonly cadaN = cadaN;
 
   protected readonly panorama = computed(() => {
     const p = this.store.panorama();
@@ -151,7 +152,7 @@ export class EstadoComponent {
   });
   protected readonly explicacao = computed(() => ({
     total: 'Mais registros nos últimos 12 meses',
-    taxa: 'Maior taxa por 100 mil habitantes (municípios com 20 mil hab. ou mais)',
+    taxa: 'Mais casos em proporção à população: 1 caso a cada N habitantes (municípios com 20 mil hab. ou mais)',
     altas: 'Maior aumento em relação aos 12 meses anteriores',
     quedas: 'Maior redução em relação aos 12 meses anteriores',
   })[this.visao()]);

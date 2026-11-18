@@ -18,6 +18,20 @@ export const fmt1 = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
 
+/**
+ * Taxa por 100 mil → "N" de "1 a cada N habitantes", arredondado para leitura (1.754 → 1.800).
+ * O texto para o público usa essa forma em todo o Brasil: "por 100 mil" confunde em cidades com menos de 100 mil moradores.
+ */
+export function cadaN(taxa100mil: number | null | undefined): string {
+  if (taxa100mil == null || !(taxa100mil > 0)) return '—';
+  const n = 1e5 / taxa100mil;
+  const passo = n >= 100000 ? 10000 : n >= 10000 ? 1000 : n >= 1000 ? 100 : n >= 100 ? 10 : 1;
+  return fmt(Math.max(1, Math.round(n / passo) * passo));
+}
+/** "1 a cada N habitantes" (ou "nenhum caso" quando a taxa é zero). */
+export const umACada = (taxa100mil: number | null | undefined) =>
+  taxa100mil != null && taxa100mil > 0 ? `1 a cada ${cadaN(taxa100mil)} habitantes` : 'nenhum caso';
+
 /** Variação percentual inteira; null quando não há base de comparação. */
 export function variacao(atual: number | null, anterior: number | null | undefined): number | null {
   if (atual == null || anterior == null || anterior === 0) return null;

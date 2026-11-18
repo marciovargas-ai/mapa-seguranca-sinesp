@@ -53,9 +53,9 @@ function preaquecerCidadesGatilho() {
       if (decorrido > PREAQUECER_MS_POR_EXECUCAO_ - 45000 || uso.ms + decorrido >= PREAQUECER_MS_POR_DIA_) break;
       const mun = fila[i];
       try {
-        const r = coletarNoticiasCidade_(mun, 'busca');
+        const r = coletarNoticiasCidade_(mun, 'busca', { enxuto: true });
         if (r.erro === 'EM_ANDAMENTO') continue;  // alguém abriu a cidade agora: a coleta já está em curso
-        if (r.historicoPendente && Date.now() - inicio < PREAQUECER_MS_POR_EXECUCAO_ - 60000) coletarNoticiasCidade_(mun, 'historico');
+        if (r.historicoPendente && Date.now() - inicio < PREAQUECER_MS_POR_EXECUCAO_ - 60000) coletarNoticiasCidade_(mun, 'historico', { enxuto: true });
         feitas++;
       } catch (e) {
         Logger.log('Pré-carga (' + mun.nome + '/' + mun.uf + '): ' + e.message);

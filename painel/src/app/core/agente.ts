@@ -88,7 +88,7 @@ export class AgenteIA {
           new Promise<null>((r) => setTimeout(() => r(null), 12000)),
         ]);
         if (dados) comparacao = {
-          explicacao: 'Dados oficiais do Sinesp (mesmos 12 meses e mesma regra do painel) dos outros locais citados na pergunta, para comparar com o local aberto. Compare pela taxa por 100 mil habitantes, não só pelo total.',
+          explicacao: 'Dados oficiais do Sinesp (mesmos 12 meses e mesma regra do painel) dos outros locais citados na pergunta, para comparar com o local aberto. Compare em proporção à população (escreva 1 a cada N habitantes), não só pelo total.',
           localAberto: base['resumoOficial'] || null,
           locais: dados.filter(Boolean),
         };

@@ -207,7 +207,10 @@ function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros)
  * Coleta as notícias de um município e atualiza o arquivo dele.
  * mun = { uf, nome, ibge, lat, lng } (de 6_Base_Municipios.gs).
  */
-function coletarNoticiasCidade_(mun, modo) {
+function coletarNoticiasCidade_(mun, modo, opcoes) {
+  // opcoes.enxuto: chamada em que alguém espera (painel) ou pré-carga. Só faz o que responde em segundos:
+  // sem Overpass, GDELT, descoberta de feeds e leitura de matérias. O robô completa isso depois em segundo plano.
+  const enxuto = !!(opcoes && opcoes.enxuto);
   // modo: 'busca' = só procura notícias novas (rápido, o painel espera); 'materias' = só lê o texto
   // das matérias ainda sem bairro (o painel chama em seguida, sem travar a tela); vazio = tudo (robô)
   // 'historico' = 2ª etapa da primeira consulta (12 meses mês a mês, bairros e feeds diretos).
@@ -237,12 +240,12 @@ function coletarNoticiasCidade_(mun, modo) {
     const etapaRapida = modo === 'busca' && primeiraColeta;
     // GDELT fica fora da etapa rápida: responde devagar (ou 429 em IP compartilhado) e a busca espera a mais lenta
     const partes = etapaRapida ? { fatias: false, bairros: false, feeds: false, gdelt: false }
-      : modo === 'historico' ? { base: false, imprensa: false } : {};
+      : modo === 'historico' ? (enxuto ? { base: false, imprensa: false, gdelt: false, feeds: false } : { base: false, imprensa: false }) : {};
 
     // 1. Busca (fora da trava). Primeira coleta: 12 meses; depois só os últimos dias.
     const janela = primeiraColeta ? CONFIG.DIAS_JANELA_NOTICIAS + 'd'
       : Math.min(CONFIG.DIAS_JANELA_NOTICIAS, Math.ceil((Date.now() - atual.coletadoEm) / 86400000) + 3) + 'd';
-    const bairrosOsm = obterBairrosOsm_(mun, etapaRapida);
+    const bairrosOsm = obterBairrosOsm_(mun, etapaRapida || enxuto);
     medir('bairros');
     const candidatos = modo === 'materias' ? [] : buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm, partes);
     medir('busca');
@@ -251,7 +254,7 @@ function coletarNoticiasCidade_(mun, modo) {
     const idsExistentes = new Set(atual.ocorrencias.map(o => o.id));
     const assinaturas = atual.ocorrencias.map(o => assinaturaTitulo_(o.t));
     // Etapa rápida: poucas geocodificações (cada uma leva ~1 s); o resto fica pendente para as próximas
-    const ctx = criarContextoGeo_(mun, atual.locais, { restantes: etapaRapida ? 5 : CONFIG.MAX_GEOCODING_POR_COLETA });
+    const ctx = criarContextoGeo_(mun, atual.locais, { restantes: etapaRapida || enxuto ? 5 : CONFIG.MAX_GEOCODING_POR_COLETA });
     adicionarBairrosOsm_(ctx, bairrosOsm);
     const novas = [];
 
@@ -300,7 +303,7 @@ function coletarNoticiasCidade_(mun, modo) {
       .concat(atual.ocorrencias.filter(o => o.p === PRECISAO.MUNICIPIO && !o.mt && !revalidadas[o.id]));
     const totalSemLocal = semLocal.length;
     // Orçamento de tempo: na busca rápida o painel espera, então a leitura fica para a chamada seguinte
-    semLocal.splice(modo === 'busca' || Date.now() - inicioColeta > SEGUNDOS_ORCAMENTO_COLETA_ * 1000 ? 0 : MAX_MATERIAS_POR_COLETA_);
+    semLocal.splice(modo === 'busca' || (enxuto && modo === 'historico') || Date.now() - inicioColeta > SEGUNDOS_ORCAMENTO_COLETA_ * 1000 ? 0 : MAX_MATERIAS_POR_COLETA_);
     resultado.materiasPendentes = totalSemLocal - semLocal.length;
     if (semLocal.length) {
       const textos = lerTextoMaterias_(semLocal.map(o => o.u));
@@ -353,8 +356,9 @@ function coletarNoticiasCidade_(mun, modo) {
 
     medir('gravacao');
     // Resumo do estado e índice: se falharem, as notícias já gravadas continuam valendo para o painel
-    try { atualizarResumoUf_(mun, salvo); } catch (e) { Logger.log('Resumo do estado não atualizado: ' + e.message); }
-    try { atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm }); } catch (e) { Logger.log('Índice não atualizado: ' + e.message); }
+    // Com alguém esperando, não fica parado na fila da trava: o resumo do estado é refeito na próxima coleta
+    try { atualizarResumoUf_(mun, salvo, enxuto ? 5000 : 0); } catch (e) { Logger.log('Resumo do estado não atualizado: ' + e.message); }
+    try { atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm }, enxuto ? 15000 : 0); } catch (e) { Logger.log('Índice não atualizado: ' + e.message); }
     medir('resumo');
     resultado.historicoPendente = etapaRapida;
     resultado.tempos.total = Date.now() - inicioColeta;

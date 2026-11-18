@@ -76,12 +76,12 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
   const primeiraConsulta = !registro || !registro.coletadoEm;
   if (forcarColeta === true) {
     if (idadeMs > CONFIG.MINUTOS_MIN_ENTRE_COLETAS * 60000) {
-      coleta = coletarNoticiasCidade_(mun, 'busca');
+      coleta = coletarNoticiasCidade_(mun, 'busca', { enxuto: true });
       if (coleta.registro) registro = coleta.registro;
     }
   } else if (forcarColeta === 'historico') {
     // 2ª etapa da primeira consulta: o histórico de 12 meses mês a mês e as buscas por bairro
-    coleta = coletarNoticiasCidade_(mun, 'historico');
+    coleta = coletarNoticiasCidade_(mun, 'historico', { enxuto: true });
     if (coleta.registro) registro = coleta.registro;
   } else if (forcarColeta === 'materias') {
     // 2ª etapa: lê o texto das matérias para achar o bairro (o painel já mostra as notícias)
@@ -186,7 +186,7 @@ function montarRespostaEstado_(siglaUf, metaUf, t0) {
 /**
  * Mantém no resumo do estado as ocorrências mais recentes da cidade.
  */
-function atualizarResumoUf_(mun, registro) {
+function atualizarResumoUf_(mun, registro, esperaMs) {
   atualizarJsonComTrava_(nomeArquivoUf_(mun.uf), resumo => {
     resumo = resumo || { v: 3, uf: mun.uf, cidades: {} };
     resumo.cidades[mun.ibge] = {
@@ -198,7 +198,7 @@ function atualizarResumoUf_(mun, registro) {
     };
     resumo.atualizadoEm = Date.now();
     return resumo;
-  });
+  }, esperaMs || 0);
 }
 
 /**

@@ -29,7 +29,7 @@ import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/da
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
 import { Aba, PainelStore } from './core/painel.store';
-import { fmt, fmt1, gravarLocal, lerLocal } from './core/util';
+import { cadaN, fmt, gravarLocal, lerLocal } from './core/util';
 import { MapaComponent } from './mapa/mapa';
 import { DeltaComponent } from './painel/comuns';
 import { EstadoComponent } from './painel/estado';
@@ -384,11 +384,11 @@ export class App {
     const resto = o.eventos.filter((e) => !m.partes.includes(e) || /^feminic/i.test(e.nome));
     lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
     if (m.taxa != null) {
-      // Cidade pequena: mostra a população, para a taxa "por 100 mil" não parecer o tamanho da cidade
+      // Proporção na forma "1 a cada N habitantes" (em todo o Brasil): "por 100 mil" confunde em cidades pequenas
       const hab = this.store.escopo() !== 'ESTADO' && o.populacao && o.populacao < 100000 ? o.populacao : 0;
-      lista.push({ rotulo: 'Mortes violentas por 100 mil hab.', valor: fmt1(m.taxa),
-        sub: (hab ? `${fmt(hab)} habitantes · ` : '') +
-          (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)}` + (m.taxaEstadoMvi && !hab ? ` (${fmt1(m.taxaEstadoMvi)} com mortes por policiais)` : '') + ' · ' : '') + (hab ? '12 meses' : 'últimos 12 meses') });
+      lista.push({ rotulo: 'Uma morte violenta a cada', valor: m.taxa > 0 ? cadaN(m.taxa) : '—',
+        sub: (m.taxa > 0 ? 'habitantes em 12 meses' : 'nenhuma morte em 12 meses') + (hab ? ` · população ${fmt(hab)}` : '') +
+          (m.taxaEstado ? ` · estado: 1 a cada ${cadaN(m.taxaEstado)}` : '') });
     }
     for (const e of resto) {
       if (lista.length >= 4) break;
@@ -407,7 +407,7 @@ export class App {
     const uf = this.store.uf();
     return `Mortes violentas = ${nomes} (o que as secretarias chamam de CVLI). Mortes por intervenção policial não entram: o Sinesp só as publica por estado.` +
       (m.intervEstado && m.mviEstado
-        ? ` No estado inteiro (${uf}), as polícias mataram ${fmt(m.intervEstado)} pessoas nesses 12 meses (${Math.round((m.intervEstado / m.mviEstado) * 100)}% das mortes violentas do estado); com elas, a taxa do estado sobe para ${fmt1(m.taxaEstadoMvi)} por 100 mil, que é a conta usada pelo Anuário (MVI).`
+        ? ` No estado inteiro (${uf}), as polícias mataram ${fmt(m.intervEstado)} pessoas nesses 12 meses (${Math.round((m.intervEstado / m.mviEstado) * 100)}% das mortes violentas do estado); com elas, o estado passa a ter 1 morte violenta a cada ${cadaN(m.taxaEstadoMvi)} habitantes, que é a conta usada pelo Anuário (MVI).`
         : ' Por isso o total das secretarias e do Anuário (MVI) fica maior.');
   });
 

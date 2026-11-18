@@ -56,6 +56,8 @@ const chaveLocal = (uf: string, cidade: string) => uf + '|' + normalizar(cidade)
 export interface PrimeiraCarga {
   uf: string; cidade: string; inicio: number; noticias: number;
   etapa: 'recentes' | 'historico' | 'bairros' | 'pronto' | 'erro';
+  /** Quanto cada etapa levou (ms), para medir no servidor real; servidor = tempos medidos lá dentro */
+  tempos?: { oficial?: number; recentes?: number; servidor?: Record<string, number> };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -323,6 +325,7 @@ export class PainelStore {
     const meta = ESTADOS[uf];
     if (!meta) return;
     const token = ++this.tokenAbertura;
+    const t0 = Date.now();
     const ehEstado = nome === 'ESTADO_INTEIRO';
     if (this.primeiraCarga() && (ehEstado || this.primeiraCarga()!.cidade !== nome || this.primeiraCarga()!.uf !== uf)) this.primeiraCarga.set(null);
     const mun = ehEstado ? null : buscarMunicipio(uf, nome);
@@ -390,7 +393,7 @@ export class PainelStore {
       if (!this.receber(res, token)) return;
       this.carregando.set(false);
       if (res.primeiraConsulta && !ehEstado) {
-        this.primeiraCarga.set({ uf, cidade: mun!.nome, etapa: 'recentes', inicio: Date.now(), noticias: 0 });
+        this.primeiraCarga.set({ uf, cidade: mun!.nome, etapa: 'recentes', inicio: t0, noticias: 0, tempos: { oficial: Date.now() - t0 } });
       }
       if (res.precisaColeta && !ehEstado) { this.coletar(uf, mun!.nome, lat, lng, token); return; }
       this.definirStatus('check_circle', res.ultimaColeta ? 'Dados de ' + res.ultimaColeta : 'Atualizado às ' + res.atualizadoEm, 'ok');
@@ -427,7 +430,11 @@ export class PainelStore {
       const novas = res.novasCapturadasAgora || 0;
       this.definirStatus('check_circle', (novas ? `Google Notícias: ${novas} ${novas === 1 ? 'notícia nova' : 'notícias novas'} · `
         : 'Google Notícias: nada novo · ') + 'atualizado às ' + res.atualizadoEm, 'ok');
-      this.etapaPrimeira(res.historicoPendente ? 'historico' : res.materiasPendentes ? 'bairros' : 'pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
+      // O aviso da primeira consulta termina aqui: o histórico de 12 meses e a leitura das matérias seguem em
+      // segundo plano e entram sozinhos no painel (ninguém precisa esperar por eles)
+      const p = this.primeiraCarga();
+      this.etapaPrimeira('pronto', { noticias: this.dados()?.ocorrencias.length || 0,
+        tempos: { ...(p?.tempos || {}), recentes: p ? Date.now() - p.inicio : undefined, servidor: res.tempos } });
       if (res.historicoPendente) this.buscarHistorico(uf, cidade, lat, lng, token);
       else if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
     }).catch(() => {
@@ -441,23 +448,25 @@ export class PainelStore {
   /** Primeira consulta, 2ª etapa (sem travar a tela): 12 meses mês a mês, buscas por bairro e feeds diretos. */
   private buscarHistorico(uf: string, cidade: string, lat: number, lng: number, token: number): void {
     const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
+    const t = Date.now();
     Servidor.cidade(uf, cidade, lat, lng, 'historico', desdeDe(base)).then((res) => {
       if (!this.receber(res, token)) return;
-      this.etapaPrimeira(res.materiasPendentes ? 'bairros' : 'pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
+      const total = this.dados()?.ocorrencias.length || 0;
+      this.definirStatus('check_circle', `Histórico de 12 meses carregado em ${Math.round((Date.now() - t) / 1000)} s · ${total} ${total === 1 ? 'notícia' : 'notícias'}`, 'ok');
+      if (res.tempos) console.info('[Mapa] Histórico', cidade, res.tempos);
       if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, 4);
-    }).catch(() => { if (token === this.tokenAbertura) this.etapaPrimeira('pronto'); });
+    }).catch(() => {});
   }
 
   /** 2ª etapa, sem travar a tela: o servidor lê o texto das matérias para achar o bairro de cada notícia. */
   private lerMaterias(uf: string, cidade: string, lat: number, lng: number, token: number, rodadas: number): void {
     if (token !== this.tokenAbertura) return;
-    if (rodadas <= 0) { this.etapaPrimeira('pronto'); return; }
+    if (rodadas <= 0) return;
     const base = this.memoria.get(chaveLocal(uf, cidade))?.res || null;
     Servidor.cidade(uf, cidade, lat, lng, 'materias', desdeDe(base)).then((res) => {
       if (!this.receber(res, token)) return;
       if (res.materiasPendentes) this.lerMaterias(uf, cidade, lat, lng, token, rodadas - 1);
-      else this.etapaPrimeira('pronto', { noticias: this.dados()?.ocorrencias.length || 0 });
-    }).catch(() => { if (token === this.tokenAbertura) this.etapaPrimeira('pronto'); });
+    }).catch(() => {});
   }
 
   atualizarAgora(): void {
@@ -601,7 +610,8 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
   // População: a do arquivo do SIM (IBGE, todos os municípios) e, se faltar, a API do IBGE por estado
   const popSim = sim?.populacao?.municipios;
   const pops = popSim ? [] : await Promise.all(ufs.map((uf) => carregarPopulacao(uf).catch(() => null)));
-  type Bruto = { ibge: string; uf: string; hab: number; mortes: number; anos: number; tent: number; roubo: number | null; d: number[]; dSim: number };
+  type Bruto = { ibge: string; uf: string; hab: number; mortes: number; anos: number; tent: number; roubo: number | null; d: number[]; dSim: number;
+    n: number; expo: number; fonte: number; casos: number };
   const brutos: Bruto[] = [];
   let mortesBr = 0, popBr = 0, ufsOk = 0;
   ufs.forEach((uf, k) => {
@@ -618,13 +628,18 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
       const dSim = s ? s[0] + s[1] : 0;
       // Abaixo de 100 mil hab.: média anual de 3 anos do Sinesp, para um caso isolado não distorcer a taxa
       const anos = hab < CIDADE_GRANDE && d[2] > 0 ? 3 : 1;
-      const cvli = anos === 3 ? d[2] / 3 : d[0];
+      const nSinesp = anos === 3 ? d[2] : d[0];
       // Cada fonte deixa de contar casos em lugares diferentes (o Sinesp depende do envio de cada estado; o SIM
-      // tem óbitos ainda sem causa definida). A maior das duas é a contagem mais completa, sem somar o mesmo caso.
-      const mortes = Math.max(cvli, dSim);
+      // tem óbitos ainda sem causa definida). Vale a fonte com a maior taxa, sem somar o mesmo caso, e cada uma
+      // entra com a sua contagem real e o seu período (Sinesp: 3 anos ou 12 meses; DATASUS: 1 ano).
+      const simMaior = dSim / hab > nSinesp / (hab * anos);
+      const n = simMaior ? dSim : nSinesp, expo = simMaior ? hab : hab * anos;
+      const mortes = (n / expo) * hab;
       const tent = anos === 3 ? d[4] / 3 : d[3];
       const r = rb?.municipios[c6];
-      brutos.push({ ibge: m.ibge, uf, hab, mortes, anos, tent, roubo: r ? r[0] : null, d, dSim });
+      // Quantidade de casos que sustenta a comparação: a maior contagem entre as fontes, cada uma no seu período
+      brutos.push({ ibge: m.ibge, uf, hab, mortes, anos, tent, roubo: r ? r[0] : null, d, dSim,
+        n, expo, fonte: simMaior ? 1 : 0, casos: Math.max(nSinesp, dSim) });
       mortesBr += Math.max(d[0], dSim); popBr += hab;
     }
   });
@@ -639,6 +654,7 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
     a[0] += b.mortes; a[1] += b.hab; a[2] += b.tent;
     if (b.roubo != null) { a[3] += b.roubo; a[4] += b.hab; }
   }
+  // casos = média por ano; anos = período observado. Para as mortes, a contagem real e o período da fonte usada.
   const ajustar = (casos: number, hab: number, anos: number, mu: number) =>
     hab >= CIDADE_GRANDE || !(mu >= 0) ? (casos / hab) * 1e5 : ((casos * anos + mu * FORCA_AJUSTE) / (hab * anos + FORCA_AJUSTE)) * 1e5;
   const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -647,11 +663,13 @@ async function montarReferencia(): Promise<ReferenciaNacional | null> {
   for (const b of brutos) {
     const a = media[b.uf];
     const mu = (i: number, h = 1) => (a && a[h] ? a[i] / a[h] : NaN);
-    const tx = ajustar(b.mortes, b.hab, b.anos, mu(0));
+    const anosM = b.expo / b.hab;
+    const tx = ajustar(b.n / anosM, b.hab, anosM, mu(0));
     const tt = ajustar(b.tent, b.hab, b.anos, mu(2));
     const tr = b.roubo == null ? -1 : ajustar(b.roubo, b.hab, 1, mu(3, 4));
     const linha = [r1(b.mortes), b.hab, r1(tx), b.d[0], b.dSim, r1(tt), b.d[1], b.anos === 3 ? 1 : 0, r1(tr),
-      r1((b.mortes / b.hab) * 1e5), Math.round(b.mortes * b.anos), Math.round(b.roubo ?? 0)];
+      r1((b.mortes / b.hab) * 1e5), b.casos, Math.round(b.roubo ?? 0),
+      b.n, Math.round(anosM), b.fonte, b.anos === 3 ? b.d[2] : b.d[0]];
     municipios[b.ibge] = linha;
     if (b.hab >= 20000) { taxas.push(linha[2]); taxasTent.push(linha[5]); totais.push(linha[0]); if (tr >= 0) taxasRoubo.push(linha[8]); }
   }

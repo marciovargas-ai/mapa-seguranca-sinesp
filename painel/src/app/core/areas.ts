@@ -78,8 +78,9 @@ export interface ReferenciaNacional {
   periodo: string; brasil: { cvli: number; pop: number; taxa: number };
   /** ibge → [mortes por ano, habitantes, taxa ajustada por 100 mil, CVLI Sinesp 12 meses, mortes SIM no ano,
    *  tentativas por 100 mil (ajustada), CVLI 12 meses anteriores, média de 3 anos (1) ou 12 meses (0),
-   *  roubos por 100 mil (ajustada; -1 = estado não publica), taxa de mortes sem ajuste, casos de morte no período,
-   *  roubos por ano] */
+   *  roubos por 100 mil (ajustada; -1 = estado não publica), taxa de mortes sem ajuste,
+   *  casos de morte (maior contagem entre Sinesp e DATASUS, cada uma no seu período), roubos por ano,
+   *  mortes na fonte usada, anos da fonte usada, fonte usada (0 = Sinesp, 1 = DATASUS), mortes no Sinesp no seu período] */
   taxas: number[]; totais: number[]; taxasTent: number[]; taxasRoubo: number[]; municipios: Record<string, number[]>;
   sim: { ano: number; preliminar: boolean } | null;
   roubos: Record<string, { fonte: string; periodo: string; definicao: string }>;
