@@ -61,7 +61,8 @@ export function enriquecerOficial(o: Oficial | null, uf: string, cidade: string,
     eventos: o.eventos.map((e) => ({
       ...e,
       taxa: e.taxa ?? taxa(e.total, populacao),
-      taxaEstado: ehEstado ? e.taxaEstado : e.taxaEstado ?? (estadoPorEvento.has(e.nome) ? taxa(estadoPorEvento.get(e.nome)!, pop.total) : null),
+      taxaEstado: ehEstado ? e.taxaEstado : e.taxaEstado ?? (estadoPorEvento.has(e.nome) ? taxa(estadoPorEvento.get(e.nome)!, pop.total)
+        : e.totalEstado != null ? taxa(e.totalEstado, pop.total) : null),
     })),
   };
 }

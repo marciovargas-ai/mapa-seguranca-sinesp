@@ -36,7 +36,12 @@ MODELO = """<!DOCTYPE html>
   <title>Mapa da Segurança</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Conexões abertas cedo: bibliotecas, aplicativo, dados do robô (CDN) e IBGE -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://servicodados.ibge.gov.br" crossorigin>
+  {PRELOAD}<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css">
@@ -44,7 +49,8 @@ MODELO = """<!DOCTYPE html>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Gráficos não bloqueiam a primeira pintura: o painel desenha quando a biblioteca chega -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <?!= incluir('Painel_Estilos'); ?>
 </head>
 <body>
@@ -134,9 +140,11 @@ def main():
   <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
 """, '  ' + CARREGADOR_CDN.replace('{SHA}', sha).replace('{N}', str(len(partes))) + '\n')
         pagina = pagina.replace('  <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->\n', '')
+        # O navegador começa a baixar o aplicativo junto com o <head>, sem esperar o fim da página
+        pagina = pagina.replace('{PRELOAD}', '<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@' + sha + '/publicado/painel.js">\n  ')
     else:
         includes = '\n  '.join(f"<?!= incluir('Painel_App_{i}'); ?>" for i in range(1, len(partes) + 1))
-        pagina = MODELO.replace('{INCLUDES}', includes)
+        pagina = MODELO.replace('{INCLUDES}', includes).replace('{PRELOAD}', '')
     with open(os.path.join(saida, 'Painel.html'), 'w', encoding='utf-8') as f:
         f.write(pagina)
     print(f'{len(partes)} partes do aplicativo em {saida}')

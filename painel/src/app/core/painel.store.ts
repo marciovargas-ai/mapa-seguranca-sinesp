@@ -7,11 +7,12 @@ import { CacheDisco } from './cache-disco';
 import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
-import { Filtrados, Ocorrencia, Pacote, Panorama } from './modelos';
+import { Filtrados, Ocorrencia, Oficial, Pacote, Panorama } from './modelos';
 import { buscarMunicipio, municipioMaisProximo, municipioPorCodigo, municipiosUf } from './municipios';
 import { carregarPopulacao, enriquecerOficial, enriquecerPanorama, PopulacaoUf } from './populacao';
 import { aplicarPeriodo, mesesDoPeriodo } from './periodo';
 import { Servidor } from './servidor';
+import { oficialPelaCdn } from './sinesp-cdn';
 import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsParaData } from './util';
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'FACCOES' | 'NOTICIAS';
@@ -105,11 +106,17 @@ export class PainelStore {
   readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas));
   readonly bairros12 = computed(() => resumirBairros(this.listaBairros(), this.filtrados12().todas));
 
+  /** Estatística do Sinesp montada no navegador direto da CDN, sem esperar o Apps Script. */
+  readonly oficialCdn = signal<{ chave: string; dado: Oficial | null } | null>(null);
+
   /** Indicadores oficiais do local aberto (no estado, o panorama traz os mesmos números). */
   readonly oficial = computed(() => {
     const d = this.dados();
     const ehEstado = this.escopo() === 'ESTADO';
-    const o = d?.oficial ? encurtarOficial(d.oficial) : ehEstado ? this.panorama()?.oficial || null : null;
+    const cdn = this.oficialCdn();
+    const daCdn = cdn && cdn.chave === chaveLocal(this.uf(), ehEstado ? 'ESTADO_INTEIRO' : this.cidade()) ? cdn.dado : null;
+    // Servidor (com as notícias) > CDN do robô (chega antes) > panorama do estado
+    const o = d?.oficial ? encurtarOficial(d.oficial) : daCdn ? encurtarOficial(daCdn) : ehEstado ? this.panorama()?.oficial || null : null;
     return aplicarPeriodo(enriquecerOficial(o, this.uf(), this.cidade(), ehEstado, this.populacao(), this.panorama()), mesesDoPeriodo(this.periodoDias()));
   });
 
@@ -142,7 +149,9 @@ export class PainelStore {
     // Tempo real: com o painel aberto e visível, busca novidades a cada poucos minutos (só o que mudou)
     setInterval(() => this.buscarNovidades(), CFG.MINUTOS_ATUALIZACAO_AUTOMATICA * 60000);
     // Referência nacional: totais do robô + população de cada estado (IBGE, guardada 180 dias no navegador)
-    setTimeout(() => montarReferencia().then((r) => this.referencia.set(r)), 1500);
+    // Fora do caminho crítico: espera o navegador ficar ocioso (ou 3 s, o que vier antes)
+    const ocioso = (window as any).requestIdleCallback || ((f: () => void) => setTimeout(f, 800));
+    ocioso(() => montarReferencia().then((r) => this.referencia.set(r)), { timeout: 3000 });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.buscarNovidades(); });
     const tema = lerLocal(CFG.CHAVE_TEMA);
     this.definirTema(tema ? tema === 'escuro' : window.matchMedia?.('(prefers-color-scheme: dark)').matches, false);
@@ -250,6 +259,13 @@ export class PainelStore {
     const nomeServidor = ehEstado ? 'ESTADO_INTEIRO' : mun!.nome;
     const chave = chaveLocal(uf, nomeServidor);
     this.dados.set(pacoteVazio(uf, nomeServidor, lat, lng, ehEstado ? meta.ibge : mun!.ibge));
+    // O essencial primeiro: estatística oficial direto da CDN (em paralelo com o resto)
+    if (this.oficialCdn()?.chave !== chave) {
+      this.oficialCdn.set({ chave, dado: null });
+      oficialPelaCdn(uf, ehEstado ? '' : mun!.nome, ehEstado)
+        .then((dado) => { if (this.oficialCdn()?.chave === chave && dado) this.oficialCdn.set({ chave, dado }); })
+        .catch(() => undefined);
+    }
     this.carregarPanorama(uf);
     if (!ehEstado && this.bairrosOsm()?.ibge !== mun!.ibge) {
       const ibge = mun!.ibge;
@@ -358,8 +374,9 @@ export class PainelStore {
     this.panoramaBruto.set(null);
     this.panoramaCarregando.set(true);
     const chave = 'PANORAMA_' + uf;
-    CacheDisco.obter<Panorama>(chave, 0.25).then((guardado) => {
-      if (guardado && this.uf() === uf && !this.panoramaBruto()) this.panoramaBruto.set(guardado);
+    // Mostra o panorama guardado na hora (o Sinesp muda uma vez por mês) e atualiza com o servidor em seguida
+    CacheDisco.obterComIdade<Panorama>(chave).then((g) => {
+      if (g?.dado && g.em > Date.now() - 40 * 86400000 && this.uf() === uf && !this.panoramaBruto()) this.panoramaBruto.set(g.dado);
     });
     Servidor.panorama(uf).then((p) => {
       p = { ...p, uf };

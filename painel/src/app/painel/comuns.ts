@@ -1,8 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { PainelStore } from '../core/painel.store';
 
 declare const Chart: any;
+/** Chart.js chega com "defer" (não bloqueia a primeira pintura): os gráficos esperam por ele. */
+const chartPronto = signal(typeof Chart !== 'undefined');
+if (!chartPronto()) {
+  const ver = () => { if (typeof Chart !== 'undefined') { chartPronto.set(true); return true; } return false; };
+  window.addEventListener('load', ver, { once: true });
+  const t = setInterval(() => { if (ver()) clearInterval(t); }, 300);
+  setTimeout(() => clearInterval(t), 30000);
+}
 
 /** Selo de variação: ↑ vermelho (piora), ↓ verde (melhora). */
 @Component({
@@ -89,7 +97,7 @@ export class GraficoComponent implements OnDestroy {
     effect(() => {
       const cfg = this.config();
       const escuro = this.store.escuro();
-      if (typeof Chart === 'undefined') return;
+      if (!chartPronto()) return;
       const texto = escuro ? '#c4c7cf' : '#44474e';
       const grade = escuro ? 'rgba(148,163,184,.16)' : 'rgba(100,116,139,.16)';
       if (this.grafico && this.tipo === cfg.type && this.escuro === escuro) {

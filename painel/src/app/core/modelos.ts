@@ -10,6 +10,8 @@ export interface EventoOficial {
   nome: string; total: number; anterior: number | null; serie: number[];
   porAno: (number | null)[]; parcialAnterior: number | null; serie36: number[];
   federais: Record<string, number> | null; taxa: number | null; taxaEstado?: number | null;
+  /** Total do estado nos mesmos 12 meses (só na cidade, quando vem da CDN). */
+  totalEstado?: number;
   /** Período escolhido no filtro (últimos N meses publicados) e os mesmos meses do ano anterior. */
   sel?: number | null; selAnterior?: number | null;
 }

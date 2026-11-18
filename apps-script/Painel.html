@@ -6,6 +6,11 @@
   <title>Mapa da Segurança</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Conexões abertas cedo: bibliotecas, aplicativo, dados do robô (CDN) e IBGE -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://servicodados.ibge.gov.br" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -14,36 +19,21 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Gráficos não bloqueiam a primeira pintura: o painel desenha quando a biblioteca chega -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <?!= incluir('Painel_Estilos'); ?>
 </head>
 <body>
   <app-root></app-root>
   <script>var BASE_MUNICIPIOS_BR = <?!= obterBaseMunicipiosJson() ?>;</script>
-  <!-- Aplicativo Angular pela CDN (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
-  <script>
-  (function () {
-    var URL_APP = 'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@3457e57a548a981b3b8f837f9e98ac84c060e515/publicado/painel.js';
-    var PARTES = 6;
-    var feito = false;
-    function reserva() {
-      if (feito) return; feito = true;
-      var partes = [], recebidas = 0;
-      var run = (window.google && google.script && google.script.run) || window.__servidorTeste;
-      for (var i = 1; i <= PARTES; i++) (function (i) {
-        run.withSuccessHandler(function (t) {
-          partes[i - 1] = t;
-          if (++recebidas === PARTES) (new Function(partes.join('')))();
-        }).obterParteApp(i);
-      })(i);
-    }
-    var s = document.createElement('script');
-    s.src = URL_APP;
-    s.onload = function () { feito = true; };
-    s.onerror = reserva;
-    document.body.appendChild(s);
-    setTimeout(function () { if (!feito && !window.__PAINEL_INICIADO) reserva(); }, 15000);
-  })();
-  </script>
+  <!-- Aplicativo Angular (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
+  <script>window.__PAINEL_APP = [];</script>
+  <?!= incluir('Painel_App_1'); ?>
+  <?!= incluir('Painel_App_2'); ?>
+  <?!= incluir('Painel_App_3'); ?>
+  <?!= incluir('Painel_App_4'); ?>
+  <?!= incluir('Painel_App_5'); ?>
+  <?!= incluir('Painel_App_6'); ?>
+  <script>(new Function(window.__PAINEL_APP.join('')))(); delete window.__PAINEL_APP;</script>
 </body>
 </html>

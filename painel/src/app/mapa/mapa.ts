@@ -13,7 +13,7 @@ import { Camadas, PainelStore, UnidadeShopee } from '../core/painel.store';
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, IspMunicipio, Tiroteio } from '../core/areas';
-import { esc, fetchComTimeout, fmt, fmt1, urlSegura } from '../core/util';
+import { esc, fetchComTimeout, fmt, fmt1, normalizar, urlSegura } from '../core/util';
 
 declare const L: any;
 
@@ -116,10 +116,16 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         @if (camadas().unidades) {
           <div class="legenda-unidades">
             @if (store.unidades(); as u) {
-              @if (u.carregando) { <i class="pino-unidade"><span></span></i> Carregando unidades Shopee… }
-              @else if (u.erro) { <i class="pino-unidade"><span></span></i> Unidades Shopee: {{ u.erro }} }
-              @else { <i class="pino-unidade"><span></span></i> {{ u.lista.length }} unidades Shopee
-                @if (u.semCoordenada) { <small>({{ u.semCoordenada }} aproximadas, sem coordenada na planilha)</small> } }
+              @if (u.carregando) { <i class="pino-unidade"><span>S</span></i> Carregando unidades Shopee… }
+              @else if (u.erro) { <i class="pino-unidade"><span>S</span></i> Unidades Shopee: {{ u.erro }} }
+              @else {
+                @let vis = unidadesVisiveis();
+                @let aprox = aproximadasVisiveis();
+                <i class="pino-unidade"><span>S</span></i>
+                @if (vis.length) { {{ vis.length }} {{ vis.length === 1 ? 'unidade Shopee' : 'unidades Shopee' }} {{ store.escopo() === 'ESTADO' ? 'no estado' : 'em ' + store.cidade() }} }
+                @else { Nenhuma unidade Shopee {{ store.escopo() === 'ESTADO' ? 'neste estado' : 'em ' + store.cidade() }} }
+                @if (aprox) { <small>({{ aprox }} {{ aprox === 1 ? 'aproximada' : 'aproximadas' }}, sem coordenada na planilha)</small> }
+              }
             }
           </div>
         }
@@ -133,7 +139,8 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .botao-mapa { background: var(--mat-sys-surface-container-lowest); color: var(--mat-sys-on-surface); }
     .legenda-unidades { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
     .legenda-unidades small { opacity: .75; }
-    .legenda-unidades .pino-unidade { position: relative; display: inline-block; width: 14px; height: 14px; }
+    .legenda-unidades .pino-unidade { position: relative; display: inline-block; width: 18px; height: 18px; flex: none; }
+    .legenda-unidades .pino-unidade span { font-size: 11px; border-width: 1.5px; border-radius: 4px; }
     .legenda {
       position: absolute; left: 12px; bottom: 12px; z-index: 800; max-width: min(300px, calc(100% - 80px));
       background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent); backdrop-filter: blur(6px);
@@ -202,6 +209,19 @@ export class MapaComponent implements OnDestroy {
   private layerOficial: any;
   /** Contorno do município aberto (IBGE): pontos fora dele não entram no mapa. */
   private readonly contorno = signal<any>(null);
+  /** Unidades Shopee do local aberto: na cidade, as que ficam dentro do contorno do município
+   *  (ou têm o nome da cidade na planilha); no estado, todas as unidades daquela UF. */
+  protected readonly unidadesVisiveis = computed(() => {
+    const lista = this.store.unidades()?.lista || [];
+    const uf = this.store.uf();
+    const doEstado = lista.filter((u) => u.uf === uf);
+    if (this.store.escopo() === 'ESTADO') return doEstado;
+    const cidade = normalizar(this.store.cidade());
+    const geo = this.contorno();
+    return doEstado.filter((u) => normalizar(u.cidade) === cidade
+      || (u.origem === 'planilha' && !!geo?.features?.length && dentroDoContorno(u.lat, u.lng, geo)));
+  });
+  protected readonly aproximadasVisiveis = computed(() => this.unidadesVisiveis().filter((u) => u.origem !== 'planilha').length);
   private layerBairros: any;
   private layerCoropletico: any;
   private cluster: any;
@@ -312,8 +332,8 @@ export class MapaComponent implements OnDestroy {
       untracked(() => this.desenharFogo((f?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, geo)), c.pinos && !cor));
     });
     effect(() => {
-      const u = this.store.unidades(); const ver = this.camadas().unidades;
-      untracked(() => this.desenharUnidades(ver ? u?.lista || [] : []));
+      const ver = this.camadas().unidades; const lista = this.unidadesVisiveis();
+      untracked(() => this.desenharUnidades(ver ? lista : []));
     });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
@@ -480,7 +500,7 @@ export class MapaComponent implements OnDestroy {
     }
   }
 
-  /** Unidades Shopee: losango laranja (azul = ainda não iniciada); ponto aproximado sai transparente e tracejado.
+  /** Unidades Shopee: quadrado laranja com S (azul = ainda não iniciada); ponto aproximado sai transparente e tracejado.
    *  Unidades no mesmo endereço viram um pino só, com o número de unidades e todas no balão. */
   private desenharUnidades(lista: UnidadeShopee[]): void {
     if (!this.map || !this.layerUnidades) return;
@@ -495,7 +515,7 @@ export class MapaComponent implements OnDestroy {
       const exato = g.some((u) => u.origem === 'planilha');
       const futura = g.every((u) => /not started/i.test(u.status));
       const icone = L.divIcon({ className: 'pino-unidade' + (exato ? '' : ' aproximado') + (futura ? ' futura' : ''),
-        html: '<span></span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [18, 18], iconAnchor: [9, 9] });
+        html: '<span>S</span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
       const m = L.marker([u0.lat, u0.lng], { icon: icone, pane: 'paneUnidades', keyboard: false,
         title: g.map((u) => u.codigo + ' · ' + u.nome).join('\n') });
       m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 360 });

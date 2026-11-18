@@ -173,8 +173,9 @@ html.tema-escuro .popup-meta { color: #a9b6cf; }
 
 /* Unidades Shopee no mapa (camada desmarcada ao abrir) */
 .pino-unidade { background: none; border: 0; }
-.pino-unidade span { position: absolute; inset: 2px; border-radius: 5px; background: #EE4D2D; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); transform: rotate(45deg); }
+.pino-unidade span { position: absolute; inset: 1px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: #EE4D2D; border: 2px solid #fff; color: #fff; font: 900 15px/1 Roboto, Arial, sans-serif; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
 .pino-unidade.futura span { background: #113366; }
-.pino-unidade.aproximado span { opacity: .45; border-style: dashed; }
-.pino-unidade b { position: absolute; top: -9px; right: -11px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: #113366; color: #fff; font: 700 10px/16px Roboto, sans-serif; text-align: center; border: 1px solid #fff; }
+.pino-unidade.aproximado span { opacity: .55; border-style: dashed; }
+.pino-unidade:hover span { transform: scale(1.12); }
+.pino-unidade b { position: absolute; top: -8px; right: -10px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: #113366; color: #fff; font: 700 10px/16px Roboto, sans-serif; text-align: center; border: 1px solid #fff; }
 .popup-unidades hr { border: 0; border-top: 1px solid rgba(127, 127, 127, .3); margin: 8px 0; }

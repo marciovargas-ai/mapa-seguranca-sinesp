@@ -44,6 +44,19 @@ class CacheDiscoImpl {
     });
   }
 
+  /** Lê sem prazo e devolve a idade: permite mostrar o guardado na hora e atualizar por trás. */
+  async obterComIdade<T>(chave: string): Promise<{ em: number; dado: T } | null> {
+    const db = await this.abrir();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const req = db.transaction('kv', 'readonly').objectStore('kv').get(chave);
+        req.onsuccess = () => resolve(req.result?.dado ? { em: req.result.em || 0, dado: req.result.dado } : null);
+        req.onerror = () => resolve(null);
+      } catch { resolve(null); }
+    });
+  }
+
   async salvar(chave: string, dado: unknown): Promise<void> {
     this.memoria.set(chave, dado);
     const db = await this.abrir();
