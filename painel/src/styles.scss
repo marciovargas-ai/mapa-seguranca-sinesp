@@ -170,3 +170,11 @@ html.tema-escuro .popup-meta { color: #a9b6cf; }
 .kpi > .ia-resumo { bottom: 6px; right: 6px; }
 /* Última linha do cartão deixa espaço para o botão, sem ficar por baixo do texto */
 .kpi:has(> .ia-resumo) > .kpi-sub:last-of-type { padding-right: 30px; }
+
+/* Unidades Shopee no mapa (camada desmarcada ao abrir) */
+.pino-unidade { background: none; border: 0; }
+.pino-unidade span { position: absolute; inset: 2px; border-radius: 5px; background: #EE4D2D; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); transform: rotate(45deg); }
+.pino-unidade.futura span { background: #113366; }
+.pino-unidade.aproximado span { opacity: .45; border-style: dashed; }
+.pino-unidade b { position: absolute; top: -9px; right: -11px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: #113366; color: #fff; font: 700 10px/16px Roboto, sans-serif; text-align: center; border: 1px solid #fff; }
+.popup-unidades hr { border: 0; border-top: 1px solid rgba(127, 127, 127, .3); margin: 8px 0; }

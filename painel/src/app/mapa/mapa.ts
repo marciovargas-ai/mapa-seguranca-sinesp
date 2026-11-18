@@ -9,7 +9,7 @@ import { CATEGORIA_POR_ID, CATEGORIAS, CFG, COR_NIVEL, ESTADOS, NOME_NIVEL, ROTU
 import { BairroResumo } from '../core/bairros';
 import { Ocorrencia } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
-import { Camadas, PainelStore } from '../core/painel.store';
+import { Camadas, PainelStore, UnidadeShopee } from '../core/painel.store';
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, IspMunicipio, Tiroteio } from '../core/areas';
@@ -113,6 +113,16 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         </div>
         @if (camadas().calor) { <div class="gradiente"><span>menor</span><div></div><span>maior</span></div> }
         @if (camadas().zonas && leg.zonas) { <div class="legenda-zona"><i></i> Zona vermelha (concentração)</div> }
+        @if (camadas().unidades) {
+          <div class="legenda-unidades">
+            @if (store.unidades(); as u) {
+              @if (u.carregando) { <i class="pino-unidade"><span></span></i> Carregando unidades Shopee… }
+              @else if (u.erro) { <i class="pino-unidade"><span></span></i> Unidades Shopee: {{ u.erro }} }
+              @else { <i class="pino-unidade"><span></span></i> {{ u.lista.length }} unidades Shopee
+                @if (u.semCoordenada) { <small>({{ u.semCoordenada }} aproximadas, sem coordenada na planilha)</small> } }
+            }
+          </div>
+        }
       </div>
     }
   `,
@@ -121,6 +131,9 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .mapa { position: absolute; inset: 0; background: var(--mat-sys-surface-container); }
     .controles { position: absolute; top: 12px; right: 12px; z-index: 900; display: flex; flex-direction: column; gap: 8px; }
     .botao-mapa { background: var(--mat-sys-surface-container-lowest); color: var(--mat-sys-on-surface); }
+    .legenda-unidades { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+    .legenda-unidades small { opacity: .75; }
+    .legenda-unidades .pino-unidade { position: relative; display: inline-block; width: 14px; height: 14px; }
     .legenda {
       position: absolute; left: 12px; bottom: 12px; z-index: 800; max-width: min(300px, calc(100% - 80px));
       background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent); backdrop-filter: blur(6px);
@@ -172,6 +185,7 @@ export class MapaComponent implements OnDestroy {
     { id: 'fronteira', nome: 'Limite do município', icone: 'border_outer' },
     { id: 'vizinhos', nome: 'Municípios vizinhos (taxa oficial)', icone: 'grid_view' },
     { id: 'coropletico', nome: 'Taxa por município (aba Estado)', icone: 'map' },
+    { id: 'unidades', nome: 'Unidades Shopee', icone: 'warehouse' },
     { id: 'satelite', nome: 'Satélite', icone: 'satellite_alt' },
     { id: 'mapaEscuro', nome: 'Mapa escuro', icone: 'dark_mode' },
   ];
@@ -183,6 +197,7 @@ export class MapaComponent implements OnDestroy {
   private layerZonas: any;
   private layerSemLocal: any;
   private layerFogo: any;
+  private layerUnidades: any;
   private layerDelegacias: any;
   private layerOficial: any;
   /** Contorno do município aberto (IBGE): pontos fora dele não entram no mapa. */
@@ -296,6 +311,10 @@ export class MapaComponent implements OnDestroy {
       const f = this.store.fogoCidade(); const c = this.camadas(); const cor = this.coropleticoAtivo(); const geo = this.contorno();
       untracked(() => this.desenharFogo((f?.dado?.itens || []).filter((t) => dentroDoContorno(t.lat, t.lng, geo)), c.pinos && !cor));
     });
+    effect(() => {
+      const u = this.store.unidades(); const ver = this.camadas().unidades;
+      untracked(() => this.desenharUnidades(ver ? u?.lista || [] : []));
+    });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
 
@@ -339,6 +358,8 @@ export class MapaComponent implements OnDestroy {
     this.layerZonas = L.layerGroup().addTo(map);
     this.layerSemLocal = L.layerGroup().addTo(map);
     this.layerFogo = L.layerGroup().addTo(map);
+    const pU = map.createPane('paneUnidades'); pU.style.zIndex = 620;
+    this.layerUnidades = L.layerGroup().addTo(map);
     this.layerDelegacias = L.layerGroup().addTo(map);
     this.layerOficial = L.layerGroup().addTo(map);
     this.layerBairros = L.layerGroup().addTo(map);
@@ -457,6 +478,41 @@ export class MapaComponent implements OnDestroy {
         `<div class="popup-meta">Fonte: Instituto Fogo Cruzado (verificado, local exato)</div></div>`);
       this.layerFogo.addLayer(m);
     }
+  }
+
+  /** Unidades Shopee: losango laranja (azul = ainda não iniciada); ponto aproximado sai transparente e tracejado.
+   *  Unidades no mesmo endereço viram um pino só, com o número de unidades e todas no balão. */
+  private desenharUnidades(lista: UnidadeShopee[]): void {
+    if (!this.map || !this.layerUnidades) return;
+    this.layerUnidades.clearLayers();
+    const grupos = new Map<string, UnidadeShopee[]>();
+    for (const u of lista) {
+      const k = u.lat.toFixed(5) + ',' + u.lng.toFixed(5);
+      const g = grupos.get(k); if (g) g.push(u); else grupos.set(k, [u]);
+    }
+    for (const g of grupos.values()) {
+      const u0 = g[0];
+      const exato = g.some((u) => u.origem === 'planilha');
+      const futura = g.every((u) => /not started/i.test(u.status));
+      const icone = L.divIcon({ className: 'pino-unidade' + (exato ? '' : ' aproximado') + (futura ? ' futura' : ''),
+        html: '<span></span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [18, 18], iconAnchor: [9, 9] });
+      const m = L.marker([u0.lat, u0.lng], { icon: icone, pane: 'paneUnidades', keyboard: false,
+        title: g.map((u) => u.codigo + ' · ' + u.nome).join('\n') });
+      m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 360 });
+      m.on('click', () => this.map.flyTo([u0.lat, u0.lng], Math.max(this.map.getZoom(), exato ? 14 : u0.origem === 'cidade' ? 11 : 6), { duration: 0.5 }));
+      this.layerUnidades.addLayer(m);
+    }
+  }
+
+  private popupUnidade(u: UnidadeShopee): string {
+    const origem = u.origem === 'planilha' ? 'Local exato (planilha UNIDADES PADRAO)'
+      : u.origem === 'cidade' ? 'Aproximado: centro da cidade (sem coordenada na planilha)' : 'Aproximado: centro do estado (sem coordenada na planilha)';
+    const analistas = u.analistas.map((a) => `<li>${esc(a.nome || 'Analista')}${a.email ? ' · <a href="mailto:' + esc(a.email) + '">' + esc(a.email) + '</a>' : ''}${a.telefone ? ' · ' + esc(a.telefone) : ''}</li>`).join('');
+    const extra = [u.tipo, u.regiao && 'Região ' + u.regiao, u.gestor && 'Gestor: ' + u.gestor].filter(Boolean).map((x) => esc(x as string)).join(' · ');
+    return `<span class="popup-cat" style="color:#EE4D2D">Unidade Shopee</span> · ${esc(u.status || 'sem status')}` +
+      `<div class="popup-titulo">${esc(u.codigo)} · ${esc(u.nome)}</div>` +
+      `<div class="popup-meta">${esc([u.cidade, u.uf].filter(Boolean).join(' / '))}${u.endereco ? ' · ' + esc(u.endereco) : ''}</div>` +
+      `${extra}${analistas ? '<ul class="lista-sem-local">' + analistas + '</ul>' : ''}<div class="popup-meta">${origem}</div>`;
   }
 
   private popupBairro(b: BairroResumo): string {

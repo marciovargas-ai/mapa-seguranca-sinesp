@@ -16,7 +16,12 @@ import { distanciaKm, fetchComTimeout, gravarLocal, lerLocal, normalizar, tsPara
 
 export type Aba = 'PANORAMA' | 'OFICIAL' | 'ESTADO' | 'ZONAS' | 'FACCOES' | 'NOTICIAS';
 export type Escopo = 'CIDADE' | 'ESTADO';
-export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean }
+export interface Camadas { zonas: boolean; calor: boolean; pinos: boolean; bairros: boolean; fronteira: boolean; vizinhos: boolean; satelite: boolean; mapaEscuro: boolean; coropletico: boolean; delegacias: boolean; oficial: boolean; unidades: boolean }
+export interface UnidadeShopee {
+  codigo: string; nome: string; status: string; uf: string; cidade: string; endereco: string; tipo: string; operacao: string;
+  regiao: string; gestor: string; classe: string; analistas: { nome: string; email: string; telefone: string }[];
+  lat: number; lng: number; origem: 'planilha' | 'cidade' | 'uf';
+}
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
@@ -32,7 +37,7 @@ export class PainelStore {
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
   readonly aba = signal<Aba>('PANORAMA');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true });
+  readonly camadas = signal<Camadas>({ zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true, unidades: false });
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
@@ -175,6 +180,19 @@ export class PainelStore {
 
   alternarCamada(nome: keyof Camadas): void {
     this.camadas.update((c) => ({ ...c, [nome]: !c[nome] }));
+    if (nome === 'unidades' && this.camadas().unidades) this.carregarUnidades();
+  }
+
+  /** Unidades Shopee (planilha UNIDADES PADRAO): só carregam quando a camada é ligada. */
+  readonly unidades = signal<{ carregando: boolean; erro: string; lista: UnidadeShopee[]; semCoordenada: number } | null>(null);
+  carregarUnidades(): void {
+    const u = this.unidades();
+    if (u && (u.carregando || u.lista.length)) return;
+    this.unidades.set({ carregando: true, erro: '', lista: [], semCoordenada: 0 });
+    Servidor.unidadesShopee().then((r) => {
+      if (!r?.ok) throw new Error(r?.erro || 'sem resposta');
+      this.unidades.set({ carregando: false, erro: '', lista: r.unidades || [], semCoordenada: r.problemas?.semCoordenada?.length || 0 });
+    }).catch((e) => this.unidades.set({ carregando: false, erro: String(e?.message || e), lista: [], semCoordenada: 0 }));
   }
 
   alternarCategoria(id: string): void {
