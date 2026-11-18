@@ -79,7 +79,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     </section>
 
     @if (c.serie; as s) {
-      <section class="cartao">
+      <section class="cartao mes-a-mes">
         <div class="titulo-bloco">
           <h3 matTooltip="Barras: mortes violentas intencionais por mês no Sinesp (homicídio doloso, feminicídio, latrocínio e lesão corporal seguida de morte). Linha: ocorrências noticiadas no mesmo mês (eixo da direita).">
             Mortes violentas mês a mês × notícias <mat-icon class="info">info</mat-icon></h3>
@@ -176,7 +176,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
           }
         </section>
       }
-      <section class="cartao">
+      <section class="cartao por-bairro">
         <div class="titulo-bloco">
           <h3 matTooltip="Ocorrências noticiadas nos últimos 12 meses ligadas a cada bairro (pelo contorno do bairro ou pelo nome citado). Contornos oficiais do IBGE (Censo 2022); onde o IBGE não tem, OpenStreetMap. Clique para ver no mapa.">
             Ocorrências por bairro <mat-icon class="info">info</mat-icon></h3>

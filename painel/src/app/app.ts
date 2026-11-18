@@ -86,14 +86,14 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
         <button mat-icon-button matTooltip="Minha localização" aria-label="Minha localização" (click)="localizar()"><mat-icon>my_location</mat-icon></button>
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
         <app-favoritos />
-        <button mat-icon-button matTooltip="Meus alertas por e-mail" aria-label="Meus alertas por e-mail" (click)="abrirAlertas()"><mat-icon>mark_email_unread</mat-icon></button>
-        <button mat-icon-button matTooltip="Relatos das equipes Shopee" aria-label="Relatos das equipes Shopee" (click)="abrirRelatos()"><mat-icon>campaign</mat-icon></button>
-        <button mat-icon-button matTooltip="Saúde das fontes" aria-label="Saúde das fontes" (click)="abrirFontes()"><mat-icon>monitor_heart</mat-icon></button>
+        <button mat-icon-button class="bt-alertas" matTooltip="Meus alertas por e-mail" aria-label="Meus alertas por e-mail" (click)="abrirAlertas()"><mat-icon>mark_email_unread</mat-icon></button>
+        <button mat-icon-button class="bt-relatos" matTooltip="Relatos das equipes Shopee" aria-label="Relatos das equipes Shopee" (click)="abrirRelatos()"><mat-icon>campaign</mat-icon></button>
+        <button mat-icon-button class="bt-fontes" matTooltip="Saúde das fontes" aria-label="Saúde das fontes" (click)="abrirFontes()"><mat-icon>monitor_heart</mat-icon></button>
         <app-shopee />
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         </button>
-        <button mat-icon-button matTooltip="Como ler o painel (tour guiado)" aria-label="Como ler o painel" (click)="ajuda()"><mat-icon>help_outline</mat-icon></button>
+        <button mat-icon-button class="bt-ajuda" matTooltip="Como ler o painel (tour guiado)" aria-label="Como ler o painel" (click)="ajuda()"><mat-icon>help_outline</mat-icon></button>
         <button mat-button class="idioma" [matMenuTriggerFor]="menuIdioma" matTooltip="Idioma" aria-label="Idioma">
           <mat-icon>translate</mat-icon><span translate="no">{{ idioma() === 'en' ? 'EN' : 'PT' }}</span>
         </button>
