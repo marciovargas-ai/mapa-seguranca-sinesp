@@ -154,6 +154,12 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
                 </div>
               }
             </div>
+          }
+        </header>
+
+        <!-- Abaixo dos cartões tudo rola junto (nota, filtros e abas), para sobrar altura em notebooks -->
+        <div class="rolagem" #rolagem>
+          @if (!avisoOficial()) {
             <p class="fonte-kpis">Sinesp/MJSP (polícias do estado, PRF e PF) · {{ periodoOficial() }}. {{ notaMortes() }} Notícias entram só como complemento.</p>
           }
           @if (filtrosNoticias()) {
@@ -182,9 +188,8 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
               }
             </div>
           }
-        </header>
 
-        <mat-tab-group class="abas" [selectedIndex]="indiceAba()" (selectedIndexChange)="store.aba.set(abas[$event].id)"
+        <mat-tab-group class="abas" [selectedIndex]="indiceAba()" (selectedIndexChange)="trocarAba($event)"
           mat-stretch-tabs="false" mat-align-tabs="start" animationDuration="0ms" [disablePagination]="false">
           @for (a of abas; track a.id) {
             <mat-tab>
@@ -208,6 +213,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
             </mat-tab>
           }
         </mat-tab-group>
+        </div>
       </section>
     </main>
   `,
@@ -233,7 +239,10 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .divisor:hover span, .divisor:focus-visible span { background: var(--mat-sys-primary); opacity: 1; }
     .divisor:focus-visible { outline: none; }
     .painel { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--mat-sys-surface); container: painel / inline-size; }
-    .painel-topo { padding: 14px 16px 6px; display: grid; gap: 10px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+    .painel-topo { padding: 14px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--mat-sys-outline-variant); flex: none; }
+    .rolagem { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+    .rolagem > .fonte-kpis { margin: 0; padding: 10px 16px 0; }
+    .rolagem > .filtros { padding: 0 16px 10px; }
     .linha-titulo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
     h1 { font: var(--mat-sys-headline-small); margin: 0; display: flex; align-items: center; gap: 2px; }
     .estrela { color: var(--mat-sys-outline); }
@@ -268,9 +277,10 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
     .aviso-oficial div { display: flex; flex-direction: column; gap: 2px; font: var(--mat-sys-body-medium); }
     .fonte-kpis { margin: 6px 0 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
-    .abas { flex: 1; min-height: 0; }
-    .abas ::ng-deep .mat-mdc-tab-body-wrapper { flex: 1; min-height: 0; }
-    .abas ::ng-deep .mat-mdc-tab-body-content { overflow: auto; }
+    /* As abas crescem com o conteúdo; quem rola é a caixa .rolagem. A barra das abas gruda no topo ao rolar. */
+    .abas ::ng-deep .mat-mdc-tab-header { position: sticky; top: 0; z-index: 3; background: var(--mat-sys-surface); }
+    .abas ::ng-deep .mat-mdc-tab-body-wrapper, .abas ::ng-deep .mat-mdc-tab-body-active { overflow: visible; }
+    .abas ::ng-deep .mat-mdc-tab-body-content { overflow: visible; height: auto; }
     .conteudo { padding: 14px 16px 24px; }
     .icone-aba { font-size: 18px; width: 18px; height: 18px; margin-right: 6px; }
     .contador { margin-left: 6px; font: var(--mat-sys-label-small); background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container);
@@ -287,11 +297,14 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       .corpo { display: flex; flex-direction: column; }
       .area-mapa { height: 46vh; min-height: 300px; }
       .divisor { display: none; }
-      .abas ::ng-deep .mat-mdc-tab-body-content { overflow: visible; }
+      .rolagem { overflow: visible; }
+      .abas ::ng-deep .mat-mdc-tab-header { position: static; }
     }
     @media (max-width: 520px) {
       .marca-texto { display: none; }
-      .painel-topo { padding: 12px 12px 6px; }
+      .painel-topo { padding: 12px 12px 8px; }
+      .rolagem > .fonte-kpis { padding: 8px 12px 0; }
+      .rolagem > .filtros { padding: 0 12px 8px; }
       .conteudo { padding: 12px 12px 24px; }
       h1 { font: var(--mat-sys-title-large); }
       .icone-aba { display: none; }
@@ -303,6 +316,7 @@ export class App {
   private readonly dialog = inject(MatDialog);
   private readonly corpo = viewChild.required<ElementRef<HTMLElement>>('corpo');
   private readonly busca = viewChild.required<ElementRef<HTMLInputElement>>('busca');
+  private readonly rolagem = viewChild.required<ElementRef<HTMLElement>>('rolagem');
 
   protected readonly abas = ABAS;
   protected readonly ufs = UFS;
@@ -328,6 +342,15 @@ export class App {
   protected readonly larguraPainel = signal(this.larguraInicial());
 
   protected readonly indiceAba = computed(() => ABAS.findIndex((a) => a.id === this.store.aba()));
+
+  /** Ao trocar de aba depois de rolar, a nova aba começa do topo (com a barra das abas visível), não no meio. */
+  protected trocarAba(i: number): void {
+    this.store.aba.set(this.abas[i].id);
+    const caixa = this.rolagem().nativeElement, abas = caixa.querySelector<HTMLElement>('.abas');
+    if (!abas || window.innerWidth <= 900) return;
+    const topo = abas.getBoundingClientRect().top - caixa.getBoundingClientRect().top + caixa.scrollTop;
+    if (caixa.scrollTop > topo) caixa.scrollTop = topo;
+  }
   protected readonly filtrosNoticias = computed(() => true);
   protected readonly orgaoAtivo = computed(() => ORGAO_POR_ID[this.store.orgao()] || null);
   protected readonly contagem = computed(() => {
