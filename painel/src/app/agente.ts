@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AgenteIA, MensagemIA } from './core/agente';
 import { PainelStore } from './core/painel.store';
+import { ESTADOS } from './core/dados';
+import { normalizar } from './core/util';
 
 const SUGESTOES = [
   'Resuma a situação da segurança neste local',
@@ -45,7 +47,7 @@ const SELETOR_CARTOES = '.conteudo .cartao:not(.zona):not(.noticia), .kpis .kpi'
             <div class="boas-vindas">
               <p>Olá! Respondo com base nos dados que o painel está mostrando agora: estatísticas oficiais, índice, bairros, zonas e notícias.</p>
               <div class="sugestoes">
-                @for (s of sugestoes; track s) { <button type="button" (click)="ia.perguntar(s)">{{ s }}</button> }
+                @for (s of sugestoes(); track s) { <button type="button" (click)="ia.perguntar(s)">{{ s }}</button> }
               </div>
             </div>
           }
@@ -143,7 +145,17 @@ const SELETOR_CARTOES = '.conteudo .cartao:not(.zona):not(.noticia), .kpis .kpi'
 export class AgenteComponent {
   protected readonly ia = inject(AgenteIA);
   protected readonly store = inject(PainelStore);
-  protected readonly sugestoes = SUGESTOES;
+  /** Sugestões fixas + análises que dependem do local aberto (comparar com a capital, com o Brasil, ranking do estado). */
+  protected readonly sugestoes = computed(() => {
+    const uf = this.store.uf(), est = ESTADOS[uf];
+    const ehEstado = this.store.escopo() === 'ESTADO';
+    const cidade = this.store.cidade();
+    const extra: string[] = [];
+    if (est && !ehEstado && normalizar(cidade) !== normalizar(est.capital)) extra.push(`Compare ${cidade} com ${est.capital}`);
+    else if (est && !ehEstado) extra.push(`Compare ${cidade} com o estado de ${est.nome} e com o Brasil`);
+    extra.push(ehEstado ? `Quais cidades de ${est?.nome || uf} têm as maiores taxas de mortes violentas?` : 'Como este local está em relação ao estado e ao Brasil?');
+    return [SUGESTOES[0], ...extra, ...SUGESTOES.slice(1)];
+  });
   protected readonly texto = signal('');
   protected readonly copiado = signal(0);
   private readonly lista = viewChild<ElementRef<HTMLElement>>('lista');

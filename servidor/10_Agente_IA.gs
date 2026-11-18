@@ -17,7 +17,7 @@
 
 const AGENTE_IA_URL_ = 'https://ai.insea.io/api/superagents/';
 const AGENTE_IA_PADRAO_ = '30297';
-const AGENTE_IA_MAX_CONTEXTO_ = 30000;   // caracteres do resumo do painel enviados por pergunta
+const AGENTE_IA_MAX_CONTEXTO_ = 60000;   // caracteres do resumo do painel enviados por pergunta
 const AGENTE_IA_LIMITE_HORA_ = 300;      // perguntas por hora no portal inteiro (proteção de custo)
 const NOME_PASTA_EXPORTACOES_ = 'Mapa da Segurança - Exportações';
 
@@ -27,7 +27,13 @@ const INSTRUCOES_AGENTE_ = [
   'Use SOMENTE os dados do painel enviados abaixo. Se a resposta não estiver nos dados, diga isso com franqueza e sugira onde olhar no painel. Nunca invente números.',
   'Sempre diga de qual fonte vem cada número (Sinesp, DATASUS, SSP, ISP-RJ, Fogo Cruzado, notícias) e o período.',
   'Notícias são complemento: não trate contagem de notícias como estatística oficial.',
-  'Quando houver vários números, organize em tabela Markdown. Seja breve: no máximo uns 15 itens ou linhas.'
+  'Quando houver vários números, organize em tabela Markdown. Seja breve: no máximo uns 15 itens ou linhas.',
+  'COMPARAÇÕES E ANÁLISES:',
+  '- Se o JSON tiver "comparacao", ele traz os dados oficiais do Sinesp dos outros locais citados na pergunta (mesmos 12 meses e mesma regra). Use-os junto com "comparacao.localAberto" (ou "resumoOficial") e monte uma tabela lado a lado: mortes violentas em 12 meses, taxa por 100 mil, variação sobre os 12 meses anteriores e os principais crimes.',
+  '- Compare sempre pela taxa por 100 mil habitantes; o total sozinho engana quando as populações são diferentes. Diga quantas vezes uma taxa é maior que a outra.',
+  '- Se um local da comparação vier com "semDados", diga que o Sinesp não publicou dados dele e compare só o que existe.',
+  '- "brasil" traz a taxa nacional de mortes violentas; "rankingEstado" traz os municípios do estado com maiores e menores taxas e mais mortes; "posicaoNoEstado" traz a posição do local; "serieMensalMortesViolentas" traz a evolução mês a mês. Use esses blocos para comparar com o estado e o país, montar rankings e dizer se a tendência é de alta ou de queda.',
+  '- Se pedirem a comparação com um lugar que não está no JSON, diga que não recebeu os dados dele e peça para escrever o nome da cidade e a sigla do estado (ex.: "Compare com Porto Alegre RS").'
 ].join('\n');
 
 /** Diz ao painel se o agente está configurado (sem expor a chave). */
