@@ -1,12 +1,12 @@
 """Sonda temporária: estrutura das planilhas de RS (SSP-RS) e MG (Sejusp) e da página de microdados da BA."""
-import csv, io, re, sys, collections, urllib.request
+import csv, io, re, sys, collections, urllib.request, urllib.parse
 sys.path.insert(0, 'scripts')
 from sondar_fontes import get, pagina
 
 def rs():
     _, _, b = get('https://www.ssp.rs.gov.br/indicadores-criminais', timeout=60)
     links = re.findall(r'href="([^"]*site-geral-e-munic[^"]*\.xlsx)"', b.decode('utf-8', 'ignore'), re.I)
-    links = sorted(set(links), key=lambda u: re.search(r'/(\d{6})/', u).group(1))[-2:]
+    links = sorted(set(urllib.parse.urljoin('https://www.ssp.rs.gov.br/', l) for l in links), key=lambda u: re.search(r'/(\d{6})/', u).group(1))[-2:]
     import openpyxl
     for u in links:
         _, _, x = get(u, timeout=300)
@@ -42,11 +42,11 @@ def ba():
         try:
             _, _, b = get(u, timeout=60)
             t = b.decode('utf-8', 'ignore')
-            for m in sorted(set(re.findall(r'href="([^"]+)"[^>]*>([^<]{0,80}(?:micro|dados|bairro|mortes|planilha)[^<]{0,80})<', t, re.I)))[:40]: print('   ', m)
+            for m in sorted(set(re.findall(r'href="([^"]*(?:files/|drive|sharepoint|dados)[^"]*)"[^>]*>([^<]{0,120})<', t, re.I)))[:80]: print('   ', m)
         except Exception as e:
             print('   ERRO', e)
 
 if __name__ == '__main__':
-    for f in (rs, mg, ba):
+    for f in (rs, ba):
         try: f()
         except Exception as e: print('ERRO', f.__name__, e)
