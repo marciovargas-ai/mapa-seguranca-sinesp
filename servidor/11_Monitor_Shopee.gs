@@ -53,7 +53,7 @@ function obterNoticiasShopee(desde) {
     atualizado: dado.atualizado || 0,
     termos: TERMOS_SHOPEE_,
     gatilho: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'monitorShopeeGatilho'),
-    itens: (dado.itens || []).filter(i => !d || i.achadoEm > d)
+    itens: (dado.itens || []).filter(i => ehNoticiaDaShopee_(i.titulo, i.resumo) && (!d || i.achadoEm > d))
   };
 }
 
@@ -132,7 +132,7 @@ function atualizarMonitorShopee_() {
       itens.forEach(it => {
         const titulo = String(it.t || '');
         const resumo = String(it.r || '');
-        if (!/shopee/i.test(titulo + ' ' + resumo)) return;
+        if (!ehNoticiaDaShopee_(titulo, resumo)) return;
         novos.push({ titulo: titulo, resumo: limparHtml_(resumo), link: String(it.l || ''),
           veiculo: String(it.v || 'Imprensa'), ts: Number(it.ms) || agora, termo: '' });
       });
@@ -148,7 +148,7 @@ function atualizarMonitorShopee_() {
   novos.forEach(n => {
     if (!n.titulo || !n.link || n.ts < limite) return;
     const texto = n.titulo + '. ' + n.resumo;
-    if (!/shopee/i.test(texto)) return; // só o que cita a Shopee de verdade
+    if (!ehNoticiaDaShopee_(n.titulo, n.resumo)) return; // só notícia sobre a Shopee, nunca de concorrente
     const ass = chaveTituloShopee_(n.titulo);
     const igual = porLink[n.link] || porAssinatura[ass];
     if (igual) { if (n.termo && !igual.termo) igual.termo = n.termo; return; }
@@ -174,10 +174,27 @@ function atualizarMonitorShopee_() {
     lista.push(item);
   });
 
-  const final = lista.filter(i => i.ts >= limite).sort((a, b) => b.ts - a.ts).slice(0, MAX_NOTICIAS_SHOPEE_);
+  const final = lista.filter(i => i.ts >= limite && ehNoticiaDaShopee_(i.titulo, i.resumo)).sort((a, b) => b.ts - a.ts).slice(0, MAX_NOTICIAS_SHOPEE_);
   const dado = { atualizado: agora, itens: final };
   gravarJson_(ARQUIVO_SHOPEE_, dado);
   return dado;
+}
+
+/** Concorrentes: notícia sobre eles fica fora, mesmo que o resumo cite a Shopee (Márcio, 2026-11-18). */
+const CONCORRENTES_SHOPEE_ = /\b(amazon|mercado ?livre|mercado ?pago|magalu|magazine luiza|aliexpress|alibaba|shein|temu|americanas|casas bahia|grupo casas bahia|kabum|tiktok shop|netshoes|submarino|carrefour|olist|enjoei|olx)\b/i;
+
+/**
+ * Só entra notícia sobre a Shopee: a Shopee no título, ou um termo do monitor
+ * ("motorista da Shopee", "carga roubada da Shopee"...) no resumo e nenhum
+ * concorrente no título. O Google Notícias põe manchetes de outras empresas no
+ * resumo, e por isso "Shopee" solta no resumo não basta.
+ */
+function ehNoticiaDaShopee_(titulo, resumo) {
+  const t = String(titulo || '');
+  if (/shopee/i.test(t)) return true;
+  if (CONCORRENTES_SHOPEE_.test(t)) return false;
+  const r = normalizarTexto_(String(resumo || ''));
+  return TERMOS_SHOPEE_.some(x => r.indexOf(normalizarTexto_(x)) !== -1);
 }
 
 /** Mesma manchete em veículos diferentes vira uma notícia só. */
