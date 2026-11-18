@@ -13,6 +13,14 @@ const MINUTOS_CONSULTA = 3;
 /** Na primeira visita, só o que entrou nos últimos 3 dias conta como novidade. */
 const DIAS_NOVIDADE_INICIAL = 3;
 
+/** Mesmo filtro do servidor, repetido aqui: notícia de concorrente nunca aparece, mesmo com o servidor antigo. */
+const CONCORRENTES = /\b(amazon|mercado ?livre|mercado ?pago|magalu|magazine luiza|aliexpress|alibaba|shein|temu|americanas|casas bahia|kabum|tiktok shop|netshoes|submarino|carrefour|olist|enjoei|olx)\b/i;
+function ehDaShopee(i: NoticiaShopee): boolean {
+  if (/shopee/i.test(i.titulo || '')) return true;
+  if (CONCORRENTES.test(i.titulo || '')) return false;
+  return /shopee/i.test(i.resumo || '');
+}
+
 /** Monitor de notícias que citam a Shopee: lista, contador de não lidas e avisos (popup). */
 @Injectable({ providedIn: 'root' })
 export class MonitorShopee {
@@ -71,7 +79,7 @@ export class MonitorShopee {
       this.atualizado.set(r.atualizado || 0);
       if (r.termos) this.termos.set(r.termos);
       const conhecidos = new Set(this.itens().map((i) => i.id));
-      const novos = ((r.itens || []) as NoticiaShopee[]).filter((i) => !conhecidos.has(i.id));
+      const novos = ((r.itens || []) as NoticiaShopee[]).filter((i) => !conhecidos.has(i.id) && ehDaShopee(i));
       if (!novos.length) return;
       this.itens.update((l) => [...novos, ...l].sort((a, b) => b.ts - a.ts).slice(0, 600));
       // Popup: na abertura, um resumo do que não foi lido; depois, cada lote novo
