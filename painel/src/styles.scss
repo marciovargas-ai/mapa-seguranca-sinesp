@@ -129,7 +129,23 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .lista-sem-local { padding-left: 16px; margin: 6px 0 0; max-height: 220px; overflow: auto; }
 .marcador-sem-local div { background: #334155; color: #fff; border-radius: 999px; padding: 3px 9px; font: 600 11px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
 .rotulo-bairro div { display: inline-flex; align-items: center; gap: 5px; background: #fde68a; color: #1c1917; border: 1.5px solid #1c1917; border-radius: 6px;
-  padding: 2px 7px; font: 600 11.5px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
+  padding: 3px 8px; font: 600 12.5px Roboto, sans-serif; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
+.rotulo-bairro .nb { font-weight: 800; letter-spacing: .1px; }
+/* Nome de todos os bairros (sem registro): texto com contorno branco, aparece só com o mapa aproximado */
+.rotulo-nome-bairro div { transform: translate(-50%, -50%); font: 700 11px/1.1 Roboto, sans-serif; color: #334155; text-transform: uppercase; letter-spacing: .4px;
+  white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; }
+.tema-escuro .rotulo-nome-bairro div, .leaflet-container.mapa-escuro .rotulo-nome-bairro div { color: #e2e8f0; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.leaflet-container:not(.zoom-perto) .rotulo-nome-bairro { display: none; }
+.nome-bairro { display: inline-block; font-weight: 700; color: #113366; }
+.popup-zona .zona-topo { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 3px solid; }
+.popup-zona .zona-rank { width: 28px; height: 28px; border-radius: 50%; color: #fff; font: 700 14px/28px Roboto, sans-serif; text-align: center; flex: none; }
+.popup-zona .zona-indice { margin: 4px 0 8px; }
+.popup-zona .zona-indice > b { font-size: 30px; line-height: 1; }
+.popup-zona .zona-indice > span { font-size: 13px; opacity: .7; margin-left: 2px; }
+.popup-zona .zona-barra { height: 6px; border-radius: 99px; background: rgba(127,127,127,.2); margin: 6px 0 4px; overflow: hidden; }
+.popup-zona .zona-barra i { display: block; height: 100%; border-radius: 99px; }
+.popup-zona .zona-bairros { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 4px; }
+.popup-zona .zona-sub { display: block; margin-top: 8px; }
 .rotulo-bairro div:hover { background: #fcd34d; }
 .rotulo-bairro i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; }
 .leaflet-container:not(.zoom-perto) .rotulo-extra { display: none; }

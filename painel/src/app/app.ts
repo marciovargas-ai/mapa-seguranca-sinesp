@@ -17,6 +17,7 @@ import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
 import { ShopeeComponent } from './shopee';
 import { FavoritosComponent } from './favoritos';
+import { AlertasComponent } from './alertas';
 import { Favoritos } from './core/favoritos';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
@@ -79,6 +80,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
         <button mat-icon-button matTooltip="Minha localização" aria-label="Minha localização" (click)="localizar()"><mat-icon>my_location</mat-icon></button>
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
         <app-favoritos />
+        <button mat-icon-button matTooltip="Meus alertas por e-mail" aria-label="Meus alertas por e-mail" (click)="abrirAlertas()"><mat-icon>mark_email_unread</mat-icon></button>
         <app-shopee />
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
@@ -399,6 +401,7 @@ export class App {
   /** Como ler o painel: tour que passa por cada parte da tela. */
   protected readonly tourAberto = signal(false);
   protected ajuda(): void { this.tourAberto.set(true); }
+  protected abrirAlertas(): void { this.dialog.open(AlertasComponent, { width: '640px', maxWidth: '96vw', autoFocus: false }); }
   protected fecharTour(naoMostrar: boolean): void {
     this.tourAberto.set(false);
     if (naoMostrar) gravarLocal(CFG.CHAVE_AJUDA_VISTA, '1');

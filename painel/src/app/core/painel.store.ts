@@ -26,6 +26,16 @@ export interface UnidadeShopee {
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
 
+const CHAVE_CAMADAS = 'MAPA_SEG_CAMADAS';
+const CAMADAS_PADRAO: Camadas = { zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true, unidades: false };
+function lerCamadas(): Camadas {
+  try {
+    const g = JSON.parse(lerLocal(CHAVE_CAMADAS) || '{}');
+    const c = { ...CAMADAS_PADRAO };
+    (Object.keys(c) as (keyof Camadas)[]).forEach((k) => { if (typeof g[k] === 'boolean') c[k] = g[k]; });
+    return { ...c, unidades: false };
+  } catch { return { ...CAMADAS_PADRAO }; }
+}
 const chaveLocal = (uf: string, cidade: string) => uf + '|' + normalizar(cidade);
 
 /** Estado único do painel (signals) e as ações que falam com o servidor. */
@@ -38,7 +48,8 @@ export class PainelStore {
   readonly categorias = signal<string[]>([]);
   readonly orgao = signal('');
   readonly aba = signal<Aba>('PANORAMA');
-  readonly camadas = signal<Camadas>({ zonas: true, calor: false, pinos: true, bairros: true, fronteira: true, vizinhos: false, satelite: false, mapaEscuro: false, coropletico: true, delegacias: true, oficial: true, unidades: false });
+  /** Camadas: volta a última escolha de cada pessoa (no navegador); Unidades Shopee sempre começam desligadas. */
+  readonly camadas = signal<Camadas>(lerCamadas());
   readonly dados = signal<Pacote | null>(null);
   readonly carregando = signal(false);
   readonly coletando = signal(false);
@@ -189,6 +200,8 @@ export class PainelStore {
 
   alternarCamada(nome: keyof Camadas): void {
     this.camadas.update((c) => ({ ...c, [nome]: !c[nome] }));
+    const { unidades, ...guardar } = this.camadas();
+    gravarLocal(CHAVE_CAMADAS, JSON.stringify(guardar));
     if (nome === 'unidades' && this.camadas().unidades) this.carregarUnidades();
   }
 

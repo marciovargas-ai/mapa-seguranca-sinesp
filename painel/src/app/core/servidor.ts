@@ -34,6 +34,9 @@ export const Servidor = {
   unidadesShopee: () => chamar<any>('obterUnidadesShopee', false),
   favoritos: () => chamar<{ ok: boolean; conta: string; favoritos: { uf: string; nome: string }[] | null }>('obterFavoritos'),
   salvarFavoritos: (lista: { uf: string; nome: string }[]) => chamar<any>('salvarFavoritos', lista),
+  alertas: () => chamar<any>('obterAlertas'),
+  salvarAlertas: (prefs: unknown) => chamar<any>('salvarAlertas', prefs),
+  testarAlertas: (prefs: unknown) => chamar<any>('testarAlertas', prefs),
   shopee: (desde: number) => chamar<any>('obterNoticiasShopee', desde || 0),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),

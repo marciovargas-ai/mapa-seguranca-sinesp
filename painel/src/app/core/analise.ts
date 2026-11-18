@@ -202,6 +202,7 @@ export function calcularZonas(precisas: Ocorrencia[]): Zona[] {
       cats: Object.keys(cats).sort((a, b) => cats[b] - cats[a]).map((id) => ({ id, qtd: cats[id] })),
       graves: (cats['CVLI'] || 0) + (cats['CONFRONTO'] || 0), recentes: rec, anteriores30: ant,
       rank: 0, indice: 0, nivel: 'moderada' as Zona['nivel'],
+      ultimas: pontos.slice().sort((a, b) => b.ts - a.ts).slice(0, 5).map((o) => ({ titulo: o.titulo, link: o.link, data: o.data, cat: o.cat })),
     };
   }).filter((z): z is Zona => !!z).sort((a, b) => b.peso - a.peso).slice(0, CFG.ZONA_MAX_EXIBIDAS);
 

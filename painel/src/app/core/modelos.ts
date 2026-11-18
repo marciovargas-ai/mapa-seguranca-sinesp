@@ -52,6 +52,8 @@ export interface Zona {
   lat: number; lng: number; qtd: number; peso: number; raio: number; nome: string; cidade: string;
   cats: { id: string; qtd: number }[]; graves: number; recentes: number; anteriores30: number;
   rank: number; indice: number; nivel: 'critica' | 'alta' | 'moderada';
+  /** Notícias mais recentes dentro da zona (para o balão). */
+  ultimas: { titulo: string; link: string; data: string; cat: string }[];
 }
 
 export interface ResumoOrgao { qtd: number; graves: number; precisas: number }

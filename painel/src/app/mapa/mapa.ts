@@ -7,7 +7,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { CacheDisco } from '../core/cache-disco';
 import { CATEGORIA_POR_ID, CATEGORIAS, CFG, COR_NIVEL, ESTADOS, NOME_NIVEL, ROTULOS_PRECISAO } from '../core/dados';
 import { BairroResumo } from '../core/bairros';
-import { Ocorrencia } from '../core/modelos';
+import { Ocorrencia, Zona } from '../core/modelos';
 import { municipioPorCodigo } from '../core/municipios';
 import { Camadas, PainelStore, UnidadeShopee } from '../core/painel.store';
 import { NOME_CAT_OFICIAL } from '../core/oficial';
@@ -535,6 +535,33 @@ export class MapaComponent implements OnDestroy {
       `${extra}${analistas ? '<ul class="lista-sem-local">' + analistas + '</ul>' : ''}<div class="popup-meta">${origem}</div>`;
   }
 
+  /** Balão da zona vermelha: índice 0–100 (100 = zona mais intensa da cidade), tipos, tendência e últimas notícias. */
+  private popupZona(z: Zona, total: number): string {
+    const cor = COR_NIVEL[z.nivel];
+    const tend = z.anteriores30 ? Math.round(((z.recentes - z.anteriores30) / z.anteriores30) * 100) : null;
+    const tendTxt = z.recentes || z.anteriores30
+      ? `${fmt(z.recentes)} nos últimos 30 dias` + (tend === null ? '' : ` (${tend > 0 ? '+' : ''}${tend}% vs 30 dias anteriores)`)
+      : 'nenhuma nos últimos 60 dias';
+    const tipos = z.cats.map((c) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[c.id]?.cor || '#64748b'}">${esc(CATEGORIA_POR_ID[c.id]?.curto || c.id)} ${fmt(c.qtd)}</span>`).join(' ');
+    const bairros = z.nome && z.nome !== 'Área sem bairro citado'
+      ? z.nome.split(', ').map((n) => `<span class="nome-bairro">Bairro ${esc(n)}</span>`).join(' ') : '<small>Área sem bairro citado nas notícias</small>';
+    const risco = this.store.compilado().risco;
+    const ultimas = (z.ultimas || []).map((o) =>
+      `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener">${esc(o.titulo)}</a> <small>(${esc(o.data)})</small></li>`).join('');
+    return `<div class="popup popup-zona">` +
+      `<div class="zona-topo" style="border-color:${cor}"><span class="zona-rank" style="background:${cor}">${z.rank}</span>` +
+      `<div><b>Zona vermelha ${z.rank} de ${total}</b><br><small>${esc(NOME_NIVEL[z.nivel])}</small></div></div>` +
+      `<div class="zona-indice"><b style="color:${cor}">${z.indice}</b><span>/100</span>` +
+      `<div class="zona-barra"><i style="width:${z.indice}%;background:${cor}"></i></div>` +
+      `<small>Concentração de crimes noticiados, com peso maior para homicídio, tiroteio e fatos recentes. 100 = zona mais intensa da cidade.</small></div>` +
+      `<div class="zona-bairros">${bairros}</div>` +
+      `<div>${fmt(z.qtd)} ocorrências · ${fmt(z.graves)} homicídio/tiroteio · ${tendTxt}</div>` +
+      `<div class="popup-tags">${tipos}</div>` +
+      (ultimas ? `<b class="zona-sub">Últimas notícias na zona</b><ul class="lista-sem-local">${ultimas}</ul>` : '') +
+      (risco ? `<small>Cidade inteira: ${esc(risco.titulo)} ${risco.valor}/100 (${esc(risco.nivel.toLowerCase())}), na comparação com o Brasil.</small>` : '') +
+      `</div>`;
+  }
+
   private popupBairro(b: BairroResumo): string {
     const lista = b.ocorrencias.slice().sort((x, y) => y.ts - x.ts);
     const tipos = Object.keys(b.cats).sort((x, y) => b.cats[y] - b.cats[x])
@@ -549,7 +576,7 @@ export class MapaComponent implements OnDestroy {
     const of = ob?.porBairro.get(b.nome);
     const oficial = ob ? `<div class="popup-oficial"><b>${of ? fmt(of.total) : 0} registros oficiais</b> (${esc(ob.dado.orgao)}, ${esc(ob.dado.periodo)})` +
       (of ? '<ul class="lista-sem-local">' + Object.entries(of.cats).sort((x, y) => y[1] - x[1]).map(([c, n]) => `<li>${esc(NOME_CAT_OFICIAL[c] || c)}: <b>${fmt(n)}</b></li>`).join('') + '</ul>' : '') + '</div>' : '';
-    return `<div class="popup"><b>${esc(b.nome)}</b><br>${oficial}${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
+    return `<div class="popup"><b class="nome-bairro">Bairro ${esc(b.nome)}</b><br>${oficial}${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
   }
 
   /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */
@@ -595,10 +622,15 @@ export class MapaComponent implements OnDestroy {
     // Rótulos: os 8 bairros com mais registros sempre; até 30 só quando o mapa está aproximado
     lista.filter((b) => valor(b)).sort((a, b) => valor(b) - valor(a)).slice(0, 30).forEach((b, i) => {
       const icone = L.divIcon({ className: 'rotulo-bairro' + (i >= 8 ? ' rotulo-extra' : ''), iconSize: null, iconAnchor: [-6, 12],
-        html: `<div><i style="background:${ob ? '#113366' : CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i>${esc(b.nome)} <b>(${fmt(valor(b))})</b></div>` });
+        html: `<div><i style="background:${ob ? '#113366' : CATEGORIA_POR_ID[b.catTop]?.cor || '#334155'}"></i><span class="nb">${esc(b.nome)}</span> <b>(${fmt(valor(b))})</b></div>` });
       const mk = L.marker([b.lat, b.lng], { icon: icone, riseOnHover: true, title: b.nome, pane: 'paneRotulos' });
       mk.bindPopup(() => this.popupBairro(b));
       this.layerBairros.addLayer(mk);
+    });
+    // Nome de todos os bairros com contorno (os sem registro também), discreto e só com o mapa aproximado
+    lista.filter((b) => b.aneis && !valor(b)).slice(0, 200).forEach((b) => {
+      const icone = L.divIcon({ className: 'rotulo-nome-bairro', iconSize: null, iconAnchor: [0, 0], html: `<div>${esc(b.nome)}</div>` });
+      this.layerBairros.addLayer(L.marker([b.lat, b.lng], { icon: icone, interactive: false, keyboard: false, pane: 'paneRotulos' }));
     });
     void f;
   }
@@ -659,9 +691,9 @@ export class MapaComponent implements OnDestroy {
     if (c.zonas && mostrarNoticias) {
       f.zonas.slice().reverse().forEach((z) => {
         const cor = COR_NIVEL[z.nivel];
-        const txt = `<b>Zona vermelha ${z.rank} · ${NOME_NIVEL[z.nivel]}</b><br>${esc(z.nome)}<br>${fmt(z.qtd)} ocorrências${z.graves ? ', ' + fmt(z.graves) + ' homicídio/tiroteio' : ''} · índice ${z.indice}`;
-        this.layerZonas.addLayer(L.circle([z.lat, z.lng], { pane: 'paneZonas', renderer: this.renderer, radius: z.raio, color: cor, weight: 2, fillColor: cor, fillOpacity: z.nivel === 'critica' ? 0.22 : 0.15 }).bindPopup(txt));
-        this.layerZonas.addLayer(L.marker([z.lat, z.lng], { pane: 'paneZonas', icon: L.divIcon({ className: 'rotulo-zona', html: `<div style="background:${cor}">${z.rank}</div>`, iconSize: [24, 24] }), keyboard: false }).bindPopup(txt));
+        const txt = () => this.popupZona(z, f.zonas.length);
+        this.layerZonas.addLayer(L.circle([z.lat, z.lng], { pane: 'paneZonas', renderer: this.renderer, radius: z.raio, color: cor, weight: 2, fillColor: cor, fillOpacity: z.nivel === 'critica' ? 0.22 : 0.15 }).bindPopup(txt, { maxWidth: 340 }));
+        this.layerZonas.addLayer(L.marker([z.lat, z.lng], { pane: 'paneZonas', icon: L.divIcon({ className: 'rotulo-zona', html: `<div style="background:${cor}">${z.rank}</div>`, iconSize: [24, 24] }), keyboard: false }).bindPopup(txt, { maxWidth: 340 }));
       });
     }
 
