@@ -52,7 +52,9 @@ function obterNoticiasShopee(desde) {
     atualizado: dado.atualizado || 0,
     termos: TERMOS_SHOPEE_,
     gatilho: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'monitorShopeeGatilho'),
-    itens: (dado.itens || []).filter(i => ehNoticiaDaShopee_(i.titulo, i.resumo) && (!d || i.achadoEm > d))
+    // Reclassifica na leitura: notícias já guardadas também seguem a regra mais nova
+    itens: (dado.itens || []).filter(i => ehNoticiaDaShopee_(i.titulo, i.resumo, i.veiculo) && (!d || i.achadoEm > d))
+      .map(i => Object.assign({}, i, classificarShopee_(i.titulo + '. ' + (i.resumo || ''))))
   };
 }
 
@@ -146,12 +148,11 @@ function atualizarMonitorShopee_() {
   novos.forEach(n => {
     if (!n.titulo || !n.link || n.ts < limite) return;
     const texto = n.titulo + '. ' + n.resumo;
-    if (!ehNoticiaDaShopee_(n.titulo, n.resumo)) return; // só notícia sobre a Shopee, nunca de concorrente
+    if (!ehNoticiaDaShopee_(n.titulo, n.resumo, n.veiculo)) return; // só notícia sobre a Shopee no Brasil, nunca de concorrente
     const ass = chaveTituloShopee_(n.titulo);
     const igual = porLink[n.link] || porAssinatura[ass];
     if (igual) { if (n.termo && !igual.termo) igual.termo = n.termo; return; }
     const norm = normalizarTexto_(texto);
-    const cls = classificarCrimeNLP_(texto);
     const ufs = Object.keys(ufsCitadas_(texto, norm));
     const item = {
       id: gerarHashMD5_(n.link).slice(0, 12),
@@ -164,15 +165,15 @@ function atualizarMonitorShopee_() {
       // Na primeira busca as notícias antigas não viram "novidade" para ninguém
       achadoEm: primeira ? n.ts : agora,
       termo: n.termo || termoShopeeNoTexto_(norm),
-      tipo: tipoShopee_(norm, cls),
-      seguranca: !!(cls && cls.valido) || /roub|assalt|furt|polici|pres[oa]|golpe|fraud|baleado|morto|morte|tiro|sequestr|quadrilha|receptac/.test(norm),
+      tipo: classificarShopee_(texto).tipo,
+      seguranca: classificarShopee_(texto).seguranca,
       ufs: ufs.slice(0, 3)
     };
     porLink[item.link] = item; porAssinatura[ass] = item;
     lista.push(item);
   });
 
-  const final = lista.filter(i => i.ts >= limite && ehNoticiaDaShopee_(i.titulo, i.resumo)).sort((a, b) => b.ts - a.ts).slice(0, MAX_NOTICIAS_SHOPEE_);
+  const final = lista.filter(i => i.ts >= limite && ehNoticiaDaShopee_(i.titulo, i.resumo, i.veiculo)).sort((a, b) => b.ts - a.ts).slice(0, MAX_NOTICIAS_SHOPEE_);
   const dado = { atualizado: agora, itens: final };
   gravarJson_(ARQUIVO_SHOPEE_, dado);
   return dado;
@@ -187,12 +188,29 @@ const CONCORRENTES_SHOPEE_ = /\b(amazon|mercado ?livre|mercado ?pago|magalu|maga
  * concorrente no título. O Google Notícias põe manchetes de outras empresas no
  * resumo, e por isso "Shopee" solta no resumo não basta.
  */
-function ehNoticiaDaShopee_(titulo, resumo) {
+function ehNoticiaDaShopee_(titulo, resumo, veiculo) {
   const t = String(titulo || '');
+  if (FORA_DO_ESCOPO_SHOPEE_.test(normalizarTexto_(t + ' ' + (veiculo || ''))) || /\.(vn|my|sg|ph|id|th|tw)\b/i.test(String(veiculo || ''))) return false;
   if (/shopee/i.test(t)) return true;
   if (CONCORRENTES_SHOPEE_.test(t)) return false;
   const r = normalizarTexto_(String(resumo || ''));
   return TERMOS_SHOPEE_.some(x => r.indexOf(normalizarTexto_(x)) !== -1);
+}
+
+/**
+ * Fora do escopo do monitor (Márcio, 2026-11-18): esporte patrocinado pela Shopee (Shopee Cup, ligas) e
+ * notícias de outros países onde a Shopee opera. "Polícia da Cidade de Ho Chi Minh" ali é nome de time.
+ */
+const FORA_DO_ESCOPO_SHOPEE_ = /\b(shopee cup|copa shopee|shopee liga|liga 1|futebol|campeonato|torneio|rodada|partida|escalacao|placar|united|fc|asean|vietna|vietnam|ho chi minh|hanoi|malasia|malaysia|singapura|singapore|filipinas|philippines|indonesia|tailandia|thailand|taiwan|buriram)\b/;
+
+/** Segurança e rótulo da notificação, pelo texto (título + resumo). */
+function classificarShopee_(texto) {
+  const norm = normalizarTexto_(texto);
+  const cls = classificarCrimeNLP_(texto);
+  // "polícia" ou "operação" sozinhas não bastam (operação logística, nome de time): precisa de um fato
+  const crime = /roub|assalt|furt|golpe|fraud|estelionat|baleado|morto|assassin|tiro|sequestr|quadrilha|receptac|\bpres[oa]s?\b|prisao|apreend|arromb|latrocin|extors/.test(norm);
+  const seguranca = crime || !!(cls && cls.valido && cls.categoria !== 'OUTROS');
+  return { seguranca: seguranca, tipo: seguranca ? tipoShopee_(norm, cls) : 'Outros assuntos' };
 }
 
 /** Mesma manchete em veículos diferentes vira uma notícia só. */
@@ -215,7 +233,7 @@ function tipoShopee_(norm, cls) {
   if (/golpe|fraud|estelionat|falso|falsa|phishing/.test(norm)) return 'Golpe ou fraude';
   if (/furt/.test(norm)) return 'Furto';
   if (/roub|assalt/.test(norm)) return 'Roubo/assalto';
-  if (/pres[oa]s?\b|prisao|operacao|policia/.test(norm)) return 'Ação policial';
+  if (/\bpres[oa]s?\b|prisao|apreend|operacao policial|policia (civil|militar|federal|rodoviaria)|delegad/.test(norm)) return 'Ação policial';
   if (cls && cls.valido) return 'Segurança';
   return 'Outros assuntos';
 }
