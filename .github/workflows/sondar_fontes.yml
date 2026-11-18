@@ -1,6 +1,10 @@
 name: Sondar fontes oficiais estaduais
 on:
   workflow_dispatch:
+    inputs:
+      script:
+        description: 'script de sondagem'
+        default: 'sondar_fontes.py'
 jobs:
   sondar:
     runs-on: ubuntu-latest
@@ -11,4 +15,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install openpyxl
-      - run: python -u scripts/sondar_fontes.py
+      - run: python -u scripts/${{ inputs.script || 'sondar_fontes.py' }}
