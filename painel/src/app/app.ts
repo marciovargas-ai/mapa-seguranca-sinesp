@@ -385,7 +385,7 @@ export class App {
     lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
     if (m.taxa != null) {
       // Proporção na forma "1 a cada N habitantes" (em todo o Brasil): "por 100 mil" confunde em cidades pequenas
-      const hab = this.store.escopo() !== 'ESTADO' && o.populacao && o.populacao < 100000 ? o.populacao : 0;
+      const hab = this.store.escopo() !== 'ESTADO' && o.populacao ? o.populacao : 0;  // população sempre junto da proporção
       lista.push({ rotulo: 'Uma morte violenta a cada', valor: m.taxa > 0 ? cadaN(m.taxa) : '—',
         sub: (m.taxa > 0 ? 'habitantes em 12 meses' : 'nenhuma morte em 12 meses') + (hab ? ` · população ${fmt(hab)}` : '') +
           (m.taxaEstado ? ` · estado: 1 a cada ${cadaN(m.taxaEstado)}` : '') });

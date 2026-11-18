@@ -167,7 +167,8 @@ export function compilar(c: Entrada): Compilado {
     if (!a || (!a.total12 && !a.ano)) return;
     const e = agEstado(g);
     const tx = taxa(a.total12, popLocal);
-    const txE = e && popEstado ? taxa(e.total12, popEstado) : null;
+    // Mortes violentas: mesma média do estado do parecer e do ranking, para os números baterem na tela
+    const txE = g === 'cvli' && posicao?.taxaEstado ? posicao.taxaEstado : e && popEstado ? taxa(e.total12, popEstado) : null;
     const v = variacao(a.ano, a.anterior);
     const instavel = Math.max(a.ano || 0, a.anterior || 0) < 10;
     const razao = !c.ehEstado && tx != null && txE ? tx / txE : null;
@@ -188,7 +189,7 @@ export function compilar(c: Entrada): Compilado {
       const acima = posicao.taxaEstado != null && posicao.taxa > posicao.taxaEstado;
       indicadores.push({
         id: 'posicao', titulo: 'Posição no estado (mortes violentas)', valor: `${posicao.rank}º`, unidade: `de ${posicao.total}`,
-        sub: `1 a cada ${cadaN(posicao.taxa)} hab. · estado: 1 a cada ${cadaN(posicao.taxaEstado)}`,
+        sub: `1º = mais violento, entre os ${posicao.total} municípios do estado com mais de 20 mil hab.`,
         tom: acima ? 'alerta' : 'positivo', fonte: 'Sinesp + IBGE',
         dica: `Ordem das mortes violentas intencionais em proporção à população (12 meses) entre os municípios do estado com ${fmt(MIN_POP)} habitantes ou mais. 1º = mais violento. Cidade típica do estado: 1 a cada ${cadaN(posicao.mediana)} habitantes.`,
       });
@@ -377,17 +378,30 @@ export function compilar(c: Entrada): Compilado {
       (inst ? ' (base pequena, a variação percentual oscila muito)' : '') + '.');
     const tx = taxa(mvi.total12, popLocal);
     if (posicao && tx != null) {
-      const r = posicao.taxaEstado ? tx / posicao.taxaEstado : null;
-      parecer.push((tx > 0 ? `Em 12 meses, houve 1 morte violenta a cada ${cadaN(tx)} habitantes` : 'Em 12 meses, não houve morte violenta registrada') +
-        (r && tx > 0 ? `, ${r >= 1.1 ? 'proporção ' + fmt1(r) + ' vezes a do estado' : r <= 0.9 ? 'proporção abaixo da do estado' : 'proporção próxima da do estado'} (1 a cada ${cadaN(posicao.taxaEstado)})` : '') +
-        `, o que põe o município em ${posicao.rank}º entre ${posicao.total} municípios do estado com 20 mil habitantes ou mais.`);
+      const txEstado = posicao.taxaEstado;
+      const r = txEstado ? tx / txEstado : null;
+      // Frases curtas e explícitas: população, mortes, proporção, comparação com o estado e o que é o ranking.
+      // ("1 a cada N habitantes" sozinho era lido como o tamanho da cidade)
+      const m12 = mvi.total12 || 0;
+      const frases: string[] = [];
+      if (popLocal) frases.push(`${c.cidade} tem ${fmt(popLocal)} habitantes (IBGE).`);
+      frases.push(tx > 0 ? `Em 12 meses, ${m12 === 1 ? 'houve 1 morte violenta' : `foram ${fmt(m12)} mortes violentas`}: 1 para cada ${cadaN(tx)} moradores.`
+        : 'Em 12 meses, não houve morte violenta registrada.');
+      if (txEstado && tx > 0) frases.push(`A média do estado é 1 para cada ${cadaN(txEstado)} moradores, ` +
+        (r! >= 1.1 ? `então aqui a proporção de mortes é ${fmt1(r!)} vezes a do estado.` : r! <= 0.9 ? 'então aqui a proporção de mortes é menor que a do estado.' : 'então aqui a proporção de mortes é parecida com a do estado.'));
+      frases.push(`No ranking dos ${posicao.total} municípios do estado com mais de 20 mil habitantes, do mais violento (1º) para o menos violento, ${posicao.rank === 1 ? `${c.cidade} é o mais violento` : `${c.cidade} fica em ${posicao.rank}º`}.`);
+      parecer.push(frases.join(' '));
     } else if (tx != null && !c.ehEstado && popLocal && popLocal < MIN_POP) {
       const m12 = mvi.total12 || 0;
       parecer.push(m12 > 0
         ? `Em 12 meses, ${m12 === 1 ? 'houve 1 morte violenta' : `foram ${fmt(m12)} mortes violentas`} para ${fmt(popLocal)} moradores (1 a cada ${cadaN(tx)}). ` +
           `Em cidades com menos de ${fmt(MIN_POP)} habitantes, uma morte a mais ou a menos muda muito essa proporção; por isso a cidade não entra no ranking do estado.`
         : `Em 12 meses, nenhuma morte violenta para ${fmt(popLocal)} moradores. A cidade não entra no ranking do estado, que compara só municípios com ${fmt(MIN_POP)} habitantes ou mais.`);
-    } else if (tx != null) parecer.push(tx > 0 ? `Em 12 meses, houve 1 morte violenta a cada ${cadaN(tx)} habitantes.` : 'Em 12 meses, não houve morte violenta registrada.');
+    } else if (tx != null) {
+      const m12 = mvi.total12 || 0;
+      parecer.push(tx > 0 ? (popLocal && !c.ehEstado ? `Em 12 meses, ${m12 === 1 ? 'houve 1 morte violenta' : `foram ${fmt(m12)} mortes violentas`} para ${fmt(popLocal)} moradores (1 a cada ${cadaN(tx)}).`
+        : `Em 12 meses, houve 1 morte violenta a cada ${cadaN(tx)} habitantes.`) : 'Em 12 meses, não houve morte violenta registrada.');
+    }
     const lr = !c.ehEstado && c.ibge ? c.referencia?.municipios[c.ibge] : undefined;
     if (lr && c.referencia?.sim && lr[4] > lr[3] * 1.15 && lr[4] - lr[3] >= 5)
       parecer.push(`Os atestados de óbito do DATASUS (${c.referencia.sim.ano}${c.referencia.sim.preliminar ? ', preliminar' : ''}) registram ${fmt(lr[4])} mortes por agressão ou ação policial, mais que as ${fmt(lr[3])} do Sinesp; o índice usa o número maior.`);
