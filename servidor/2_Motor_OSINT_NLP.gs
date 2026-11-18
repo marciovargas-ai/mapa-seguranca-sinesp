@@ -230,7 +230,10 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
   cache.put(chaveColetando, '1', 300);
 
   try {
-    const atual = lerJson_(nomeArquivo) || novoRegistroCidade_(mun);
+    let atual = lerJson_(nomeArquivo);
+    // Cidade nunca coletada aqui: puxa o arquivo pronto do robô do GitHub e só busca o que é novo
+    if ((!atual || !atual.coletadoEm) && modo !== 'materias') atual = importarNoticiasGithub_(mun) || atual;
+    atual = atual || novoRegistroCidade_(mun);
     // Histórico completo (12 meses) na primeira coleta e também, uma vez por dia, enquanto a cidade
     // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
     const primeiraColeta = modo !== 'materias' && (!atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_ ||
@@ -376,6 +379,46 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
   } finally {
     cache.remove(chaveColetando);
   }
+}
+
+/**
+ * Robô de notícias do GitHub (robo/coletar_noticias.js + .github/workflows/noticias.yml): roda esta mesma
+ * coleta para todos os municípios todo dia e publica um arquivo por cidade no ramo `noticias`.
+ * Na primeira consulta de uma cidade, o servidor importa esse arquivo (1 pedido, ~1 s) em vez de fazer
+ * as dezenas de buscas da primeira coleta. Devolve o registro gravado ou null (sem arquivo ou inválido).
+ */
+const NOTICIAS_GITHUB_ = ['https://raw.githubusercontent.com/marciovargas-ai/mapa-seguranca-sinesp/noticias/',
+  'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@noticias/'];
+function importarNoticiasGithub_(mun) {
+  if (typeof ROBO_GITHUB_ !== 'undefined') return null;  // o próprio robô
+  const cache = CacheService.getScriptCache();
+  const chaveSem = 'NOTGH0|' + mun.ibge;
+  if (cache.get(chaveSem)) return null;
+  for (let i = 0; i < NOTICIAS_GITHUB_.length; i++) {
+    try {
+      const resp = UrlFetchApp.fetch(NOTICIAS_GITHUB_[i] + mun.uf + '/' + mun.ibge + '.json', { muteHttpExceptions: true });
+      const codigo = resp.getResponseCode();
+      if (codigo === 404) break;  // o robô ainda não chegou nesta cidade
+      if (codigo !== 200) continue;
+      const reg = JSON.parse(resp.getContentText());
+      if (String(reg.ibge) !== String(mun.ibge) || !reg.coletadoEm || !Array.isArray(reg.ocorrencias)) break;
+      const agora = Date.now();
+      reg.ocorrencias.forEach(o => { o.m = agora; });
+      reg.locais = reg.locais || {};
+      // O robô já fez o histórico de 12 meses: a coleta daqui em diante só busca os dias novos
+      reg.historicoEm = Math.max(reg.historicoEm || 0, agora);
+      reg.importadoGithub = agora;
+      delete reg.robo;
+      const salvo = atualizarJsonComTrava_(nomeArquivoCidade_(mun.ibge), atual => (atual && atual.coletadoEm ? atual : podarRegistroCidade_(reg)));
+      try { atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm }, 5000); } catch (e) { /* índice refeito depois */ }
+      Logger.log('Notícias de ' + mun.nome + '/' + mun.uf + ' importadas do robô do GitHub: ' + salvo.ocorrencias.length);
+      return salvo;
+    } catch (e) {
+      Logger.log('Importação do GitHub (' + mun.nome + '): ' + e.message);
+    }
+  }
+  cache.put(chaveSem, '1', 21600);
+  return null;
 }
 
 function novoRegistroCidade_(mun) {

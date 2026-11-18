@@ -1,0 +1,122 @@
+name: Robô de notícias (todos os municípios)
+
+# Roda a mesma coleta de notícias do servidor (servidor/*.gs) para os municípios de cada estado, em paralelo,
+# e publica um arquivo por cidade no ramo `noticias` (<UF>/<IBGE>.json). O servidor do Apps Script importa
+# esse arquivo na primeira consulta da cidade, que passa a abrir em segundos.
+# Incremental: cada rodada parte dos arquivos da anterior e só atualiza as cidades vencidas
+# (1 dia acima de 100 mil hab., 2 dias acima de 20 mil, 4 dias nas menores).
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 03:00 em Brasília
+  workflow_dispatch:
+    inputs:
+      ufs:
+        description: 'UFs separadas por vírgula (vazio = todas)'
+        required: false
+      limite:
+        description: 'Máximo de cidades por estado (vazio = sem limite; use para teste)'
+        required: false
+      minutos:
+        description: 'Tempo máximo de coleta por estado, em minutos'
+        required: false
+        default: '290'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: robo-noticias
+  cancel-in-progress: false
+
+jobs:
+  lista:
+    runs-on: ubuntu-latest
+    outputs:
+      ufs: ${{ steps.m.outputs.ufs }}
+    steps:
+      - id: m
+        run: |
+          TODAS="AC,AL,AP,AM,BA,CE,DF,ES,GO,MA,MT,MS,MG,PA,PB,PR,PE,PI,RJ,RN,RS,RO,RR,SC,SP,SE,TO"
+          ESCOLHA="${{ github.event.inputs.ufs }}"
+          [ -z "$ESCOLHA" ] && ESCOLHA="$TODAS"
+          echo "ufs=$(echo "$ESCOLHA" | tr 'a-z' 'A-Z' | tr -d ' ' | jq -Rc 'split(",") | map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+
+  coletar:
+    needs: lista
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        uf: ${{ fromJson(needs.lista.outputs.ufs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Arquivos da rodada anterior
+        run: |
+          mkdir -p saida/${{ matrix.uf }}
+          if git fetch --depth=1 origin noticias 2>/dev/null; then
+            git archive FETCH_HEAD ${{ matrix.uf }} 2>/dev/null | tar -x -C saida || echo "Estado ainda sem arquivos"
+          fi
+          ls saida/${{ matrix.uf }} | wc -l
+      - name: Coletar notícias do estado
+        env:
+          MINUTOS: ${{ github.event.inputs.minutos || '290' }}
+          LIMITE: ${{ github.event.inputs.limite }}
+        run: node robo/coletar_noticias.js ${{ matrix.uf }} saida/${{ matrix.uf }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: noticias-${{ matrix.uf }}
+          path: saida/${{ matrix.uf }}
+          retention-days: 1
+          if-no-files-found: ignore
+
+  publicar:
+    needs: coletar
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conteúdo atual do ramo noticias
+        run: |
+          mkdir -p pub
+          if git fetch --depth=1 origin noticias 2>/dev/null; then git archive FETCH_HEAD | tar -x -C pub; fi
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: noticias-*
+          path: novos
+      - name: Juntar e publicar (um único commit, para o repositório não crescer a cada dia)
+        run: |
+          for d in novos/noticias-*; do
+            [ -d "$d" ] || continue
+            UF="${d##*/noticias-}"
+            mkdir -p "pub/$UF"
+            cp -f "$d"/*.json "pub/$UF/" 2>/dev/null || true
+          done
+          cd pub
+          python3 - <<'EOF'
+          import json, glob, os, time
+          ufs = {}
+          for f in sorted(glob.glob('*/indice.json')):
+              try:
+                  i = json.load(open(f))
+                  ufs[os.path.dirname(f)] = {'cidades': len(i.get('cidades', {})), 'atualizado': i.get('atualizado'), 'rodada': i.get('rodada')}
+              except Exception:
+                  pass
+          json.dump({'atualizado': int(time.time() * 1000), 'ufs': ufs}, open('indice.json', 'w'))
+          print('Cidades com arquivo:', sum(u['cidades'] for u in ufs.values()))
+          for uf, u in ufs.items():
+              print(uf, u['cidades'], u.get('rodada'))
+          EOF
+          printf '# Notícias por município\n\nArquivos gerados pelo robô (.github/workflows/noticias.yml no ramo main): <UF>/<IBGE>.json.\nO servidor importa o arquivo na primeira consulta da cidade.\n' > README.md
+          git init -q -b noticias
+          git config user.name "robo-sinesp"
+          git config user.email "robo-sinesp@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Notícias por município: $(date -u +%Y-%m-%d\ %H:%M) UTC"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" noticias

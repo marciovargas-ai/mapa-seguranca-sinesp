@@ -71,6 +71,8 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
   registrarConsulta_(mun);
 
   let registro = lerJson_(nomeArquivoCidade_(mun.ibge));
+  // Cidade nunca consultada: o robô do GitHub já pode ter o arquivo pronto (abre na hora, sem a espera da 1ª vez)
+  if ((!registro || !registro.coletadoEm) && forcarColeta !== 'materias') registro = importarNoticiasGithub_(mun) || registro;
   let coleta = null;
   const idadeMs = registro && registro.coletadoEm ? Date.now() - registro.coletadoEm : Infinity;
   const primeiraConsulta = !registro || !registro.coletadoEm;
