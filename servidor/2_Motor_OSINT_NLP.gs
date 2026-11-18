@@ -363,7 +363,7 @@ function novoRegistroCidade_(mun) {
 function podarRegistroCidade_(reg) {
   const limite = Utilities.formatDate(new Date(Date.now() - CONFIG.DIAS_JANELA_NOTICIAS * 86400000), CONFIG.FUSO, 'yyyy-MM-dd');
   reg.ocorrencias = reg.ocorrencias
-    .filter(o => o.d >= limite)
+    .filter(o => o.d >= limite && !ehNoticiaPolitica_(o.t || ''))
     .sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0))
     .slice(0, CONFIG.MAX_OCORRENCIAS_POR_CIDADE);
   return reg;
@@ -487,10 +487,24 @@ function buscarNoticiasRss_(mun, cidNorm, janela, bairrosOsm) {
 }
 
 /**
+ * Notícia de política fica fora do mapa. Política (políticos, eleição, STF, Congresso) fica fora, salvo quando o político é vítima de crime (assalto, roubo, furto, morte, ataque). Corrupção fica sempre fora. Nomes de rua/escola/bairro ("Rua Lula Gomes") não contam.
+ * A mesma regra está no painel (core/politica.ts); mudou uma, mude a outra.
+ */
+const RE_POLITICA_ = /\b(lula|bolsonaro|bolsonaros|bolsonarista|bolsonaristas|lulista|lulistas|petista|petistas|janja|alexandre de moraes|presidente da republica|presidente lula|planalto|stf|supremo tribunal|tse|pgr|cpi|cpmi|congresso nacional|camara dos deputados|camara municipal|senado|eleicao|eleicoes|eleitoral|eleitorais|candidato|candidata|campanha eleitoral|golpe de estado|trama golpista|tentativa de golpe|8 de janeiro|impeachment|emendas? parlamentar(es)?|deputad[oa]s?|senador(a|es|as)?|vereador(a|es|as)?|prefeit[oa]s?|vice prefeit[oa]|governador(a|es|as)?|ministr[oa]s?|parlamentar(es)?|secretari[oa] de estado)\b/;
+const RE_CORRUPCAO_ = /\b(corrupcao|propina|desvio de verbas?|desvio de recursos|improbidade|peculato|rachadinha|licitacao|mensalao|petrolao|lavagem de dinheiro publico)\b/;
+const RE_POLITICO_VITIMA_ = /\b(assaltad[oa]s?|assalto|assaltantes|roubad[oa]s?|roubo|furtad[oa]s?|furto|arrombad[oa]s?|arrombamento|latrocinio|assassinad[oa]s?|mort[oa]s?|morte|executad[oa]s?|baleado|baleada|atentado|alvejad[oa]s?|sequestrad[oa]s?|sequestro|esfaquead[oa]s?|homicidio|agredid[oa]s?|tiros)\b/;
+const RE_LOGRADOURO_POL_ = /\b(rua|avenida|av|travessa|praca|estrada|rodovia|alameda|viaduto|escola|colegio|bairro|vila|jardim|conjunto)( [a-z0-9]+){1,3}/g;
+function ehNoticiaPolitica_(texto) {
+  const t = ' ' + normalizarTexto_(texto).replace(RE_LOGRADOURO_POL_, ' ') + ' ';
+  return RE_CORRUPCAO_.test(t) || (RE_POLITICA_.test(t) && !RE_POLITICO_VITIMA_.test(t));
+}
+
+/**
  * Classificador de tipo de crime. Os códigos são os mesmos usados no painel.
  */
 function classificarCrimeNLP_(texto) {
   const t = normalizarTexto_(texto);
+  if (ehNoticiaPolitica_(texto)) return { valido: false, politica: true };
   const termosDescarte = ['juri popular', 'condenado a', 'anos de prisao', 'absolvido', 'concurso publico', 'formatura',
     'novela', 'futebol', 'leilao', 'campanha de vacinacao', 'simulado', 'palestra'];
   for (let termo of termosDescarte) {

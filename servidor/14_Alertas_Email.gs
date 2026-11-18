@@ -174,7 +174,7 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
   const limiteData = Utilities.formatDate(new Date(desde - 86400000), CONFIG.FUSO, 'yyyy-MM-dd');
   const blocos = [];
   const ler = nome => (nome in cache ? cache[nome] : (cache[nome] = lerJson_(nome)));
-  const novo = (o, ehUf) => temas.has(o.c) && !ja.has(o.id) && String(o.d || '') >= limiteData && (ehUf || !o.m || o.m > desde);
+  const novo = (o, ehUf) => temas.has(o.c) && !ja.has(o.id) && String(o.d || '') >= limiteData && (ehUf || !o.m || o.m > desde) && !ehNoticiaPolitica_(o.t || '');
 
   p.locais.forEach(f => {
     if (!temas.size) return;

@@ -1,4 +1,5 @@
 import { CATEGORIA_POR_ID, CFG, ORGAO_POR_ID, PRECISOES_NO_MAPA } from './dados';
+import { ehNoticiaPolitica } from './politica';
 import { Filtrados, Local, Ocorrencia, Oficial, Pacote, Panorama, ResumoOrgao, Zona } from './modelos';
 import { distanciaKm, idadeDias, MESES, normalizar, tsDiasAtras, tsParaData } from './util';
 
@@ -14,7 +15,8 @@ function idCategoria(valor: string): string {
 }
 
 export function normalizarPacote(res: any): Pacote {
-  const ocorrencias: Ocorrencia[] = (res.ocorrencias || []).map((o: any) => {
+  // Notícias de política ficam de fora, inclusive as que já estavam guardadas antes do filtro do servidor
+  const ocorrencias: Ocorrencia[] = (res.ocorrencias || []).filter((o: any) => !ehNoticiaPolitica(o.titulo)).map((o: any) => {
     const lat = Number(o.lat) || null;
     const lng = Number(o.lng) || null;
     return {
