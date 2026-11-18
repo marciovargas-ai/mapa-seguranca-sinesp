@@ -16,6 +16,8 @@ import { TourComponent } from './tour';
 import { FaccoesComponent } from './painel/faccoes';
 import { AgenteComponent } from './agente';
 import { ShopeeComponent } from './shopee';
+import { FavoritosComponent } from './favoritos';
+import { Favoritos } from './core/favoritos';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -45,7 +47,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   imports: [
     MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatAutocompleteModule, MatSelectModule,
     MatTooltipModule, MatTabsModule, MatButtonToggleModule, MatChipsModule, MatBadgeModule,
-    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, NoticiasComponent, DeltaComponent, TourComponent,
+    MapaComponent, PanoramaComponent, GeralComponent, OficialComponent, EstadoComponent, ZonasComponent, FaccoesComponent, AgenteComponent, ShopeeComponent, FavoritosComponent, NoticiasComponent, DeltaComponent, TourComponent,
   ],
   host: { '[class.arrastando]': 'arrastando()', '(window:resize)': 'aoRedimensionar()' },
   template: `
@@ -76,6 +78,7 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       <div class="acoes">
         <button mat-icon-button matTooltip="Minha localização" aria-label="Minha localização" (click)="localizar()"><mat-icon>my_location</mat-icon></button>
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
+        <app-favoritos />
         <app-shopee />
         <button mat-icon-button [matTooltip]="store.escuro() ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema" (click)="store.definirTema(!store.escuro())">
           <mat-icon>{{ store.escuro() ? 'light_mode' : 'dark_mode' }}</mat-icon>
@@ -97,7 +100,11 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       <section class="painel">
         <header class="painel-topo">
           <div class="linha-titulo">
-            <h1>{{ store.nomeLocal() }}</h1>
+            <h1>{{ store.nomeLocal() }}
+              <button mat-icon-button class="estrela" [class.ativa]="ehFavorito()" (click)="alternarFavorito()"
+                [matTooltip]="ehFavorito() ? 'Remover dos favoritos' : 'Salvar nos favoritos'" [attr.aria-label]="ehFavorito() ? 'Remover dos favoritos' : 'Salvar nos favoritos'"
+                [attr.aria-pressed]="ehFavorito()"><mat-icon>{{ ehFavorito() ? 'star' : 'star_outline' }}</mat-icon></button>
+            </h1>
             <span class="status" [class]="'status ' + store.status().tipo" [title]="store.status().texto">
               <mat-icon [class.girando]="store.status().icone === 'sync'">{{ store.status().icone }}</mat-icon>{{ store.status().texto }}
             </span>
@@ -202,7 +209,9 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
     .painel { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--mat-sys-surface); container: painel / inline-size; }
     .painel-topo { padding: 14px 16px 6px; display: grid; gap: 10px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
     .linha-titulo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
-    h1 { font: var(--mat-sys-headline-small); margin: 0; }
+    h1 { font: var(--mat-sys-headline-small); margin: 0; display: flex; align-items: center; gap: 2px; }
+    .estrela { color: var(--mat-sys-outline); }
+    .estrela.ativa { color: #F5A623; }
     .status { display: inline-flex; align-items: center; gap: 4px; font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant);
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .status mat-icon { font-size: 16px; width: 16px; height: 16px; flex: none; }
@@ -268,7 +277,20 @@ export class App {
   protected readonly periodos = PERIODOS;
   protected readonly categorias = CATEGORIAS;
   protected readonly textoBusca = signal('');
-  protected readonly sugestoes = computed(() => sugerir(this.textoBusca()));
+  private readonly favoritos = inject(Favoritos);
+  /** Campo de busca vazio: mostra os favoritos para abrir com um clique. */
+  protected readonly sugestoes = computed<Sugestao[]>(() => {
+    const t = this.textoBusca();
+    if (t.trim()) return sugerir(t);
+    return this.favoritos.rotulos().map((f) => f.nome === 'ESTADO_INTEIRO'
+      ? { tipo: 'UF' as const, uf: f.uf, rotulo: '★ ' + f.rotulo, detalhe: f.uf }
+      : { tipo: 'MUN' as const, uf: f.uf, nome: f.nome, rotulo: '★ ' + f.rotulo, detalhe: f.uf });
+  });
+  protected readonly ehFavorito = computed(() =>
+    this.favoritos.ehFavorito(this.store.uf(), this.store.escopo() === 'ESTADO' ? 'ESTADO_INTEIRO' : this.store.cidade()));
+  protected alternarFavorito(): void {
+    this.favoritos.alternar(this.store.uf(), this.store.escopo() === 'ESTADO' ? 'ESTADO_INTEIRO' : this.store.cidade());
+  }
   protected readonly arrastando = signal(false);
   protected readonly larguraPainel = signal(this.larguraInicial());
 

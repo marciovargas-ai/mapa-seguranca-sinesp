@@ -179,3 +179,15 @@ html.tema-escuro .popup-meta { color: #a9b6cf; }
 .pino-unidade:hover span { transform: scale(1.12); }
 .pino-unidade b { position: absolute; top: -8px; right: -10px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: #113366; color: #fff; font: 700 10px/16px Roboto, sans-serif; text-align: center; border: 1px solid #fff; }
 .popup-unidades hr { border: 0; border-top: 1px solid rgba(127, 127, 127, .3); margin: 8px 0; }
+
+/* Menu de favoritos (fica fora do componente, no overlay do Material) */
+.menu-favoritos { min-width: 280px !important; max-width: 360px !important; }
+.menu-favoritos .cab { display: flex; flex-direction: column; gap: 2px; padding: 10px 16px 8px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.menu-favoritos .cab small { opacity: .7; font-size: 12px; overflow-wrap: anywhere; }
+.menu-favoritos .item { display: flex; align-items: center; }
+.menu-favoritos .item > [mat-menu-item] { flex: 1; min-width: 0; }
+.menu-favoritos .item small { opacity: .65; margin-left: 4px; }
+.menu-favoritos .item .remover { flex: none; transform: scale(.8); opacity: .6; }
+.menu-favoritos .item .remover:hover { opacity: 1; }
+.menu-favoritos .vazio { margin: 0; padding: 12px 16px; font-size: 13px; opacity: .75; max-width: 300px; }
+.menu-favoritos [mat-menu-item] .mat-icon { color: #F5A623; }

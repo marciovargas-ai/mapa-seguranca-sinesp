@@ -32,6 +32,8 @@ export const Servidor = {
   exportar: (formato: 'pdf' | 'sheets', titulo: string, local: string, pergunta: string, resposta: string) =>
     chamar<{ ok: boolean; url: string; nome: string }>('exportarRespostaIA', formato, titulo, local, pergunta, resposta),
   unidadesShopee: () => chamar<any>('obterUnidadesShopee', false),
+  favoritos: () => chamar<{ ok: boolean; conta: string; favoritos: { uf: string; nome: string }[] | null }>('obterFavoritos'),
+  salvarFavoritos: (lista: { uf: string; nome: string }[]) => chamar<any>('salvarFavoritos', lista),
   shopee: (desde: number) => chamar<any>('obterNoticiasShopee', desde || 0),
   fronteira: (codigo: string) =>
     chamar<string>('obterFronteiraIbge', codigo).then((t) => { try { return JSON.parse(t); } catch { return null; } }, () => null),
