@@ -40,6 +40,10 @@ def rs():
                    key=lambda u: (re.search(r'/(\d{6})/', u) or re.search(r'()', u)).group(1))
     pop = json.load(open('dados/populacao.json', encoding='utf-8'))['ufs']['RS']
     por_nome = {norm(k): v[0][:6] for k, v in pop.items()}
+    # Grafias da SSP-RS diferentes das do IBGE
+    for apelido, oficial in (('dr mauricio cardoso', 'doutor mauricio cardoso'), ('santana do livramento', 'sant ana do livramento'),
+                             ('fazenda vila nova', 'fazenda vilanova')):
+        if oficial in por_nome: por_nome[apelido] = por_nome[oficial]
     # Planilhas por ano (a mais recente de cada ano vence)
     por_ano = {}
     for u in links:
@@ -63,12 +67,12 @@ def rs():
                 vals = lambda n: (row[col(n)] or 0) if col(n) is not None and isinstance(row[col(n)], (int, float)) else 0
                 ibge = por_nome.get(nome)
                 if not ibge:
-                    if not nome.startswith('total'): sem.append(nome)
+                    if not nome.startswith(('total', 'fonte', 'nota', 'obs')) and len(nome) < 50: sem.append(nome)
                     continue
                 dados[ibge] = [vals('roubos') + vals('roubo de veiculo'), vals('furtos') + vals('furto de veiculo')]
             if len(dados) > 400:
                 meses[(ano, mes)] = dados
-                if sem: print(f'RS {ano}/{mes}: sem código IBGE para', sem[:8])
+                if sem and mes == 1: print(f'RS {ano}: sem código IBGE para', sem[:8])
     chaves = sorted(meses)[-12:]
     if len(chaves) < 6: raise RuntimeError(f'RS: só {len(chaves)} meses lidos')
     soma = {}
