@@ -67,26 +67,33 @@ MODELO = """<!DOCTYPE html>
 CARREGADOR_CDN = """<!-- Aplicativo Angular pela CDN (gerado por scripts/gerar_apps_script.py; não editar à mão) -->
   <script>
   (function () {
-    var URL_APP = 'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@{SHA}/publicado/painel.js';
+    // Mesmo arquivo em três endereços da CDN; só se nenhum responder o navegador pede as partes ao Apps Script
+    var CAMINHO = '/gh/marciovargas-ai/mapa-seguranca-sinesp@{SHA}/publicado/painel.js';
+    var ENDERECOS = ['https://cdn.jsdelivr.net', 'https://fastly.jsdelivr.net', 'https://gcore.jsdelivr.net'];
     var PARTES = {N};
     var feito = false;
     function reserva() {
-      if (feito) return; feito = true;
+      if (feito || window.__PAINEL_INICIADO) return; feito = true;
       var partes = [], recebidas = 0;
       var run = (window.google && google.script && google.script.run) || window.__servidorTeste;
       for (var i = 1; i <= PARTES; i++) (function (i) {
         run.withSuccessHandler(function (t) {
           partes[i - 1] = t;
-          if (++recebidas === PARTES) (new Function(partes.join('')))();
+          if (++recebidas === PARTES && !window.__PAINEL_INICIADO) (new Function(partes.join('')))();
         }).obterParteApp(i);
       })(i);
     }
-    var s = document.createElement('script');
-    s.src = URL_APP;
-    s.onload = function () { feito = true; };
-    s.onerror = reserva;
-    document.body.appendChild(s);
-    setTimeout(function () { if (!feito && !window.__PAINEL_INICIADO) reserva(); }, 15000);
+    function tentar(n) {
+      if (n >= ENDERECOS.length) return reserva();
+      var s = document.createElement('script');
+      s.src = ENDERECOS[n] + CAMINHO;
+      s.onload = function () { feito = true; };
+      s.onerror = function () { if (!feito) tentar(n + 1); };
+      document.body.appendChild(s);
+    }
+    tentar(0);
+    // CDN lenta (primeiro acesso a uma versão nova): espera mais antes de usar a reserva
+    setTimeout(function () { if (!feito && !window.__PAINEL_INICIADO) reserva(); }, 25000);
   })();
   </script>"""
 
