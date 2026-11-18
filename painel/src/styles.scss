@@ -147,6 +147,9 @@ html.tema-escuro .cartao { background: var(--mat-sys-surface-container-low); }
 .popup-zona .zona-barra i { display: block; height: 100%; border-radius: 99px; }
 .popup-zona .zona-bairros { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 4px; }
 .popup-zona .zona-sub { display: block; margin-top: 8px; }
+.leaflet-tooltip.rotulo-prf { background: #fff7ed; color: #7c2d12; border: 1px solid #f59e0b; border-radius: 6px; padding: 1px 6px; font: 700 11px/1.3 Roboto, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,.25); white-space: nowrap; }
+.leaflet-tooltip.rotulo-prf::before { display: none; }
+.leaflet-container.zoom-estado .rotulo-prf-extra { display: none; }
 .rotulo-bairro div:hover { background: #fcd34d; }
 .rotulo-bairro i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; }
 .leaflet-container:not(.zoom-perto) .rotulo-extra { display: none; }

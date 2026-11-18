@@ -413,7 +413,10 @@ export class MapaComponent implements OnDestroy {
     this.cluster.addTo(map);
 
     // Mapa limpo de longe: pontos oficiais e rótulos extras só aparecem ao aproximar
-    const marcarZoom = () => { const z = map.getZoom(); map.getContainer().classList.toggle('zoom-longe', z < 13); map.getContainer().classList.toggle('zoom-perto', z >= 14); };
+    const marcarZoom = () => {
+      const z = map.getZoom(), cl = map.getContainer().classList;
+      cl.toggle('zoom-longe', z < 13); cl.toggle('zoom-perto', z >= 14); cl.toggle('zoom-estado', z < 9);
+    };
     map.on('zoomend', () => { this.atualizarCalor(); marcarZoom(); });
     marcarZoom();
     map.on('dragstart', () => (this.usuarioMoveu = true));
@@ -576,13 +579,17 @@ export class MapaComponent implements OnDestroy {
     if (!this.map) return;
     if (!this.layerPrf) this.layerPrf = L.layerGroup().addTo(this.map);
     this.layerPrf.clearLayers();
-    for (const [uf, br, km, lat, lng, n, mortos, graves] of lista as [string, number, number, number, number, number, number, number][]) {
+    // Rótulo "BR-116 · km 245" no próprio mapa; de longe (estado inteiro) só nos 10 trechos com mais acidentes
+    const top = new Set([...lista].sort((a, b) => +b[5] - +a[5]).slice(0, 10));
+    for (const linha of lista) {
+      const [uf, br, km, lat, lng, n, mortos, graves] = linha as [string, number, number, number, number, number, number, number];
       const cor = mortos >= 3 ? '#7f1d1d' : mortos ? '#dc2626' : '#f59e0b';
       const c = L.circleMarker([lat, lng], { radius: Math.min(16, 5 + Math.sqrt(n)), color: '#fff', weight: 1.5, fillColor: cor, fillOpacity: 0.85, renderer: this.renderer });
       c.bindPopup(`<div class="popup"><span class="popup-cat" style="color:${cor}">Rodovia federal · PRF</span>` +
         `<div class="popup-titulo">BR-${esc(String(br))}, km ${km} a ${km + 5} (${esc(uf)})</div>` +
         `<div>${fmt(n)} ${n === 1 ? 'acidente' : 'acidentes'}, ${fmt(mortos)} ${mortos === 1 ? 'morte' : 'mortes'} e ${fmt(graves)} ${graves === 1 ? 'ferido grave' : 'feridos graves'} em 12 meses</div>` +
         `<div class="popup-meta">${esc(dado?.fonte || 'PRF')} · ${esc(dado?.periodo || '')}. Acidentes de trânsito, não crimes.</div></div>`, { maxWidth: 300 });
+      c.bindTooltip(`BR-${esc(String(br))} · km ${km}–${km + 5}`, { permanent: true, direction: 'right', offset: [8, 0], className: 'rotulo-prf' + (top.has(linha) ? '' : ' rotulo-prf-extra') });
       this.layerPrf.addLayer(c);
     }
   }
