@@ -118,12 +118,12 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         @if (camadas().unidades) {
           <div class="legenda-unidades">
             @if (store.unidades(); as u) {
-              @if (u.carregando) { <i class="pino-unidade"><span>S</span></i> Carregando unidades Shopee… }
-              @else if (u.erro) { <i class="pino-unidade"><span>S</span></i> Unidades Shopee: {{ u.erro }} }
+              @if (u.carregando) { <i class="pino-unidade" aria-hidden="true"><span></span></i> Carregando unidades Shopee… }
+              @else if (u.erro) { <i class="pino-unidade" aria-hidden="true"><span></span></i> Unidades Shopee: {{ u.erro }} }
               @else {
                 @let vis = unidadesVisiveis();
                 @let aprox = aproximadasVisiveis();
-                <i class="pino-unidade"><span>S</span></i>
+                <i class="pino-unidade" aria-hidden="true"><span></span></i>
                 @if (vis.length) { {{ vis.length }} {{ vis.length === 1 ? 'unidade Shopee' : 'unidades Shopee' }} {{ store.escopo() === 'ESTADO' ? 'no estado' : 'em ' + store.cidade() }} }
                 @else { Nenhuma unidade Shopee {{ store.escopo() === 'ESTADO' ? 'neste estado' : 'em ' + store.cidade() }} }
                 @if (aprox) { <small>({{ aprox }} {{ aprox === 1 ? 'aproximada' : 'aproximadas' }}, sem coordenada na planilha)</small> }
@@ -142,7 +142,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .legenda-unidades { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
     .legenda-unidades small { opacity: .75; }
     .legenda-unidades .pino-unidade { position: relative; display: inline-block; width: 18px; height: 18px; flex: none; }
-    .legenda-unidades .pino-unidade span { font-size: 11px; border-width: 1.5px; border-radius: 4px; }
+    .legenda-unidades .pino-unidade span { border-width: 1.5px; border-radius: 4px; }
     .legenda {
       position: absolute; left: 12px; bottom: 12px; z-index: 800; max-width: min(300px, calc(100% - 80px));
       background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent); backdrop-filter: blur(6px);
@@ -551,7 +551,7 @@ export class MapaComponent implements OnDestroy {
       const exato = g.some((u) => u.origem === 'planilha');
       const futura = g.every((u) => /not started/i.test(u.status));
       const icone = L.divIcon({ className: 'pino-unidade' + (exato ? '' : ' aproximado') + (futura ? ' futura' : ''),
-        html: '<span>S</span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
+        html: '<span></span>' + (g.length > 1 ? `<b>${g.length}</b>` : ''), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
       const m = L.marker([u0.lat, u0.lng], { icon: icone, pane: 'paneUnidades', keyboard: false,
         title: g.map((u) => u.codigo + ' · ' + u.nome).join('\n') });
       m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 380, maxWidth: 340 });
