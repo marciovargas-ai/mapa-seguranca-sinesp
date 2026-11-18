@@ -253,7 +253,7 @@ export function compilar(c: Entrada): Compilado {
       const n = fmt(ref.taxas.length);
       const p = percentil(ref.taxas, minhaTaxa)!;
       comps.push({ nome: 'Mortes violentas', peso: pesos.m, valor: p,
-        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${n} municípios do país com 20 mil hab. ou mais (Brasil: ${fmt1(ref.brasil.taxa)})` });
+        texto: `${fmt1(minhaTaxa)} por 100 mil; mais alta que ${p}% dos ${n} municípios do país com 20 mil hab. ou mais (Brasil pela mesma régua: ${fmt1(ref.brasil.taxa)}; o Anuário, que soma as mortes por policiais, deu 19,1 em 2025)` });
       metodo.push(`Mortes violentas: ${fmt(Math.round(usado))} por ano, ${fmt1(minhaTaxa)} por 100 mil habitantes. Mais alta que ${p}% dos ${n} municípios do país com 20 mil hab. ou mais. Vale o maior número entre Sinesp (${fmt(cvli)}) e DATASUS (${fmt(dSim)}), sem somar.`);
       if (comRoubos) {
         const pr = percentil(ref.taxasRoubo, roubTx)!;

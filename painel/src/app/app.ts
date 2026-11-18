@@ -304,6 +304,18 @@ export class App {
     return { zonas: f.zonas.length, noticias: fmt(f.todas.length) };
   });
 
+  /** Mortes violentas do local, com a taxa pelo total e o estado (com e sem mortes por policiais). */
+  private readonly mortes = computed(() => {
+    const o = this.store.oficial();
+    if (!o?.disponivel) return null;
+    const pan = this.store.panorama();
+    const pop = this.store.populacao();
+    const popEstado = pop?.uf === this.store.uf() ? pop.total : pan?.oficial?.populacao || null;
+    const estado = this.store.escopo() !== 'ESTADO' && pan?.uf === this.store.uf() && pan.oficial?.eventos?.length && popEstado
+      ? { eventos: pan.oficial.eventos, pop: popEstado } : null;
+    return mortesViolentas(o.eventos, o.populacao, estado);
+  });
+
   /** Indicadores do topo: só estatística oficial (Sinesp). Notícias ficam nas abas de complemento. */
   protected readonly kpis = computed(() => {
     const o = this.store.oficial();
@@ -312,14 +324,14 @@ export class App {
     const ano = o.anos[2];
     const sub = o.rotuloSel ? `${o.rotuloSel} vs ${o.rotuloAnt}` : parcial ? `jan–${o.ultimoMes}/${ano} vs ${o.anos[1]}` : `${ano} vs ${o.anos[1]}`;
     const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string }[] = [];
-    const m = mortesViolentas(o.eventos);
+    const m = this.mortes();
     if (!m) return [];
     // Feminicídio entra na soma das mortes e continua com cartão próprio (no Sinesp, o homicídio doloso não o inclui)
     const resto = o.eventos.filter((e) => !m.partes.includes(e) || /^feminic/i.test(e.nome));
     lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
     if (m.taxa != null) {
       lista.push({ rotulo: 'Mortes violentas por 100 mil hab.', valor: fmt1(m.taxa),
-        sub: (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)} · ` : '') + 'últimos 12 meses' });
+        sub: (m.taxaEstado ? `estado: ${fmt1(m.taxaEstado)}` + (m.taxaEstadoMvi ? ` (${fmt1(m.taxaEstadoMvi)} com mortes por policiais)` : '') + ' · ' : '') + 'últimos 12 meses' });
     }
     for (const e of resto) {
       if (lista.length >= 4) break;
@@ -331,13 +343,15 @@ export class App {
 
   /** Explica o que entra na contagem de mortes, para bater com os balanços das secretarias. */
   protected readonly notaMortes = computed(() => {
-    const o = this.store.oficial();
-    const m = o?.disponivel ? mortesViolentas(o.eventos) : null;
+    const m = this.mortes();
     if (!m) return '';
     const nomes = m.partes.map((e) => e.nome.toLowerCase()).join(', ');
-    return m.comIntervencao
-      ? `Mortes violentas intencionais (MVI) = ${nomes}.`
-      : `Mortes violentas = ${nomes} (o que as secretarias chamam de CVLI). Mortes por intervenção policial não entram: o Sinesp só as publica por estado, então o total das secretarias (MVI) fica maior.`;
+    if (m.comIntervencao) return `Mortes violentas intencionais (MVI) = ${nomes}. É a mesma conta do Anuário Brasileiro de Segurança Pública.`;
+    const uf = this.store.uf();
+    return `Mortes violentas = ${nomes} (o que as secretarias chamam de CVLI). Mortes por intervenção policial não entram: o Sinesp só as publica por estado.` +
+      (m.intervEstado && m.mviEstado
+        ? ` No estado inteiro (${uf}), as polícias mataram ${fmt(m.intervEstado)} pessoas nesses 12 meses (${Math.round((m.intervEstado / m.mviEstado) * 100)}% das mortes violentas do estado); com elas, a taxa do estado sobe para ${fmt1(m.taxaEstadoMvi)} por 100 mil, que é a conta usada pelo Anuário (MVI).`
+        : ' Por isso o total das secretarias e do Anuário (MVI) fica maior.');
   });
 
   protected readonly periodoOficial = computed(() => {
@@ -469,22 +483,42 @@ export class App {
  * lesão corporal seguida de morte (CVLI) e, quando o recorte publica, mortes por
  * intervenção de agente do Estado (MVI). Vale para qualquer município ou estado.
  */
-function mortesViolentas(eventos: EventoOficial[]) {
-  const cvli = eventos.filter((e) => /^(homic[ií]dio doloso|feminic[ií]dio|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida de morte)/i.test(e.nome));
-  const interv = eventos.filter((e) => /^morte por interven/i.test(e.nome));
+/**
+ * Soma das mortes violentas do Sinesp. A taxa sai do total dividido pela população (nunca da soma de taxas já
+ * arredondadas, que dava 4,5 no cartão e 4,6 no parecer). estado: eventos de 12 meses e população do estado.
+ */
+function mortesViolentas(eventos: EventoOficial[], populacao?: number | null, estado?: { eventos: EventoOficial[]; pop: number | null } | null) {
+  const cvli = eventos.filter((e) => RE_CVLI.test(e.nome));
+  const interv = eventos.filter((e) => RE_INTERV.test(e.nome));
   const partes = [...cvli, ...interv];
   if (!cvli.length) return null;
   const somar = (f: (e: EventoOficial) => number | null | undefined) => {
     const v = partes.map(f);
     return v.every((x) => x == null) ? null : v.reduce<number>((a, b) => a + (b || 0), 0);
   };
-  const taxas = partes.map((e) => e.taxa);
-  const taxasEstado = partes.map((e) => e.taxaEstado);
+  const porTaxa = (l: (number | null | undefined)[]) => (l.every((t) => t != null) ? Math.round(l.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null);
+  const total12 = partes.reduce((a, e) => a + (e.total || 0), 0);
+  const taxa = populacao ? Math.round((total12 / populacao) * 1e6) / 10 : porTaxa(partes.map((e) => e.taxa));
+  // Estado: mesmos crimes do local (sem intervenção quando o local não a tem), pelo total do estado
+  let taxaEstado = porTaxa(partes.map((e) => e.taxaEstado));
+  let taxaEstadoMvi: number | null = null, intervEstado: number | null = null, mviEstado: number | null = null;
+  if (estado?.pop && estado.eventos.length) {
+    const doEstado = (re: RegExp) => estado.eventos.filter((e) => re.test(e.nome)).reduce((a, e) => a + (e.total || 0), 0);
+    const cvliE = doEstado(RE_CVLI), intE = doEstado(RE_INTERV);
+    if (cvliE > 0) {
+      taxaEstado = Math.round(((interv.length ? cvliE + intE : cvliE) / estado.pop) * 1e6) / 10;
+      if (!interv.length && intE > 0) {
+        intervEstado = intE; mviEstado = cvliE + intE;
+        taxaEstadoMvi = Math.round((mviEstado / estado.pop) * 1e6) / 10;
+      }
+    }
+  }
   return {
     nome: interv.length ? 'Mortes violentas (MVI)' : 'Mortes violentas (CVLI)',
     partes, comIntervencao: interv.length > 0,
     ano: somar((e) => (e.sel !== undefined ? e.sel : e.porAno[2])), anterior: somar((e) => (e.selAnterior !== undefined ? e.selAnterior : e.parcialAnterior)),
-    taxa: taxas.every((t) => t != null) ? Math.round(taxas.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
-    taxaEstado: taxasEstado.every((t) => t != null) ? Math.round(taxasEstado.reduce<number>((a, b) => a + b!, 0) * 10) / 10 : null,
+    taxa, taxaEstado, taxaEstadoMvi, intervEstado, mviEstado,
   };
 }
+const RE_CVLI = /^(homic[ií]dio doloso|feminic[ií]dio|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida de morte)/i;
+const RE_INTERV = /^morte por interven/i;
