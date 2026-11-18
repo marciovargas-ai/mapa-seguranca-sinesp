@@ -405,6 +405,9 @@ export class MapaComponent implements OnDestroy {
     this.layerSemLocal = L.layerGroup().addTo(map);
     this.layerFogo = L.layerGroup().addTo(map);
     const pU = map.createPane('paneUnidades'); pU.style.zIndex = 620;
+    // Raio de 3 km das unidades: só desenho. Num painel próprio que não recebe clique; no painel das unidades,
+    // a tela (canvas) do círculo cobria o mapa inteiro e bloqueava o clique em tudo que estava embaixo.
+    const pRU = map.createPane('paneRaioUnidades'); pRU.style.zIndex = 355; pRU.style.pointerEvents = 'none';
     this.layerUnidades = L.layerGroup().addTo(map);
     this.layerDelegacias = L.layerGroup().addTo(map);
     this.layerOficial = L.layerGroup().addTo(map);
@@ -551,7 +554,7 @@ export class MapaComponent implements OnDestroy {
         title: g.map((u) => u.codigo + ' · ' + u.nome).join('\n') });
       m.bindPopup(() => `<div class="popup popup-unidades">` + g.map((u) => this.popupUnidade(u)).join('<hr>') + `</div>`, { maxHeight: 380, maxWidth: 340 });
       // Raio de 3 km em volta das unidades com endereço exato
-      if (exato) this.layerUnidades.addLayer(L.circle([u0.lat, u0.lng], { radius: RAIO_UNIDADE_KM * 1000, pane: 'paneUnidades', interactive: false,
+      if (exato) this.layerUnidades.addLayer(L.circle([u0.lat, u0.lng], { radius: RAIO_UNIDADE_KM * 1000, pane: 'paneRaioUnidades', interactive: false,
         color: '#EE4D2D', weight: 1.2, dashArray: '4 6', fillColor: '#EE4D2D', fillOpacity: 0.04 }));
       m.on('click', () => this.map.flyTo([u0.lat, u0.lng], Math.max(this.map.getZoom(), exato ? 14 : u0.origem === 'cidade' ? 11 : 6), { duration: 0.5 }));
       this.layerUnidades.addLayer(m);
@@ -854,7 +857,7 @@ export class MapaComponent implements OnDestroy {
     const cor = ehEstado ? CFG.COR_FRONTEIRA_ESTADO : CFG.COR_FRONTEIRA_CIDADE;
     const camada = L.geoJSON(geo, { pane: 'paneFronteira', interactive: false, style: { stroke: false, fillColor: cor, fillOpacity: ehEstado ? 0.03 : 0.08 } });
     // Só a linha do contorno recebe clique, para não cobrir os pinos e os bairros
-    const linha = L.geoJSON(geo, { pane: 'paneZonas', style: { color: cor, weight: 3, fill: false, dashArray: ehEstado ? null : '6 4' } });
+    const linha = L.geoJSON(geo, { pane: 'paneZonas', renderer: this.renderer, style: { color: cor, weight: 3, fill: false, dashArray: ehEstado ? null : '6 4' } });
     linha.bindTooltip(() => this.store.nomeLocal() + ' · clique para o resumo oficial', { sticky: true });
     linha.bindPopup(() => this.popupFronteira());
     this.layerFronteira.clearLayers();
