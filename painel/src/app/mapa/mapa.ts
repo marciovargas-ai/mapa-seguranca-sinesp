@@ -376,6 +376,8 @@ export class MapaComponent implements OnDestroy {
     const pF = map.createPane('paneFronteira'); pF.style.zIndex = 350; pF.style.pointerEvents = 'none';
     const pB = map.createPane('paneBairros'); pB.style.zIndex = 360;
     const pZ = map.createPane('paneZonas'); pZ.style.zIndex = 450;
+    // Número da zona acima dos pontos de notícia (senão o agrupamento de pontos no mesmo lugar cobre o número e o clique não abre o balão)
+    const pZR = map.createPane('paneZonasRotulo'); pZR.style.zIndex = 630;
     const pR = map.createPane('paneRotulos'); pR.style.zIndex = 640;
 
     // Mapas base da Esri: não exigem chave de API
@@ -773,7 +775,7 @@ export class MapaComponent implements OnDestroy {
         const cor = COR_NIVEL[z.nivel];
         const txt = () => this.popupZona(z, f.zonas.length);
         this.layerZonas.addLayer(L.circle([z.lat, z.lng], { pane: 'paneZonas', renderer: this.renderer, radius: z.raio, color: cor, weight: 2, fillColor: cor, fillOpacity: z.nivel === 'critica' ? 0.22 : 0.15 }).bindPopup(txt, { maxWidth: 340 }));
-        this.layerZonas.addLayer(L.marker([z.lat, z.lng], { pane: 'paneZonas', icon: L.divIcon({ className: 'rotulo-zona', html: `<div style="background:${cor}">${z.rank}</div>`, iconSize: [24, 24] }), keyboard: false }).bindPopup(txt, { maxWidth: 340 }));
+        this.layerZonas.addLayer(L.marker([z.lat, z.lng], { pane: 'paneZonasRotulo', icon: L.divIcon({ className: 'rotulo-zona', html: `<div style="background:${cor}">${z.rank}</div>`, iconSize: [24, 24] }), keyboard: false }).bindPopup(txt, { maxWidth: 340 }));
       });
     }
 
