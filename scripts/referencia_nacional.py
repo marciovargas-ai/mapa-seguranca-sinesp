@@ -16,7 +16,7 @@ import unicodedata
 
 DADOS = 'dados'
 TENT = ('tentativa de homicidio', 'tentativa de feminicidio')
-CVLI = ('homicidio doloso', 'roubo seguido de morte latrocinio', 'latrocinio', 'lesao corporal seguida de morte')
+CVLI = ('homicidio doloso', 'feminicidio', 'roubo seguido de morte latrocinio', 'latrocinio', 'lesao corporal seguida de morte')
 UFS = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR',
        'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO']
 
@@ -93,7 +93,7 @@ def main():
 
     saida = {
         'periodo': f'{ate + 1:02d}/{ult - 1} a {ate:02d}/{ult}' if ate < 12 else f'01/{ult} a 12/{ult}',
-        'fonte': 'Sinesp VDE (MJSP); CVLI = homicídio doloso + latrocínio + lesão corporal seguida de morte',
+        'fonte': 'Sinesp VDE (MJSP); CVLI = homicídio doloso + feminicídio + latrocínio + lesão corporal seguida de morte',
         'ufs': ufs,
     }
     with open(os.path.join(DADOS, 'referencia_nacional.json'), 'w', encoding='utf-8') as f:

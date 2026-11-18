@@ -81,7 +81,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     @if (c.serie; as s) {
       <section class="cartao">
         <div class="titulo-bloco">
-          <h3 matTooltip="Barras: mortes violentas intencionais por mês no Sinesp (homicídio doloso, latrocínio e lesão corporal seguida de morte). Linha: ocorrências noticiadas no mesmo mês (eixo da direita).">
+          <h3 matTooltip="Barras: mortes violentas intencionais por mês no Sinesp (homicídio doloso, feminicídio, latrocínio e lesão corporal seguida de morte). Linha: ocorrências noticiadas no mesmo mês (eixo da direita).">
             Mortes violentas mês a mês × notícias <mat-icon class="info">info</mat-icon></h3>
           <span class="nota">Sinesp {{ s.labels[0] }}–{{ s.labels[s.labels.length - 1] }} · notícias 12 meses</span>
         </div>

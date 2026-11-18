@@ -314,7 +314,8 @@ export class App {
     const lista: { rotulo: string; valor: string; sub: string; delta?: [number | null, number | null]; cor?: string }[] = [];
     const m = mortesViolentas(o.eventos);
     if (!m) return [];
-    const resto = o.eventos.filter((e) => !m.partes.includes(e));
+    // Feminicídio entra na soma das mortes e continua com cartão próprio (no Sinesp, o homicídio doloso não o inclui)
+    const resto = o.eventos.filter((e) => !m.partes.includes(e) || /^feminic/i.test(e.nome));
     lista.push({ rotulo: m.nome, valor: m.ano == null ? '—' : fmt(m.ano), delta: [m.ano, m.anterior], sub, cor: 'var(--cor-perigo)' });
     if (m.taxa != null) {
       lista.push({ rotulo: 'Mortes violentas por 100 mil hab.', valor: fmt1(m.taxa),
@@ -464,12 +465,12 @@ export class App {
 }
 
 /**
- * Mortes violentas a partir dos eventos do Sinesp: homicídio doloso + latrocínio +
+ * Mortes violentas a partir dos eventos do Sinesp: homicídio doloso + feminicídio + latrocínio +
  * lesão corporal seguida de morte (CVLI) e, quando o recorte publica, mortes por
  * intervenção de agente do Estado (MVI). Vale para qualquer município ou estado.
  */
 function mortesViolentas(eventos: EventoOficial[]) {
-  const cvli = eventos.filter((e) => /^(homic[ií]dio doloso|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida de morte)/i.test(e.nome));
+  const cvli = eventos.filter((e) => /^(homic[ií]dio doloso|feminic[ií]dio|latroc[ií]nio|roubo seguido de morte|les[aã]o corporal seguida de morte)/i.test(e.nome));
   const interv = eventos.filter((e) => /^morte por interven/i.test(e.nome));
   const partes = [...cvli, ...interv];
   if (!cvli.length) return null;

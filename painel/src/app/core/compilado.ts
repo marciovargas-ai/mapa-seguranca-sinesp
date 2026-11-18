@@ -19,7 +19,7 @@ import { fmt, fmt1, normalizar, pct, variacao } from './util';
 
 /** Grupos de indicadores do Sinesp (nomes já encurtados pelo painel). */
 const GRUPOS = {
-  cvli: { nome: 'Mortes violentas intencionais', curto: 'MVI', re: /^(homic[ií]dio doloso|latroc[ií]nio|les[aã]o corporal seguida de morte|morte por interven[cç][aã]o de agente do estado)$/i },
+  cvli: { nome: 'Mortes violentas intencionais', curto: 'MVI', re: /^(homic[ií]dio doloso|feminic[ií]dio|latroc[ií]nio|les[aã]o corporal seguida de morte|morte por interven[cç][aã]o de agente do estado)$/i },
   intervencao: { nome: 'Mortes por intervenção policial', curto: 'Intervenção', re: /^morte por interven/i },
   tentativas: { nome: 'Tentativas de homicídio', curto: 'Tentativas', re: /^tentativa de homic/i },
   mulher: { nome: 'Violência letal e sexual contra a mulher', curto: 'Mulher', re: /^(feminic[ií]dio|tentativa de feminic[ií]dio|estupro|estupro de vulner[aá]vel)$/i },

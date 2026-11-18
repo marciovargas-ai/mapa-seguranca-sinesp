@@ -8,7 +8,7 @@ interface Passo { alvo: string; titulo: string; texto: string; aba?: Aba }
 /** Passos do tour: cada um destaca uma parte do painel e explica como ler. */
 const PASSOS: Passo[] = [
   { alvo: '.busca', titulo: 'Escolha o local', texto: 'Digite qualquer município do Brasil (ou um CEP) ou escolha um estado na lista ao lado. Tudo no painel muda para o local escolhido: mapa, números, abas e notícias.' },
-  { alvo: '.kpis', titulo: 'Números oficiais', texto: 'Os cartões do topo vêm do Sinesp (Ministério da Justiça). "Mortes violentas" soma homicídio doloso, latrocínio e lesão corporal seguida de morte. A seta compara o período escolhido com os mesmos meses do ano anterior.' },
+  { alvo: '.kpis', titulo: 'Números oficiais', texto: 'Os cartões do topo vêm do Sinesp (Ministério da Justiça). "Mortes violentas" soma homicídio doloso, feminicídio, latrocínio e lesão corporal seguida de morte (no Sinesp, o homicídio doloso não inclui o feminicídio). A seta compara o período escolhido com os mesmos meses do ano anterior.' },
   { alvo: '.filtros', titulo: 'Filtros', texto: 'O período (30 dias a 12 meses) e o tipo de crime valem para todas as abas, para o mapa e para os cartões. No Sinesp, que é mensal, o período vira os últimos meses publicados.' },
   { alvo: '.area-mapa', titulo: 'Mapa', texto: 'Cada bairro é pintado pela quantidade de ocorrências noticiadas (contorno do IBGE ou do OpenStreetMap). Pontos são locais exatos; círculos vermelhos numerados são zonas vermelhas. Clique em qualquer coisa para ver o detalhe.' },
   { alvo: '.botao-mapa', titulo: 'Camadas', texto: 'Liga e desliga camadas: bairros, calor, zonas vermelhas, tiroteios do Fogo Cruzado e, no RJ, as áreas de delegacia com dados oficiais do ISP.' },
