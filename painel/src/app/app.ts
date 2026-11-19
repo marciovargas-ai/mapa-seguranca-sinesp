@@ -1,5 +1,5 @@
 import { lerCoordenada } from './core/cep';
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, untracked, viewChild } from '@angular/core';
 import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
@@ -68,11 +68,12 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
 
       <mat-form-field class="busca" appearance="outline" subscriptSizing="dynamic">
         <mat-icon matPrefix>search</mat-icon>
-        <input #busca matInput placeholder="Município, CEP ou coordenada" [value]="textoBusca()" (input)="textoBusca.set($any($event.target).value)"
-          (keydown.enter)="enter()" [matAutocomplete]="auto" aria-label="Buscar município, CEP ou coordenada" autocomplete="off" spellcheck="false" />
+        <input #busca matInput placeholder="Município, endereço, CEP ou coordenada" [value]="textoBusca()" (input)="textoBusca.set($any($event.target).value)"
+          (keydown.enter)="enter()" [matAutocomplete]="auto" aria-label="Buscar município, endereço, CEP ou coordenada" autocomplete="off" spellcheck="false" />
         <button mat-icon-button matSuffix type="button" class="ajuda-busca" [matMenuTriggerFor]="menuDicaBusca" (click)="$event.stopPropagation()"
           matTooltipClass="dica-busca" aria-label="O que dá para buscar"
           matTooltip="Município ou estado: Campinas, SP
+Endereço: Av. Paulista, 1000
 CEP: 01310-100 (marca o endereço no mapa)
 Coordenada decimal: -23.5505, -46.6333
 Graus, minutos e segundos: 23°33'01.8&quot;S 46°38'00.0&quot;W
@@ -84,13 +85,14 @@ O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remov
             <b>O que dá para buscar</b>
             <ul>
               <li><b>Município ou estado:&nbsp;</b>Campinas, SP</li>
+              <li><b>Endereço:&nbsp;</b>Av. Paulista, 1000</li>
               <li><b>CEP:&nbsp;</b><span translate="no">01310-100</span> (marca o endereço no mapa)</li>
               <li><b>Coordenada decimal:&nbsp;</b><span translate="no">-23.5505, -46.6333</span></li>
               <li><b>Graus, minutos e segundos:&nbsp;</b><span translate="no">23°33'01.8"S 46°38'00.0"W</span></li>
               <li><b>Graus e minutos:&nbsp;</b><span translate="no">23°33.03'S 46°38.00'W</span></li>
               <li><b>Link do Google Maps:&nbsp;</b>cole o endereço da página</li>
             </ul>
-            <small>O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remove.</small>
+            <small>O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remove. No balão do pino, "Salvar e monitorar" guarda o pino nos favoritos com um nome e liga o alerta por e-mail.</small>
           </div>
         </mat-menu>
         <mat-autocomplete #auto="matAutocomplete" (optionSelected)="escolher($event)" [autoActiveFirstOption]="true">
@@ -512,6 +514,8 @@ export class App {
   }
 
   constructor() {
+    // Celular: abrir um local ou um pino (pelos favoritos, por exemplo) fecha o menu ☰
+    effect(() => { this.store.uf(); this.store.cidade(); this.store.pontoCep(); untracked(() => this.menuCel.set(false)); });
     iniciarTraducao();
     // No computador o painel ocupa a tela inteira e só as caixas internas rolam. Se algo deslocar a página
     // (rolagem automática dentro do Google Sites), ela volta ao lugar, para o topo nunca ficar escondido.
@@ -535,6 +539,7 @@ export class App {
     this.busca().nativeElement.blur();
     if (s.tipo === 'CEP') this.store.buscarCep(s.cep!);
     else if (s.tipo === 'COORD') this.store.buscarCoordenada(s.lat!, s.lng!);
+    else if (s.tipo === 'END') this.store.buscarEndereco(s.texto!);
     else if (s.tipo === 'UF') this.store.abrirLocal(s.uf!, 'ESTADO_INTEIRO');
     else this.store.abrirLocal(s.uf!, s.nome!);
   }

@@ -1,4 +1,4 @@
-import { formatarCoordenada, lerCoordenada } from './cep';
+import { formatarCoordenada, lerCoordenada, pareceEndereco } from './cep';
 import { ESTADOS } from './dados';
 import { Municipio } from './modelos';
 import { distanciaKm, normalizar } from './util';
@@ -53,7 +53,7 @@ export function municipioMaisProximo(lat: number, lng: number): Municipio | null
   return melhor;
 }
 
-export interface Sugestao { tipo: 'CEP' | 'UF' | 'MUN' | 'COORD'; rotulo: string; detalhe: string; uf?: string; nome?: string; cep?: string; lat?: number; lng?: number }
+export interface Sugestao { tipo: 'CEP' | 'UF' | 'MUN' | 'COORD' | 'END'; rotulo: string; detalhe: string; uf?: string; nome?: string; cep?: string; lat?: number; lng?: number; texto?: string }
 
 export function sugerir(texto: string): Sugestao[] {
   const bruto = String(texto || '').trim();
@@ -84,5 +84,9 @@ export function sugerir(texto: string): Sugestao[] {
   }
   comeca.sort((a, b) => a.norm.length - b.norm.length);
   for (const m of comeca.concat(contem).slice(0, 8)) itens.push({ tipo: 'MUN', uf: m.uf, nome: m.nome, rotulo: m.nome, detalhe: m.uf });
+  // Endereço: vem primeiro quando o texto tem cara de endereço; senão, por último (a pessoa ainda pode escolher)
+  const end: Sugestao = { tipo: 'END', texto: bruto, rotulo: 'Marcar endereço "' + bruto + '"', detalhe: 'OpenStreetMap' };
+  if (pareceEndereco(bruto) && !itens.some((s) => s.tipo === 'MUN' && normalizar(s.nome!) === alvo)) return [end, ...itens.slice(0, 8)];
+  if (bruto.length >= 4) return [...itens.slice(0, 8), end];
   return itens.slice(0, 9);
 }

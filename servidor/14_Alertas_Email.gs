@@ -16,7 +16,7 @@
 const ALERTAS_REMETENTE_PADRAO_ = 'security.br@shopee.com';
 const ALERTAS_NOME_ = 'Shopee Security Brasil';
 const ALERTAS_URL_PADRAO_ = 'https://sites.google.com/shopee.com/mapadaseguranca';
-const ALERTAS_MAX_LOCAIS_ = 15;
+const ALERTAS_MAX_LOCAIS_ = 25;
 const ALERTAS_MAX_ITENS_EMAIL_ = 40;
 const ALERTAS_TEMAS_ = {
   CVLI: { nome: 'Homicídio e latrocínio', cor: '#dc2626' },
@@ -43,6 +43,18 @@ function nomeTemaAlerta_(p, id) {
   return L_(p, (ALERTAS_TEMAS_[id] || {}).nome || id, ALERTAS_TEMAS_EN_[id] || (ALERTAS_TEMAS_[id] || {}).nome || id);
 }
 function inmetEn_(t) { const k = String(t || '').toLowerCase(); return INMET_EVENTOS_EN_[k] || k; }
+
+/** Município de um local do alerta (cidade, ou a cidade do pino); null para estado inteiro. */
+function municipioLocalAlerta_(f) {
+  if (!f || f.nome === 'ESTADO_INTEIRO') return null;
+  return obterMunicipioBase_(f.uf, f.tipo === 'pino' ? f.cidade : f.nome);
+}
+function nomeLocalAlerta_(f, p) {
+  if (f.tipo === 'pino') return L_(p, 'Pino ', 'Pin ') + '"' + f.nome + '" (' + f.cidade + '/' + f.uf + ')';
+  return f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf;
+}
+/** Pino com prazo de monitoramento vencido não gera mais alerta. */
+function pinoVencido_(f) { return f && f.tipo === 'pino' && f.ate && f.ate < Date.now(); }
 
 function chaveAlerta_(email) { return 'ALERTA::' + email; }
 function chaveAlertaEnviados_(email) { return 'ALERTA_ENV::' + email; }
@@ -118,7 +130,7 @@ function salvarAlertas(prefs) {
   gravarPreferenciasAlerta_(conta, limpa);
   if (limpa.ativo) {
     garantirGatilhoAlertas_();
-    limpa.locais.forEach(f => { const mun = f.nome === 'ESTADO_INTEIRO' ? null : obterMunicipioBase_(f.uf, f.nome); if (mun) registrarConsulta_(mun); });
+    limpa.locais.forEach(f => { const mun = municipioLocalAlerta_(f); if (mun) registrarConsulta_(mun); });
   }
   return { ok: true, prefs: limpa };
 }
@@ -185,8 +197,8 @@ function alertasEmailGatilho() {
 function manterCidadesNoRobo_(p) {
   const cache = CacheService.getScriptCache();
   p.locais.forEach(f => {
-    if (f.nome === 'ESTADO_INTEIRO') return;
-    const mun = obterMunicipioBase_(f.uf, f.nome);
+    if (pinoVencido_(f)) return;
+    const mun = municipioLocalAlerta_(f);
     if (!mun || cache.get('ALERTA_ROBO|' + mun.ibge)) return;
     cache.put('ALERTA_ROBO|' + mun.ibge, '1', 21600);
     registrarConsulta_(mun);
@@ -218,16 +230,30 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
   const novo = (o, ehUf) => temas.has(o.c) && !ja.has(o.id) && String(o.d || '') >= limiteData && (ehUf || !o.m || o.m > desde) && !ehNoticiaPolitica_(o.t || '');
 
   p.locais.forEach(f => {
-    if (!temas.size) return;
+    if (!temas.size || pinoVencido_(f)) return;
     let itens = [];
-    if (f.nome === 'ESTADO_INTEIRO') {
+    if (f.tipo === 'pino') {
+      // Pino: só ocorrências com local preciso dentro do raio (padrão 1 km)
+      const mun = municipioLocalAlerta_(f);
+      const reg = mun ? ler(nomeArquivoCidade_(mun.ibge)) : null;
+      const raio = f.raio || 1;
+      ((reg && reg.ocorrencias) || []).forEach(o => {
+        if (!novo(o, false) || !o.lat || !o.lng || !PRECISOES_NO_MAPA_.has(o.p)) return;
+        if (Math.abs(o.lat - f.lat) > 0.1 || Math.abs(o.lng - f.lng) > 0.1) return;
+        const d = distanciaKm_(o.lat, o.lng, f.lat, f.lng);
+        if (d > raio) return;
+        const it = itemAlerta_(o, mun.nome, unidades, p);
+        it.local = [L_(p, 'A ', '') + String(Math.round(d * 10) / 10).replace('.', L_(p, ',', '.')) + L_(p, ' km do pino', ' km from the pin'), it.local].filter(Boolean).join(' · ');
+        itens.push(it);
+      });
+    } else if (f.nome === 'ESTADO_INTEIRO') {
       const resumo = ler(nomeArquivoUf_(f.uf));
       Object.keys((resumo && resumo.cidades) || {}).forEach(ibge => {
         const c = resumo.cidades[ibge];
         (c.ocorrencias || []).forEach(o => { if (novo(o, true)) itens.push(itemAlerta_(o, c.cidade, unidades, p)); });
       });
     } else {
-      const mun = obterMunicipioBase_(f.uf, f.nome);
+      const mun = municipioLocalAlerta_(f);
       const reg = mun ? ler(nomeArquivoCidade_(mun.ibge)) : null;
       ((reg && reg.ocorrencias) || []).forEach(o => { if (novo(o, false)) itens.push(itemAlerta_(o, mun.nome, unidades, p)); });
     }
@@ -236,7 +262,10 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
     const porTema = {};
     itens.forEach(i => { porTema[i.tema] = (porTema[i.tema] || 0) + 1; });
     const max = p.frequencia === 'semanal' ? 20 : 15;
-    if (itens.length) blocos.push({ titulo: f.nome === 'ESTADO_INTEIRO' ? L_(p, 'Estado: ', 'State: ') + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')', itens: itens.slice(0, max), total: itens.length, porTema: porTema });
+    const titulo = f.tipo === 'pino'
+      ? L_(p, 'Pino ', 'Pin ') + '"' + f.nome + '" · ' + f.cidade + '/' + f.uf + L_(p, ' · raio de ', ' · ') + String(f.raio || 1).replace('.', L_(p, ',', '.')) + L_(p, ' km', ' km radius')
+      : f.nome === 'ESTADO_INTEIRO' ? L_(p, 'Estado: ', 'State: ') + nomeUfAlerta_(f.uf) : f.nome + ' (' + f.uf + ')';
+    if (itens.length) blocos.push({ titulo: titulo, itens: itens.slice(0, max), total: itens.length, porTema: porTema });
   });
 
   // Avisos do INMET (perigo e grande perigo) que atingem os locais escolhidos
@@ -246,9 +275,10 @@ function juntarNovidadesAlerta_(p, desde, cache, enviados) {
     (cache.__inmet.avisos || []).forEach(a => {
       if (a.nivel < 2 || ja.has('inmet' + a.id) || (a.fim && a.fim < Date.now())) return;
       const nomes = p.locais.filter(f => {
-        const mun = f.nome === 'ESTADO_INTEIRO' ? null : obterMunicipioBase_(f.uf, f.nome);
+        if (pinoVencido_(f)) return false;
+        const mun = municipioLocalAlerta_(f);
         return avisosInmetDoLocal_({ avisos: [a] }, f.uf, mun ? mun.ibge : '').length > 0;
-      }).map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf);
+      }).map(f => nomeLocalAlerta_(f, p));
       if (!nomes.length) return;
       const quando = t => (t ? Utilities.formatDate(new Date(t), CONFIG.FUSO, L_(p, "dd/MM HH'h'mm", 'MM/dd HH:mm')) : '');
       itens.push({ id: 'inmet' + a.id, tema: 'INMET', rotulo: 'INMET · ' + L_(p, a.grau, inmetEn_(a.grau)), cor: a.cor || '#F57C00',
@@ -348,7 +378,7 @@ function montarEmailAlerta_(p, blocos, teste) {
   }).join('');
 
   const temas = p.temas.map(t => nomeTemaAlerta_(p, t)).join(', ') || L_(p, 'nenhum tema de ocorrência', 'no incident topic');
-  const locais = p.locais.map(f => f.nome === 'ESTADO_INTEIRO' ? nomeUfAlerta_(f.uf) : f.nome + '/' + f.uf).join(', ') || L_(p, 'nenhum local', 'no place');
+  const locais = p.locais.filter(f => !pinoVencido_(f)).map(f => nomeLocalAlerta_(f, p)).join(', ') || L_(p, 'nenhum local', 'no place');
 
   const html = '<!doctype html><html lang="' + L_(p, 'pt-BR', 'en-US') + '"><body style="margin:0;padding:0;background:#f3f4f6;font-family:Roboto,Arial,Helvetica,sans-serif;color:#1f2937">' +
     '<div style="display:none;max-height:0;overflow:hidden">' + escAlerta_(resumo) + '</div>' +

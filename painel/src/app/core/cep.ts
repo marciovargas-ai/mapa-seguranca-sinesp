@@ -2,13 +2,15 @@ import { distanciaKm, fetchComTimeout, normalizar } from './util';
 
 /** Ponto do CEP pesquisado: fica marcado no mapa até a pessoa remover. */
 export interface PontoCep {
-  /** cep = CEP pesquisado; coord = coordenada digitada ou colada (link do Google Maps) */
-  tipo: 'cep' | 'coord';
+  /** cep = CEP pesquisado; coord = coordenada digitada ou colada (link do Google Maps); end = endereço digitado */
+  tipo: 'cep' | 'coord' | 'end';
   cep: string; logradouro: string; bairro: string; cidade: string; uf: string; ibge: string;
   lat: number; lng: number;
   /** endereco = coordenada do próprio CEP; rua = rua localizada no OpenStreetMap; bairro = centro do bairro; cidade = centro da cidade */
   precisao: 'endereco' | 'rua' | 'bairro' | 'cidade';
   fonte: string; em: number;
+  /** Pino salvo nos favoritos: nome dado pela pessoa, id, quem criou e quando */
+  pinoId?: string; nomePino?: string; por?: string; criadoEm?: number;
 }
 
 /** Dados do ViaCEP que interessam. */
@@ -126,4 +128,41 @@ export async function enderecoDaCoordenada(lat: number, lng: number): Promise<{ 
     return { rua: a.road || a.pedestrian || '', bairro: a.suburb || a.neighbourhood || a.quarter || a.city_district || '',
       cidade: a.city || a.town || a.village || a.municipality || '', uf };
   } catch { return null; }
+}
+
+/**
+ * Endereço digitado na busca ("Av. Paulista, 1000", "Rua das Flores 25, Centro") pelo OpenStreetMap (Nominatim).
+ * Com a cidade aberta no painel, tenta primeiro nela; sem resultado, procura no Brasil todo. null se não achar.
+ */
+export async function buscarEnderecoTexto(texto: string, cidade?: string, uf?: string): Promise<{
+  lat: number; lng: number; rua: string; bairro: string; cidade: string; uf: string; exato: boolean } | null> {
+  const t = String(texto || '').trim();
+  if (t.length < 4) return null;
+  const tentativas: string[] = [];
+  if (cidade && uf && !normalizar(t).includes(normalizar(cidade))) tentativas.push(t + ', ' + cidade + ', ' + uf);
+  tentativas.push(t);
+  for (const q of tentativas) {
+    try {
+      const params = new URLSearchParams({ format: 'jsonv2', limit: '1', countrycodes: 'br', addressdetails: '1', 'accept-language': 'pt-BR', q });
+      const r = await fetchComTimeout('https://nominatim.openstreetmap.org/search?' + params.toString(), 7000);
+      if (!r.ok) continue;
+      const j = (await r.json())?.[0];
+      const lat = Number(j?.lat), lng = Number(j?.lon);
+      if (!isFinite(lat) || !isFinite(lng) || !NO_BRASIL(lat, lng)) continue;
+      const a = j.address || {};
+      const rua = [a.road || a.pedestrian || '', a.house_number || ''].filter(Boolean).join(', ');
+      return { lat, lng, rua, bairro: a.suburb || a.neighbourhood || a.quarter || a.city_district || '',
+        cidade: a.city || a.town || a.village || a.municipality || '', uf: String(a['ISO3166-2-lvl4'] || '').replace('BR-', '').toUpperCase(),
+        exato: !!(a.road || a.pedestrian || a.amenity || a.building || a.shop) };
+    } catch { /* próxima tentativa */ }
+  }
+  return null;
+}
+
+/** Texto com cara de endereço: tem letras e número, vírgula ou começa com rua/avenida/travessa... */
+export function pareceEndereco(texto: string): boolean {
+  const t = normalizar(String(texto || '')).trim();
+  if (t.length < 5 || !/[a-z]/.test(t)) return false;
+  return /^(r|rua|av|avenida|al|alameda|tv|travessa|rod|rodovia|estr|estrada|pca|praca|largo|lgo|beco|via|viela|servidao|quadra|qd|setor|condominio|cond)\b/.test(t)
+    || (/\d/.test(t) && /[a-z]{3}/.test(t)) || t.includes(',');
 }

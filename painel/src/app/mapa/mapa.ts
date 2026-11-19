@@ -4,6 +4,9 @@ import { formatarCep, formatarCoordenada, PontoCep } from '../core/cep';
 import { explicarGrau, grauDe } from '../core/confianca';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog } from '@angular/material/dialog';
+import { PinoDialogoComponent } from '../pino-dialogo';
+import { dataCurta } from '../core/favoritos';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -58,7 +61,9 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     @if (store.pontoCepMapa(); as pc) {
       <div class="chip-cep" role="status">
         <button type="button" class="chip-cep-ir" (click)="abrirPopupCep(true)" matTooltip="Ver a análise do local">
-          <mat-icon>location_on</mat-icon><span><b>{{ pc.tipo === 'coord' ? 'Coordenada' : 'CEP' }} <span translate="no">{{ valorPonto(pc) }}</span></b> · {{ pc.logradouro || pc.bairro || pc.cidade }}</span>
+          <mat-icon>location_on</mat-icon><span>@if (pc.nomePino) { <b translate="no">{{ pc.nomePino }}</b> · {{ pc.cidade }} }
+            @else if (pc.tipo === 'end') { <b>Endereço</b> · {{ pc.logradouro || pc.bairro || pc.cidade }} }
+            @else { <b>{{ pc.tipo === 'coord' ? 'Coordenada' : 'CEP' }} <span translate="no">{{ valorPonto(pc) }}</span></b> · {{ pc.logradouro || pc.bairro || pc.cidade }} }</span>
         </button>
         <button type="button" class="chip-cep-x" (click)="store.removerPontoCep()" matTooltip="Remover a marcação" aria-label="Remover a marcação"><mat-icon>close</mat-icon></button>
       </div>
@@ -218,6 +223,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
 })
 export class MapaComponent implements OnDestroy {
   protected readonly store = inject(PainelStore);
+  private readonly dialog = inject(MatDialog);
   private readonly alvo = viewChild.required<ElementRef<HTMLDivElement>>('alvo');
   protected readonly camadas = this.store.camadas;
 
@@ -664,8 +670,20 @@ export class MapaComponent implements OnDestroy {
     }
   }
 
-  protected valorPonto(p: PontoCep): string { return p.tipo === 'coord' ? formatarCoordenada(p.lat, p.lng) : formatarCep(p.cep); }
-  protected rotuloPonto(p: PontoCep): string { return p.tipo === 'coord' ? 'Coordenada ' + formatarCoordenada(p.lat, p.lng) : 'CEP ' + formatarCep(p.cep); }
+  protected valorPonto(p: PontoCep): string { return p.tipo === 'cep' ? formatarCep(p.cep) : formatarCoordenada(p.lat, p.lng); }
+  protected rotuloPonto(p: PontoCep): string {
+    if (p.nomePino) return p.nomePino;
+    return p.tipo === 'cep' ? 'CEP ' + formatarCep(p.cep) : p.tipo === 'end' ? 'Endereço ' + (p.logradouro || p.cidade) : 'Coordenada ' + formatarCoordenada(p.lat, p.lng);
+  }
+
+  /** "Salvar e monitorar": nome do pino, favoritos e alerta por e-mail. */
+  private abrirSalvarPino(p: PontoCep): void {
+    this.map.closePopup();
+    this.dialog.open(PinoDialogoComponent, { data: p, width: '480px', maxWidth: '96vw', autoFocus: 'dialog' }).afterClosed().subscribe((r) => {
+      if (!r?.ok) return;
+      this.store.definirStatus('check_circle', r.alerta ? 'Pino salvo nos favoritos e com alerta por e-mail' : 'Pino salvo nos favoritos', 'ok');
+    });
+  }
 
   /** Pino do CEP pesquisado com o raio de análise; no CEP novo, o mapa vai até ele e abre a análise. */
   private desenharCep(p: PontoCep | null): void {
@@ -681,10 +699,11 @@ export class MapaComponent implements OnDestroy {
     m.on('popupopen', (e: any) => {
       const el = e.popup.getElement() as HTMLElement | null;
       el?.querySelector('.bt-remover-cep')?.addEventListener('click', () => this.store.removerPontoCep());
+      el?.querySelector('.bt-salvar-pino')?.addEventListener('click', () => this.abrirSalvarPino(this.store.pontoCep() || p));
     });
     m.addTo(this.layerCep);
     this.markerCep = m;
-    const chave = p.tipo + p.cep + '|' + p.em + '|' + p.precisao;
+    const chave = p.tipo + p.cep + '|' + p.em + '|' + p.precisao + '|' + p.lat + ',' + p.lng;
     if (this.cepDesenhado !== chave) {
       this.cepDesenhado = chave;
       this.usuarioMoveu = true;
@@ -704,8 +723,9 @@ export class MapaComponent implements OnDestroy {
   private popupCep(p: PontoCep): string {
     const a = analisarLocal(p.lat, p.lng, this.store.recentes30());
     const PREC: Record<string, string> = {
-      endereco: p.tipo === 'coord' ? 'Pino na coordenada informada' : 'Pino no ponto do CEP', rua: 'Pino na rua do CEP (aproximado)',
-      bairro: 'Pino no centro do bairro (rua não localizada)', cidade: 'Pino no centro da cidade (endereço não localizado)',
+      endereco: p.nomePino ? 'Pino salvo nos favoritos' : p.tipo === 'coord' ? 'Pino na coordenada informada' : p.tipo === 'end' ? 'Pino no endereço (OpenStreetMap)' : 'Pino no ponto do CEP',
+      rua: 'Pino na rua do CEP (aproximado)',
+      bairro: p.tipo === 'end' ? 'Pino aproximado (endereço sem número exato no OpenStreetMap)' : 'Pino no centro do bairro (rua não localizada)', cidade: 'Pino no centro da cidade (endereço não localizado)',
     };
     const tipos = a.porCat.map((c) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[c.id]?.cor || '#64748b'}">${esc(CATEGORIA_POR_ID[c.id]?.curto || c.id)} ${fmt(c.qtd)}</span>`).join(' ');
     const ult = a.ultimas.map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>(${esc(o.data)}, ${String(o.km).replace('.', ',')} km)</small></li>`).join('');
@@ -737,8 +757,10 @@ export class MapaComponent implements OnDestroy {
     if (unid) linhas.push(`<li>Unidade Shopee mais próxima: ${esc(unid.u.codigo)} · ${esc(unid.u.nome)}, a ${String(Math.round(unid.km * 10) / 10).replace('.', ',')} km</li>`);
     const end = [p.logradouro, p.bairro].filter(Boolean).map((x) => esc(x)).join(' · ');
     return `<div class="popup popup-cep">` +
-      `<span class="popup-cat" style="color:#113366">Análise do local</span> · ${p.tipo === 'coord' ? 'Coordenada' : 'CEP'} <span translate="no">${esc(this.valorPonto(p))}</span>` +
+      `<span class="popup-cat" style="color:#113366">Análise do local</span> · ` +
+      (p.nomePino ? `<span translate="no">${esc(p.nomePino)}</span>` : p.tipo === 'end' ? 'Endereço' : `${p.tipo === 'coord' ? 'Coordenada' : 'CEP'} <span translate="no">${esc(this.valorPonto(p))}</span>`) +
       `<div class="popup-titulo">${end || esc(p.cidade)}</div>` +
+      (p.nomePino && p.por ? `<span class="pino-autor">${esc('Adicionado por ' + p.por + ' em ' + dataCurta(p.criadoEm))}</span>` : '') +
       `<div class="popup-meta">${esc(p.cidade)}/${esc(p.uf)} · ${esc(PREC[p.precisao])}</div>` +
       `<div class="perto-unidade"><b>Num raio de ${RAIO_CEP_KM} km · notícias com local preciso</b>` +
       `<div class="perto-numeros"><span><b>${fmt(a.total)}</b>12 meses</span><span><b>${fmt(a.d30)}</b>30 dias</span><span class="${a.graves ? 'grave' : ''}"><b>${fmt(a.graves)}</b>graves (12 meses)</span></div>` +
@@ -746,7 +768,8 @@ export class MapaComponent implements OnDestroy {
       (ult ? `<ul class="lista-sem-local">${ult}</ul>` : '<small>Nenhuma ocorrência com local preciso no raio em 12 meses.</small>') + `</div>` +
       `<ul class="cep-contexto">${linhas.join('')}</ul>` +
       `<small class="popup-meta">Graves = homicídio, tiroteio e roubo de carga. A estatística oficial (Sinesp) é por município; no entorno valem as notícias com rua ou bairro identificados.</small>` +
-      `<div class="cep-acoes"><button type="button" class="bt-remover-cep">Remover marcação</button></div>` +
+      `<div class="cep-acoes"><button type="button" class="bt-remover-cep">Remover marcação</button>` +
+      `<button type="button" class="bt-salvar-pino">${p.nomePino ? 'Editar alerta do pino' : 'Salvar e monitorar'}</button></div>` +
       `</div>`;
   }
 

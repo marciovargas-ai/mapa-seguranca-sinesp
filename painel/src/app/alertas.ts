@@ -6,11 +6,10 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { Favorito, Favoritos } from './core/favoritos';
+import { dataCurta, Favorito, Favoritos, igualFavorito } from './core/favoritos';
 import { ESTADOS } from './core/dados';
 import { PainelStore } from './core/painel.store';
 import { Servidor } from './core/servidor';
-import { normalizar } from './core/util';
 
 interface PrefsAlerta {
   ativo: boolean; locais: Favorito[]; temas: string[]; shopee: boolean; shopeeEscopo: 'locais' | 'brasil';
@@ -21,7 +20,7 @@ const TEMAS_PADRAO = [
   { id: 'CARGA', nome: 'Roubo de carga' }, { id: 'PATRIMONIO', nome: 'Roubo e furto' },
   { id: 'TRAFICO', nome: 'Tráfico e operação policial' }, { id: 'BLOQUEIO', nome: 'Distúrbio e bloqueio de via' },
 ];
-const igual = (a: Favorito, b: Favorito) => a.uf === b.uf && normalizar(a.nome) === normalizar(b.nome);
+const igual = igualFavorito;
 
 /** "Meus alertas": a pessoa escolhe locais, temas e frequência dos e-mails (security.br@shopee.com). */
 @Component({
@@ -45,14 +44,30 @@ const igual = (a: Favorito, b: Favorito) => a.uf === b.uf && normalizar(a.nome) 
         <section [class.apagado]="!p().ativo">
           <h3>Locais</h3>
           <div class="chips">
-            @for (l of p().locais; track l.uf + l.nome) {
-              <span class="chip">{{ rotulo(l) }}<button mat-icon-button [attr.aria-label]="'Tirar ' + rotulo(l)" (click)="tirar(l)"><mat-icon>close</mat-icon></button></span>
+            @for (l of p().locais; track (l.id || '') + l.uf + l.nome) {
+              @if (l.tipo !== 'pino') {
+                <span class="chip">{{ rotulo(l) }}<button mat-icon-button [attr.aria-label]="'Tirar ' + rotulo(l)" (click)="tirar(l)"><mat-icon>close</mat-icon></button></span>
+              }
             } @empty { <span class="dica">Nenhum local escolhido.</span> }
           </div>
+          @if (pinos().length) {
+            <h3>Pinos monitorados (raio de 1 km)</h3>
+            <ul class="pinos">
+              @for (l of pinos(); track l.id) {
+                <li [class.vencido]="vencido(l)">
+                  <mat-icon>push_pin</mat-icon>
+                  <div><b translate="no">{{ l.nome }}</b> <span class="cidade">{{ l.cidade }}/{{ l.uf }}</span>
+                    <small>{{ l.por ? 'Adicionado por ' + l.por + ' em ' + data(l.em) : 'Adicionado em ' + data(l.em) }} ·
+                      {{ l.ate ? (vencido(l) ? 'monitoramento encerrado em ' : 'monitorado até ') + data(l.ate) : 'sem prazo' }}</small></div>
+                  <button mat-icon-button [attr.aria-label]="'Tirar ' + l.nome" (click)="tirar(l)"><mat-icon>close</mat-icon></button>
+                </li>
+              }
+            </ul>
+          }
           <div class="botoes-locais">
             @if (!temAtual()) { <button mat-stroked-button (click)="incluir(atual())"><mat-icon>add_location_alt</mat-icon> {{ rotulo(atual()) }}</button> }
-            @for (f of favoritosFora(); track f.uf + f.nome) {
-              <button mat-stroked-button (click)="incluir(f)"><mat-icon>star</mat-icon> {{ rotulo(f) }}</button>
+            @for (f of favoritosFora(); track (f.id || '') + f.uf + f.nome) {
+              <button mat-stroked-button (click)="incluir(f)"><mat-icon>{{ f.tipo === 'pino' ? 'push_pin' : 'star' }}</mat-icon> {{ rotulo(f) }}</button>
             }
           </div>
 
@@ -107,6 +122,13 @@ const igual = (a: Favorito, b: Favorito) => a.uf === b.uf && normalizar(a.nome) 
     .chip { display: inline-flex; align-items: center; gap: 2px; padding-left: 12px; border-radius: 999px; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); font-size: 13px; }
     .chip button { transform: scale(.75); }
     .dica { font-size: 13px; opacity: .7; }
+    .pinos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .pinos li { display: flex; align-items: center; gap: 8px; padding: 6px 4px 6px 10px; border-radius: 12px; background: var(--mat-sys-surface-container); }
+    .pinos li > mat-icon { color: #113366; flex: none; }
+    .pinos li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+    .pinos li small { font-size: 12px; opacity: .75; overflow-wrap: anywhere; }
+    .pinos li .cidade { font-size: 12px; opacity: .75; }
+    .pinos li.vencido { opacity: .6; }
     .botoes-locais { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .botoes-locais button { font-size: 12px; }
     .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
@@ -150,9 +172,16 @@ export class AlertasComponent {
       .finally(() => this.carregando.set(false));
   }
 
-  protected rotulo(l: Favorito): string { return l.nome === 'ESTADO_INTEIRO' ? 'Estado: ' + (ESTADOS[l.uf]?.nome || l.uf) : l.nome + ' (' + l.uf + ')'; }
+  protected rotulo(l: Favorito): string {
+    if (l.tipo === 'pino') return l.nome + ' (' + (l.cidade || l.uf) + ')';
+    return l.nome === 'ESTADO_INTEIRO' ? 'Estado: ' + (ESTADOS[l.uf]?.nome || l.uf) : l.nome + ' (' + l.uf + ')';
+  }
+  protected readonly pinos = computed(() => this.p().locais.filter((l) => l.tipo === 'pino'));
+  protected readonly agora = Date.now();
+  protected vencido(l: Favorito): boolean { return !!l.ate && l.ate < this.agora; }
+  protected data(ms?: number): string { return dataCurta(ms); }
   protected mudar(m: Partial<PrefsAlerta>): void { this.p.update((p) => ({ ...p, ...m })); this.mensagem.set(''); }
-  protected incluir(l: Favorito): void { if (this.p().locais.length < 15) this.mudar({ locais: [...this.p().locais, l] }); }
+  protected incluir(l: Favorito): void { if (this.p().locais.length < 25) this.mudar({ locais: [...this.p().locais, l] }); }
   protected tirar(l: Favorito): void { this.mudar({ locais: this.p().locais.filter((x) => !igual(x, l)) }); }
   protected alternarTema(id: string, marcado: boolean): void {
     const t = this.p().temas.filter((x) => x !== id);

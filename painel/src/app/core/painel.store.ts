@@ -5,7 +5,7 @@ import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './
 import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, carregarRoubos, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
-import { enderecoDaCoordenada, localizarCep, PontoCep, pontoNoBairro } from './cep';
+import { enderecoDaCoordenada, localizarCep, PontoCep, pontoNoBairro, buscarEnderecoTexto } from './cep';
 import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
@@ -317,7 +317,7 @@ export class PainelStore {
     this.foco.set({ lat, lng, zoom, raio, n: Date.now() });
   }
 
-  private definirStatus(icone: string, texto: string, tipo: Status['tipo'] = ''): void {
+  definirStatus(icone: string, texto: string, tipo: Status['tipo'] = ''): void {
     this.status.set({ icone, texto, tipo });
   }
 
@@ -531,6 +531,30 @@ export class PainelStore {
       this.pontoCep.set({ tipo: 'coord', cep: '', logradouro: e?.rua || '', bairro: e?.bairro || '', cidade: mun.nome, uf: mun.uf, ibge: String(mun.ibge),
         lat, lng, precisao: 'endereco', fonte: 'Coordenada informada', em: Date.now() });
     });
+  }
+
+  /** Endereço digitado na busca: localiza no OpenStreetMap (primeiro na cidade aberta) e marca o pino. */
+  buscarEndereco(texto: string): void {
+    this.definirStatus('search', 'Localizando o endereço…');
+    const naCidade = this.escopo() === 'CIDADE' ? this.cidade() : '';
+    buscarEnderecoTexto(texto, naCidade, this.uf()).then((e) => {
+      const mun = e ? ((ESTADOS[e.uf] && e.cidade ? buscarMunicipio(e.uf, e.cidade) : null) || municipioMaisProximo(e.lat, e.lng)) : null;
+      if (!e || !mun) { this.definirStatus('error', 'Endereço não encontrado. Tente com número e cidade, ou use o CEP.', 'erro'); return; }
+      this.pontoCep.set(null);
+      if (this.uf() !== mun.uf || normalizar(this.cidade()) !== normalizar(mun.nome) || this.escopo() !== 'CIDADE') this.abrirLocal(mun.uf, mun.nome);
+      this.pontoCep.set({ tipo: 'end', cep: '', logradouro: e.rua || texto, bairro: e.bairro, cidade: mun.nome, uf: mun.uf, ibge: String(mun.ibge),
+        lat: e.lat, lng: e.lng, precisao: e.exato ? 'endereco' : 'bairro', fonte: 'OpenStreetMap', em: Date.now() });
+    }).catch(() => this.definirStatus('error', 'Não foi possível localizar o endereço', 'erro'));
+  }
+
+  /** Abre um pino salvo nos favoritos: a cidade dele e o pino com o nome dado pela pessoa. */
+  abrirPino(f: { id?: string; nome: string; uf: string; cidade?: string; endereco?: string; lat?: number; lng?: number; por?: string; em?: number }): void {
+    const mun = buscarMunicipio(f.uf, f.cidade || '') || (f.lat != null && f.lng != null ? municipioMaisProximo(f.lat, f.lng) : null);
+    if (!mun || f.lat == null || f.lng == null) return;
+    this.pontoCep.set(null);
+    if (this.uf() !== mun.uf || normalizar(this.cidade()) !== normalizar(mun.nome) || this.escopo() !== 'CIDADE') this.abrirLocal(mun.uf, mun.nome);
+    this.pontoCep.set({ tipo: 'end', cep: '', logradouro: f.endereco || '', bairro: '', cidade: mun.nome, uf: mun.uf, ibge: String(mun.ibge),
+      lat: f.lat, lng: f.lng, precisao: 'endereco', fonte: 'Favorito', em: Date.now(), pinoId: f.id, nomePino: f.nome, por: f.por, criadoEm: f.em });
   }
 
   buscarCep(cep: string): void {
