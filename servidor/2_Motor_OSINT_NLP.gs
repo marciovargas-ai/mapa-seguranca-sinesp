@@ -25,7 +25,7 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
 /** Sobe quando o filtro de cidade passa a aceitar mais notícias: cada cidade refaz os 12 meses uma vez. */
-const VERSAO_FILTRO_CIDADE_ = 3;
+const VERSAO_FILTRO_CIDADE_ = 4;  // 4 (19/11/2026): capital citada pela sigla/região/bairro e verbos de crime (roubar, matar)
 const SEGUNDOS_ORCAMENTO_COLETA_ = 60;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
@@ -183,13 +183,73 @@ function citaApelidoCapital_(mun, norm) {
   return !!(re && re.test(norm));
 }
 
+/** Nomes normalizados dos municípios de cada UF (para não confundir bairro da capital com outra cidade do estado). */
+const MUNICIPIOS_NORM_UF_ = {};
+function municipiosNormUf_(uf) {
+  if (!MUNICIPIOS_NORM_UF_[uf]) {
+    const set = new Set();
+    try { (listarMunicipiosUF_(uf) || []).forEach(m => set.add(normalizarTexto_(m.nome))); } catch (e) { /* sem lista: só os outros sinais */ }
+    MUNICIPIOS_NORM_UF_[uf] = set;
+  }
+  return MUNICIPIOS_NORM_UF_[uf];
+}
+
+/** Outro município do estado citado no texto (n-gramas de até 5 palavras, contra a lista do IBGE). */
+function citaOutroMunicipioUf_(mun, norm) {
+  const nomes = municipiosNormUf_(mun.uf);
+  const cid = normalizarTexto_(mun.nome);
+  const p = norm.split(/\s+/).filter(Boolean);
+  for (let i = 0; i < p.length; i++) {
+    let g = '';
+    for (let k = 0; k < 5 && i + k < p.length; k++) {
+      g = k ? g + ' ' + p[i + k] : p[i];
+      if (g.length >= 5 && g !== cid && nomes.has(g) && cid.indexOf(g) === -1) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * A imprensa costuma escrever a capital só pela sigla ou pela região: "Zona Sul de SP", "na zona leste da capital",
+ * "baleado no Morumbi", "Centro de BH", "assalto em SP". Vale para as 27 capitais, sempre sem outro estado
+ * nem outro município do mesmo estado citado no texto:
+ * - "zona norte/sul/leste/oeste/central" ou "centro" seguido da sigla do estado ou de "capital";
+ * - "capital" com o estado citado (sigla ou nome);
+ * - onde a capital tem o nome do estado (São Paulo, Rio de Janeiro): "em SP", "de SP", salvo "estado de SP",
+ *   "interior de SP", "Grande SP", "cidades de SP", "polícia de SP" e parecidos;
+ * - um bairro da capital (5+ letras, que não seja nome de município do estado) com o estado citado ou na imprensa local.
+ */
+function citaCapitalPorContexto_(mun, norm, ufs, bairros, imprensaLocal) {
+  const meta = ESTADOS_BRASIL_METADATA[mun.uf] || {};
+  const cidNorm = normalizarTexto_(mun.nome);
+  if (normalizarTexto_(meta.capital) !== cidNorm) return false;
+  if (Object.keys(ufs).some(u => u !== mun.uf)) return false;
+  if (citaOutroMunicipioUf_(mun, norm)) return false;
+  const sigla = mun.uf.toLowerCase();
+  const regiao = new RegExp('(^|\\s)(zona (norte|sul|leste|oeste|central|centro sul|noroeste|nordeste|sudeste|sudoeste)|centro|regiao central) (de|do|da|na|no) (' + sigla + '|capital)(\\s|$)');
+  if (regiao.test(norm)) return true;
+  if (ufs[mun.uf] && /(^|\s)(na|da|a) capital(\s|$)/.test(norm) &&
+      !/(^|\s)(interior|litoral) (de|do|da|paulista|fluminense|gaucho|mineiro|baiano|catarinense|paranaense)/.test(norm)) return true;
+  if (normalizarTexto_(meta.nome) === cidNorm) {
+    const semEstado = norm.replace(new RegExp('(estado|interior|litoral|grande|cidades|municipios|governo|regiao metropolitana|policia( civil| militar)?|pm|ssp|secretaria( da seguranca publica)?|justica|tj|mp|ministerio publico|todo o|rodovias|estradas) (de |do |da )?' + sigla + '(\\s|$)', 'g'), ' ');
+    if (new RegExp('(^|\\s)(em|de|no|na) ' + sigla + '(\\s|$)').test(semEstado)) return true;
+  }
+  if (!bairros || !bairros.length || (!ufs[mun.uf] && !imprensaLocal)) return false;
+  const nomes = municipiosNormUf_(mun.uf);
+  return bairros.some(b => {
+    const n = normalizarTexto_(b.n);
+    return n.length >= 5 && n !== cidNorm && n !== 'centro' && !nomes.has(n) && contemTermoInteiro_(norm, n);
+  });
+}
+
 function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros) {
   const h = homonimosCidade_(mun);
   const original = String(texto || '') + ' | ' + String(veiculo || '');
   let norm = normalizarTexto_(original);
   h.maiores.forEach(n => { norm = norm.split(n).join(' '); });
   norm = norm.replace(h.logradouro, ' ');
-  if (!contemTermoInteiro_(norm, h.cidNorm) && !citaApelidoCapital_(mun, norm)) return false;
+  if (!contemTermoInteiro_(norm, h.cidNorm) && !citaApelidoCapital_(mun, norm) &&
+      !citaCapitalPorContexto_(mun, norm, ufsCitadas_(original, norm), bairros, imprensaLocal)) return false;
 
   const ufs = ufsCitadas_(original, norm);
   const outraUf = Object.keys(ufs).some(u => u !== mun.uf) || (urlFonte && ehImprensaDeOutraUf_(urlFonte, mun.uf));
@@ -232,7 +292,7 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
   try {
     let atual = lerJson_(nomeArquivo);
     // Cidade nunca coletada aqui: puxa o arquivo pronto do robô do GitHub e só busca o que é novo
-    if ((!atual || !atual.coletadoEm) && modo !== 'materias') atual = importarNoticiasGithub_(mun) || atual;
+    if ((!atual || !atual.coletadoEm || (atual.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_) && modo !== 'materias') atual = importarNoticiasGithub_(mun, atual) || atual;
     atual = atual || novoRegistroCidade_(mun);
     // Histórico completo (12 meses) na primeira coleta e também, uma vez por dia, enquanto a cidade
     // tiver poucas notícias guardadas: uma primeira coleta que falhou ou achou pouco não fica para sempre vazia
@@ -389,10 +449,13 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
  */
 const NOTICIAS_GITHUB_ = ['https://raw.githubusercontent.com/marciovargas-ai/mapa-seguranca-sinesp/noticias/',
   'https://cdn.jsdelivr.net/gh/marciovargas-ai/mapa-seguranca-sinesp@noticias/'];
-function importarNoticiasGithub_(mun) {
+function importarNoticiasGithub_(mun, atual) {
   if (typeof ROBO_GITHUB_ !== 'undefined') return null;  // o próprio robô
+  // Cidade já coletada aqui só troca pelo arquivo do robô quando o robô já usa o filtro novo (VERSAO_FILTRO_CIDADE_)
+  const atualizar = !!(atual && atual.coletadoEm);
+  if (atualizar && (atual.versaoFiltro || 0) >= VERSAO_FILTRO_CIDADE_) return null;
   const cache = CacheService.getScriptCache();
-  const chaveSem = 'NOTGH0|' + mun.ibge;
+  const chaveSem = 'NOTGH' + VERSAO_FILTRO_CIDADE_ + '|' + mun.ibge;
   if (cache.get(chaveSem)) return null;
   for (let i = 0; i < NOTICIAS_GITHUB_.length; i++) {
     try {
@@ -402,6 +465,7 @@ function importarNoticiasGithub_(mun) {
       if (codigo !== 200) continue;
       const reg = JSON.parse(resp.getContentText());
       if (String(reg.ibge) !== String(mun.ibge) || !reg.coletadoEm || !Array.isArray(reg.ocorrencias)) break;
+      if (atualizar && (reg.versaoFiltro || 0) < VERSAO_FILTRO_CIDADE_) break;  // o robô ainda não refez esta cidade
       const agora = Date.now();
       reg.ocorrencias.forEach(o => { o.m = agora; });
       reg.locais = reg.locais || {};
@@ -409,7 +473,17 @@ function importarNoticiasGithub_(mun) {
       reg.historicoEm = Math.max(reg.historicoEm || 0, agora);
       reg.importadoGithub = agora;
       delete reg.robo;
-      const salvo = atualizarJsonComTrava_(nomeArquivoCidade_(mun.ibge), atual => (atual && atual.coletadoEm ? atual : podarRegistroCidade_(reg)));
+      const salvo = atualizarJsonComTrava_(nomeArquivoCidade_(mun.ibge), cur => {
+        if (cur && cur.coletadoEm && (!atualizar || (cur.versaoFiltro || 0) >= VERSAO_FILTRO_CIDADE_)) return cur;
+        if (cur && cur.coletadoEm) {
+          // Junta: as notícias do robô (filtro novo) + as que já estavam aqui; locais geocodificados aqui têm preferência
+          const ids = new Set(reg.ocorrencias.map(o => o.id));
+          (cur.ocorrencias || []).forEach(o => { if (!ids.has(o.id)) reg.ocorrencias.push(o); });
+          reg.locais = Object.assign({}, reg.locais, cur.locais || {});
+          reg.coletadoEm = Math.max(reg.coletadoEm, cur.coletadoEm);
+        }
+        return podarRegistroCidade_(reg);
+      });
       try { atualizarIndiceCidade_(mun, { coletadoEm: salvo.coletadoEm }, 5000); } catch (e) { /* índice refeito depois */ }
       Logger.log('Notícias de ' + mun.nome + '/' + mun.uf + ' importadas do robô do GitHub: ' + salvo.ocorrencias.length);
       return salvo;
@@ -417,7 +491,7 @@ function importarNoticiasGithub_(mun) {
       Logger.log('Importação do GitHub (' + mun.nome + '): ' + e.message);
     }
   }
-  cache.put(chaveSem, '1', 21600);
+  cache.put(chaveSem, '1', atualizar ? 3600 : 21600);
   return null;
 }
 
@@ -647,12 +721,13 @@ function classificarCrimeNLP_(texto) {
     if (t.includes(termo)) return { valido: false };
   }
 
+  // Radicais (roubad, assalt...) pegam as variações do verbo: "roubar", "roubadas", "assaltantes"
   const taxonomias = [
-    { categoria: 'CVLI', termos: ['homicidio', 'assassinado', 'assassinada', 'morto a tiros', 'morta a tiros', 'executado', 'latrocinio', 'corpo encontrado', 'feminicidio', 'esfaqueado', 'encontrado morto', 'encontrada morta'], peso: 90 },
-    { categoria: 'CONFRONTO', termos: ['tiroteio', 'troca de tiros', 'confronto policial', 'baleado', 'baleada', 'disparos de arma', 'fuzil', 'alvejado', 'arma de fogo', 'bala perdida'], peso: 85 },
-    { categoria: 'CARGA', termos: ['roubo de carga', 'carga roubada', 'caminhao roubado', 'sequestro de motorista', 'carga recuperada'], peso: 80 },
-    { categoria: 'PATRIMONIO', termos: ['assalto', 'roubo', 'furto', 'arrastao', 'arrombamento', 'assaltantes', 'refens', 'veiculo roubado', 'furtado', 'assaltado', 'assaltada', 'golpe'], peso: 75 },
-    { categoria: 'TRAFICO', termos: ['trafico de drogas', 'apreensao de drogas', 'cocaina', 'maconha', 'crack', 'operacao policial', 'mandado de prisao', 'foragido', 'preso em flagrante', 'boca de fumo'], peso: 70 },
+    { categoria: 'CVLI', termos: ['homicidio', 'assassin', 'morto a tiros', 'morta a tiros', 'executado', 'executada', 'latrocinio', 'corpo encontrado', 'corpos encontrados', 'feminicidio', 'esfaque', 'a facadas', 'encontrado morto', 'encontrada morta', 'suspeito de matar', 'suspeita de matar', 'suspeitos de matar', 'acusado de matar', 'acusada de matar', 'matou a', 'matou o', 'matou um', 'matou uma'], peso: 90 },
+    { categoria: 'CONFRONTO', termos: ['tiroteio', 'troca de tiros', 'confronto policial', 'baleado', 'baleada', 'baleados', 'disparos de arma', 'fuzil', 'alvejado', 'arma de fogo', 'bala perdida', 'a tiros', 'intervencao policial', 'atingido por tiro', 'mata suspeito', 'mata dois', 'mata tres', 'suspeito morre', 'suspeitos morrem', 'morto pela policia', 'morto pela pm', 'mortos pela policia'], peso: 85 },
+    { categoria: 'CARGA', termos: ['roubo de carga', 'carga roubada', 'caminhao roubado', 'sequestro de motorista', 'carga recuperada', 'roubo de cargas', 'furto de carga', 'furto de cargas'], peso: 80 },
+    { categoria: 'PATRIMONIO', termos: ['assalt', 'roubo', 'roubad', 'roubar', 'roubou', 'furto', 'furtad', 'furtar', 'furtou', 'arrastao', 'arrombamento', 'refens', 'golpe', 'extorsao', 'estelionat', 'saidinha'], peso: 75 },
+    { categoria: 'TRAFICO', termos: ['trafico', 'traficante', 'apreensao de drogas', 'drogas apreendidas', 'cocaina', 'maconha', 'crack', 'operacao policial', 'operacao contra', 'deflagra operacao', 'mandado de prisao', 'foragido', 'preso em flagrante', 'presos em flagrante', 'boca de fumo', 'quadrilha', 'grupo criminoso', 'faccao', 'pcc', 'comando vermelho', 'milicia', 'sequestr', 'carcere privado'], peso: 70 },
     { categoria: 'BLOQUEIO', termos: ['bloqueio na br', 'incendio em onibus', 'onibus incendiado', 'barricada', 'toque de recolher', 'vandalismo'], peso: 60 }
   ];
 

@@ -195,6 +195,7 @@ const arqIndice = path.join(SAIDA, 'indice.json');
 let indice = { uf: UF, cidades: {} };
 try { indice = JSON.parse(fs.readFileSync(arqIndice, 'utf8')); indice.cidades = indice.cidades || {}; } catch (e) { /* primeira rodada */ }
 
+const VERSAO_FILTRO = vm.runInContext('VERSAO_FILTRO_CIDADE_', ctx);
 const municipios = vm.runInContext(`listarMunicipiosUF_(${JSON.stringify(UF)})`, ctx);
 const agora = Date.now();
 const fila = municipios
@@ -202,7 +203,9 @@ const fila = municipios
     const ant = indice.cidades[m.ibge];
     const hab = pop[m.ibge] || 0;
     const idadeDias = ant ? (agora - ant[0]) / 86400000 : Infinity;
-    return { m, hab, idadeDias, vencida: idadeDias >= prazoDias(hab) - 0.1 };
+    // Filtro novo no servidor (VERSAO_FILTRO_CIDADE_): a cidade é refeita mesmo dentro do prazo
+    const filtroVelho = ant && (ant[2] || 0) < VERSAO_FILTRO;
+    return { m, hab, idadeDias, vencida: filtroVelho || idadeDias >= prazoDias(hab) - 0.1 };
   })
   // IBGES=código,código: força só essas cidades (diagnóstico ou atualização avulsa)
   .filter((x) => (process.env.IBGES ? process.env.IBGES.split(',').includes(String(x.m.ibge)) : x.vencida))
@@ -234,7 +237,7 @@ for (const item of fila) {
     } else {
       reg.robo = { em: Date.now(), segundos: Math.round((Date.now() - t0) / 1000) };
       fs.writeFileSync(arqCidade, JSON.stringify(reg));
-      indice.cidades[mun.ibge] = [reg.coletadoEm, (reg.ocorrencias || []).length];
+      indice.cidades[mun.ibge] = [reg.coletadoEm, (reg.ocorrencias || []).length, reg.versaoFiltro || 0];
       feitas++;
       if (feitas % 10 === 0 || process.env.LOG_CIDADES) {
         fs.writeFileSync(arqIndice, JSON.stringify(Object.assign(indice, { atualizado: Date.now() })));
