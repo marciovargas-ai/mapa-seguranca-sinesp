@@ -155,6 +155,30 @@ vm.runInContext(`
   criarContextoGeo_ = function (mun, locais) { return __ctxOriginal(mun, locais, { restantes: 0 }); };
 `, Object.assign(ctx, { __mem: memoria }));
 
+// ---------- Diagnóstico (DIAGNOSTICO=1): conta onde as notícias ficam pelo caminho ----------
+const diag = { itensGoogle: 0, porBusca: [], foraDaCidade: 0, naoCrime: 0, aceitas: 0, amostraFora: [], amostraNaoCrime: [] };
+if (process.env.DIAGNOSTICO) {
+  ctx.__diag = diag;
+  vm.runInContext(`
+    const __cid = noticiaDaCidade_;
+    noticiaDaCidade_ = function (mun, texto) { const ok = __cid.apply(this, arguments); if (!ok) { __diag.foraDaCidade++; if (__diag.amostraFora.length < 80) __diag.amostraFora.push(String(texto).slice(0, 160)); } return ok; };
+    const __cls = classificarCrimeNLP_;
+    classificarCrimeNLP_ = function (texto) { const r = __cls.apply(this, arguments); if (!r.valido) { __diag.naoCrime++; if (__diag.amostraNaoCrime.length < 80) __diag.amostraNaoCrime.push(String(texto).slice(0, 160)); } else __diag.aceitas++; return r; };
+  `, ctx);
+  const buscarOriginal = UrlFetchApp.fetchAll;
+  UrlFetchApp.fetchAll = (lista) => {
+    const r = buscarOriginal(lista);
+    lista.forEach((p, i) => {
+      const u = typeof p === 'string' ? p : p.url;
+      if (!/news\.google\.com\/rss/.test(u)) return;
+      const n = (r[i].getContentText().match(/<item>/g) || []).length;
+      diag.itensGoogle += n;
+      diag.porBusca.push([decodeURIComponent((u.match(/q=([^&]+)/) || [])[1] || '').slice(0, 140), r[i].getResponseCode(), n]);
+    });
+    return r;
+  };
+}
+
 // ---------- Fila do estado ----------
 const pop = (() => {
   try {
@@ -180,7 +204,8 @@ const fila = municipios
     const idadeDias = ant ? (agora - ant[0]) / 86400000 : Infinity;
     return { m, hab, idadeDias, vencida: idadeDias >= prazoDias(hab) - 0.1 };
   })
-  .filter((x) => x.vencida)
+  // IBGES=código,código: força só essas cidades (diagnóstico ou atualização avulsa)
+  .filter((x) => (process.env.IBGES ? process.env.IBGES.split(',').includes(String(x.m.ibge)) : x.vencida))
   // Nunca coletadas primeiro (das maiores para as menores); depois as mais atrasadas
   .sort((a, b) => (a.idadeDias === Infinity) !== (b.idadeDias === Infinity) ? (a.idadeDias === Infinity ? -1 : 1)
     : a.idadeDias === Infinity ? b.hab - a.hab : b.idadeDias / prazoDias(b.hab) - a.idadeDias / prazoDias(a.hab));
@@ -226,6 +251,10 @@ for (const item of fila) {
 indice.atualizado = Date.now();
 indice.rodada = { feitas, erros, paradaGoogle, minutos: Math.round((Date.now() - inicio) / 60000), pedidos: estat.pedidos, google: estat.google, googleFalhas: estat.googleFalhas };
 fs.writeFileSync(arqIndice, JSON.stringify(indice));
+if (process.env.DIAGNOSTICO) {
+  fs.writeFileSync(path.join(SAIDA, 'diagnostico.json'), JSON.stringify(diag, null, 1));
+  console.log('Diagnóstico:', JSON.stringify({ itensGoogle: diag.itensGoogle, buscas: diag.porBusca.length, foraDaCidade: diag.foraDaCidade, naoCrime: diag.naoCrime, aceitas: diag.aceitas }));
+}
 console.log(`${UF}: ${feitas} cidades atualizadas, ${erros} com erro, ${Object.keys(indice.cidades).length}/${municipios.length} com arquivo. ` +
   `Pedidos: ${estat.pedidos} (Google Notícias ${estat.google}, ${estat.googleFalhas} falhas).`);
 console.log('Por site:', JSON.stringify(Object.entries(estat.porHost).sort((a, b) => b[1] - a[1]).slice(0, 12)));

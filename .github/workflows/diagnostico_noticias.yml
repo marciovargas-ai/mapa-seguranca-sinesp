@@ -1,0 +1,37 @@
+name: Diagnóstico do robô de notícias
+
+# Roda a coleta completa de algumas cidades e mostra onde as notícias ficam pelo caminho
+# (itens que o Google devolve, descartados por não serem da cidade, descartados por não serem crime).
+# Não publica nada no ramo noticias.
+
+on:
+  workflow_dispatch:
+    inputs:
+      uf:
+        description: 'UF'
+        required: true
+        default: 'SP'
+      ibges:
+        description: 'Códigos IBGE separados por vírgula'
+        required: true
+        default: '3550308'
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Coletar com diagnóstico
+        env:
+          DIAGNOSTICO: '1'
+          IBGES: ${{ github.event.inputs.ibges }}
+        run: node robo/coletar_noticias.js ${{ github.event.inputs.uf }} saida
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico
+          path: saida
+          retention-days: 3
