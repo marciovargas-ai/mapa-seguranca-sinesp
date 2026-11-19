@@ -16,7 +16,7 @@ import { Camadas, PainelStore, Relato, UnidadeShopee } from '../core/painel.stor
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, baixarDadosPublicos, IspMunicipio, Tiroteio } from '../core/areas';
-import { cadaN, distanciaKm, esc, fetchComTimeout, fmt, normalizar, umACada, urlSegura } from '../core/util';
+import { cadaN, distanciaKm, esc, fetchComTimeout, fmt, gravarLocal, lerLocal, normalizar, umACada, urlSegura } from '../core/util';
 
 declare const L: any;
 
@@ -78,8 +78,12 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     </mat-menu>
 
     @if (legendaCoropletico(); as leg) {
-      <div class="legenda" [class.sob-balao]="balaoAberto()">
-        <div class="legenda-titulo">{{ leg.titulo }}</div>
+      <div class="legenda" [class.sob-balao]="balaoAberto()" [class.recolhida]="legendaRecolhida()">
+        <button type="button" class="legenda-cab" (click)="alternarLegenda()" [attr.aria-expanded]="!legendaRecolhida()"
+          [attr.aria-label]="legendaRecolhida() ? 'Expandir legenda' : 'Recolher legenda'">
+          <span class="legenda-titulo">{{ leg.titulo }}</span><mat-icon>{{ legendaRecolhida() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+        @if (!legendaRecolhida()) {
         <div class="legenda-sub">1 caso a cada N habitantes · 12 meses</div>
         <div class="escala">
           @for (f of leg.faixas; track $index) {
@@ -87,10 +91,16 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
           }
           <span><i class="sem-dado"></i>sem registro</span>
         </div>
+        }
       </div>
     } @else if (legenda(); as leg) {
-      <div class="legenda" [class.sob-balao]="balaoAberto()">
-        <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo >= 365 ? '12 meses' : leg.periodo >= 180 ? '6 meses' : leg.periodo + ' dias' }} · {{ leg.noMapa }} com local exato</div>
+      <div class="legenda" [class.sob-balao]="balaoAberto()" [class.recolhida]="legendaRecolhida()">
+        <button type="button" class="legenda-cab" (click)="alternarLegenda()" [attr.aria-expanded]="!legendaRecolhida()"
+          [attr.aria-label]="legendaRecolhida() ? 'Expandir legenda' : 'Recolher legenda'">
+          <span class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo >= 365 ? '12 meses' : leg.periodo >= 180 ? '6 meses' : leg.periodo + ' dias' }} · {{ leg.noMapa }} com local exato</span>
+          <mat-icon>{{ legendaRecolhida() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+        @if (!legendaRecolhida()) {
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
         @if (leg.oficial; as of) {
           <div class="legenda-oficial"><b>Dados oficiais · {{ of.orgao }}</b>
@@ -140,6 +150,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
             }
           </div>
         }
+        }
       </div>
     }
   `,
@@ -168,6 +179,14 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
       box-shadow: var(--mat-sys-level1);
     }
     .legenda-titulo { font: var(--mat-sys-label-large); color: var(--mat-sys-on-surface); }
+    /* Cabeçalho da legenda: toque recolhe ou expande (a escolha fica guardada; no celular começa recolhida) */
+    .legenda-cab { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: flex-start; gap: 4px; width: 100%; border-radius: 6px; }
+    .legenda-cab:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+    .legenda-cab .legenda-titulo { flex: 1; min-width: 0; }
+    .legenda-cab mat-icon { flex: none; font-size: 20px; width: 20px; height: 20px; color: var(--mat-sys-on-surface-variant); }
+    .legenda:not(.recolhida) .legenda-cab { margin-bottom: 2px; }
+    .legenda.recolhida { padding: 6px 8px 6px 12px; }
+    .legenda.recolhida .legenda-titulo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .legenda-sub { color: var(--mat-sys-on-surface-variant); margin-bottom: 6px; }
     .legenda-fogo { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .legenda-fogo i { width: 10px; height: 10px; border-radius: 50%; background: #dc2626; border: 2px solid #111827; }
@@ -231,6 +250,17 @@ export class MapaComponent implements OnDestroy {
   private cepDesenhado = '';
   /** No celular, a legenda some enquanto um balão está aberto (ela ficava por cima do balão). */
   protected readonly balaoAberto = signal(false);
+  /** Legenda recolhida (só o título). Guarda a escolha; sem escolha, começa recolhida no celular. */
+  protected readonly legendaRecolhida = signal(((): boolean => {
+    const v = lerLocal('legendaRecolhida');
+    if (v === '1' || v === '0') return v === '1';
+    try { return matchMedia('(max-width: 600px)').matches; } catch { return false; }
+  })());
+  protected alternarLegenda(): void {
+    const v = !this.legendaRecolhida();
+    this.legendaRecolhida.set(v);
+    gravarLocal('legendaRecolhida', v ? '1' : '0');
+  }
   private layerUnidades: any;
   private layerRelatos: any;
   private layerPrf: any;

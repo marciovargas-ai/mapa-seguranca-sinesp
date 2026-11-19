@@ -26,6 +26,7 @@ import { FontesComponent } from './fontes';
 import { RelatosComponent } from './relatos';
 import { AlertasComponent } from './alertas';
 import { Favoritos } from './core/favoritos';
+import { MonitorShopee } from './core/shopee';
 import { CATEGORIAS, CFG, ESTADOS, ORGAO_POR_ID, PERIODOS, UFS } from './core/dados';
 import { EventoOficial } from './core/modelos';
 import { Sugestao, sugerir } from './core/municipios';
@@ -106,7 +107,10 @@ O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remov
         </mat-select>
       </mat-form-field>
 
-      <div class="acoes">
+      <button mat-icon-button class="bt-menu-cel" [class.aberto]="menuCel()" aria-label="Menu" [attr.aria-expanded]="menuCel()"
+        [matBadge]="naoLidasShopee() > 99 ? '99+' : naoLidasShopee()" [matBadgeHidden]="!naoLidasShopee() || menuCel()" matBadgeSize="small"
+        (click)="menuCel.set(!menuCel())"><mat-icon>{{ menuCel() ? 'close' : 'menu' }}</mat-icon></button>
+      <div class="acoes" [class.aberta]="menuCel()" (click)="fecharMenuCel($event)">
         <button mat-icon-button matTooltip="Minha localização" aria-label="Minha localização" (click)="localizar()"><mat-icon>my_location</mat-icon></button>
         <button mat-icon-button matTooltip="Atualizar agora" aria-label="Atualizar agora" (click)="store.atualizarAgora()" [class.girando]="store.coletando()"><mat-icon>refresh</mat-icon></button>
         <app-favoritos />
@@ -256,6 +260,7 @@ O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remov
     .uf { width: 210px; flex: none; }
     .detalhe { color: var(--mat-sys-on-surface-variant); margin-left: 6px; }
     .acoes { display: flex; flex: none; }
+    .bt-menu-cel { display: none; }
     .corpo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 1fr) 10px var(--largura-painel, 760px); }
     .area-mapa { position: relative; min-height: 0; }
     .divisor { cursor: col-resize; display: grid; place-items: center; background: var(--mat-sys-surface-container); border-inline: 1px solid var(--mat-sys-outline-variant); touch-action: none; }
@@ -326,8 +331,25 @@ O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remov
     }
     @media (max-width: 600px) {
       /* Celular: os botões ganham linha própria e quebram em duas se preciso; o idioma vem primeiro, sempre visível */
-      .acoes { order: 4; flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 2px; min-width: 0; }
-      .acoes .idioma { order: -1; }
+      /* Celular: os botões ficam num menu (☰) ao lado do estado; aberto, vira uma grade com o nome de cada item */
+      .bt-menu-cel { display: inline-flex; order: 2; }
+      .bt-menu-cel.aberto { background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
+      .acoes { display: none; }
+      .acoes.aberta { order: 4; flex-basis: 100%; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 2px;
+        padding: 6px 0 8px; border-top: 1px solid var(--mat-sys-outline-variant); animation: abrir-menu .15s ease-out; }
+      .acoes.aberta .idioma { order: -1; }
+      .acoes.aberta > button, .acoes.aberta > app-favoritos, .acoes.aberta > app-shopee { justify-self: center; display: flex; flex-direction: column; align-items: center; }
+      .acoes.aberta ::ng-deep .mat-mdc-icon-button, .acoes.aberta > .idioma {
+        width: 100% !important; min-width: 76px; height: auto !important; padding: 6px 2px 4px !important; border-radius: 12px !important;
+        display: flex !important; flex-direction: column; align-items: center; gap: 3px; }
+      .acoes.aberta ::ng-deep .mat-mdc-icon-button .mat-mdc-button-persistent-ripple,
+      .acoes.aberta ::ng-deep .mat-mdc-icon-button .mat-mdc-button-ripple { border-radius: 12px; }
+      .acoes.aberta ::ng-deep .mat-mdc-icon-button::after, .acoes.aberta > .idioma::after {
+        content: attr(aria-label); font: var(--mat-sys-label-small); line-height: 1.2; text-align: center; color: var(--mat-sys-on-surface-variant);
+        white-space: normal; max-width: 80px; }
+      .acoes.aberta > .idioma { font: var(--mat-sys-label-large); }
+      .acoes.aberta > .idioma ::ng-deep .mdc-button__label { display: flex; align-items: center; gap: 4px; }
+      @keyframes abrir-menu { from { opacity: 0; transform: translateY(-4px); } }
       .uf { margin-left: auto; }
     }
     @media (max-width: 520px) {
@@ -343,6 +365,16 @@ O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remov
 })
 export class App {
   protected readonly store = inject(PainelStore);
+  private readonly monitorShopee = inject(MonitorShopee);
+  /** Celular: menu (☰) com os botões do topo. */
+  protected readonly menuCel = signal(false);
+  protected readonly naoLidasShopee = computed(() => this.monitorShopee.naoLidas().length);
+  /** Fecha o menu do celular depois de escolher um item que abre outra tela. Idioma, favoritos e Shopee abrem a própria lista e mantêm o menu. */
+  protected fecharMenuCel(ev: Event): void {
+    const bt = (ev.target as HTMLElement | null)?.closest('button');
+    if (!bt || bt.closest('app-favoritos, app-shopee') || bt.classList.contains('idioma')) return;
+    this.menuCel.set(false);
+  }
   private readonly dialog = inject(MatDialog);
   private readonly corpo = viewChild.required<ElementRef<HTMLElement>>('corpo');
   private readonly busca = viewChild.required<ElementRef<HTMLInputElement>>('busca');
