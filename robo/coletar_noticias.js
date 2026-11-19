@@ -49,10 +49,19 @@ function buscarLote(pedidos) {
   });
   if (rede.length) {
     rede.forEach((i) => { estat.pedidos++; const h = (lista[i].url.match(/^https?:\/\/([^/]+)/) || [])[1] || '?'; estat.porHost[h] = (estat.porHost[h] || 0) + 1; });
-    const out = execFileSync('node', [path.join(__dirname, '..', 'validacao', 'buscar.js')], {
-      input: JSON.stringify(rede.map((i) => lista[i])), maxBuffer: 1 << 30, env: Object.assign({ TEMPO_MS: '15000' }, process.env),
-    });
-    JSON.parse(out.toString()).forEach((r, k) => {
+    // Limite duro: um pedido que nunca termina não pode segurar o estado inteiro (RJ travou 50 min em 19/11)
+    let respostas;
+    try {
+      const out = execFileSync('node', [path.join(__dirname, '..', 'validacao', 'buscar.js')], {
+        input: JSON.stringify(rede.map((i) => lista[i])), maxBuffer: 1 << 30, env: Object.assign({ TEMPO_MS: '15000' }, process.env),
+        timeout: 30000 + 20000 * Math.ceil(rede.length / 20), killSignal: 'SIGKILL',
+      });
+      respostas = JSON.parse(out.toString());
+    } catch (e) {
+      console.log(`  ! lote de ${rede.length} pedidos sem resposta no tempo limite (${String(e.code || e.signal || e.message).slice(0, 60)})`);
+      respostas = rede.map(() => ({ code: 0, body: '' }));
+    }
+    respostas.forEach((r, k) => {
       const i = rede[k];
       saida[i] = r;
       if (/news\.google\.com\/rss/.test(lista[i].url)) {
@@ -225,6 +234,7 @@ for (const item of fila) {
   const arqCidade = path.join(SAIDA, mun.ibge + '.json');
   try { if (fs.existsSync(arqCidade)) memoria[nomeArq] = JSON.parse(fs.readFileSync(arqCidade, 'utf8')); } catch (e) { /* recomeça */ }
   const t0 = Date.now();
+  if (process.env.LOG_CIDADES) console.log('  → ' + mun.nome);
   const antesGoogle = estat.google, antesFalhas = estat.googleFalhas;
   try {
     const r = vm.runInContext(`coletarNoticiasCidade_(${JSON.stringify(mun)})`, ctx);

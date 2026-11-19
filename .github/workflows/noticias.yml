@@ -67,6 +67,7 @@ jobs:
         env:
           MINUTOS: ${{ github.event.inputs.minutos || '290' }}
           LIMITE: ${{ github.event.inputs.limite }}
+          LOG_CIDADES: '1'
         run: node robo/coletar_noticias.js ${{ matrix.uf }} saida/${{ matrix.uf }}
       - uses: actions/upload-artifact@v4
         if: always()
