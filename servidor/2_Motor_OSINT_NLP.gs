@@ -25,7 +25,7 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
 /** Sobe quando o filtro de cidade passa a aceitar mais notícias: cada cidade refaz os 12 meses uma vez. */
-const VERSAO_FILTRO_CIDADE_ = 4;  // 4 (19/11/2026): capital citada pela sigla/região/bairro e verbos de crime (roubar, matar)
+const VERSAO_FILTRO_CIDADE_ = 5;  // 4-5 (19/11/2026): capital citada pela sigla/região/bairro, DF pelas regiões administrativas, verbos de crime (roubar, matar)
 const SEGUNDOS_ORCAMENTO_COLETA_ = 60;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
@@ -194,6 +194,9 @@ function municipiosNormUf_(uf) {
   return MUNICIPIOS_NORM_UF_[uf];
 }
 
+/** Regiões administrativas do DF com nome próprio (as que têm nome de cidade de outro estado, como Gama ou Santa Maria, ficam de fora). */
+const RE_REGIOES_DF_ = /(^|\s)(ceilandia|taguatinga|samambaia|sobradinho|recanto das emas|riacho fundo|aguas claras|vicente pires|sol nascente|itapoa|paranoa|brazlandia|nucleo bandeirante|candangolandia|lago sul|lago norte|asa sul|asa norte|plano piloto|estrutural|varjao|park way|arniqueira|arapoanga|fercal|jardim botanico|setor comercial sul|rodoviaria do plano)(\s|$)/;
+
 /** Outro município do estado citado no texto (n-gramas de até 5 palavras, contra a lista do IBGE). */
 function citaOutroMunicipioUf_(mun, norm) {
   const nomes = municipiosNormUf_(mun.uf);
@@ -226,6 +229,12 @@ function citaCapitalPorContexto_(mun, norm, ufs, bairros, imprensaLocal) {
   if (Object.keys(ufs).some(u => u !== mun.uf)) return false;
   if (citaOutroMunicipioUf_(mun, norm)) return false;
   const sigla = mun.uf.toLowerCase();
+  // Distrito Federal: Brasília é o único município, então "no DF" e as regiões administrativas (Ceilândia, Taguatinga) são Brasília
+  if (municipiosNormUf_(mun.uf).size === 1) {
+    if (ufs[mun.uf] || /(^|\s)(df|distrito federal)(\s|$)/.test(norm)) return true;
+    if (RE_REGIOES_DF_.test(norm)) return true;
+    if ((bairros || []).some(b => { const n = normalizarTexto_(b.n); return n.length >= 5 && contemTermoInteiro_(norm, n); })) return true;
+  }
   const regiao = new RegExp('(^|\\s)(zona (norte|sul|leste|oeste|central|centro sul|noroeste|nordeste|sudeste|sudoeste)|centro|regiao central) (de|do|da|na|no) (' + sigla + '|capital)(\\s|$)');
   if (regiao.test(norm)) return true;
   if (ufs[mun.uf] && /(^|\s)(na|da|a) capital(\s|$)/.test(norm) &&
