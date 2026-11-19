@@ -191,6 +191,9 @@ const CONCORRENTES_SHOPEE_ = /\b(amazon|mercado ?livre|mercado ?pago|magalu|maga
 function ehNoticiaDaShopee_(titulo, resumo, veiculo) {
   const t = String(titulo || '');
   if (FORA_DO_ESCOPO_SHOPEE_.test(normalizarTexto_(t + ' ' + (veiculo || ''))) || /\.(vn|my|sg|ph|id|th|tw)\b/i.test(String(veiculo || ''))) return false;
+  // Política nunca entra no monitor (Márcio, 2026-11-19), nem com a Shopee citada ("Pastor da Shopee" em bate-boca na Câmara).
+  // Exceção da regra geral: político vítima de crime.
+  if (ehNoticiaPolitica_(t + ' . ' + String(resumo || ''))) return false;
   if (/shopee/i.test(t)) return true;
   if (CONCORRENTES_SHOPEE_.test(t)) return false;
   const r = normalizarTexto_(String(resumo || ''));
