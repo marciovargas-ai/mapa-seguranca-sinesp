@@ -253,6 +253,9 @@ indice.rodada = { feitas, erros, paradaGoogle, minutos: Math.round((Date.now() -
 fs.writeFileSync(arqIndice, JSON.stringify(indice));
 if (process.env.DIAGNOSTICO) {
   fs.writeFileSync(path.join(SAIDA, 'diagnostico.json'), JSON.stringify(diag, null, 1));
+  diag.porBusca.forEach((b) => console.log('BUSCA', b[1], b[2], b[0]));
+  diag.amostraFora.forEach((t) => console.log('FORA', t));
+  diag.amostraNaoCrime.forEach((t) => console.log('NAOCRIME', t));
   console.log('Diagnóstico:', JSON.stringify({ itensGoogle: diag.itensGoogle, buscas: diag.porBusca.length, foraDaCidade: diag.foraDaCidade, naoCrime: diag.naoCrime, aceitas: diag.aceitas }));
 }
 console.log(`${UF}: ${feitas} cidades atualizadas, ${erros} com erro, ${Object.keys(indice.cidades).length}/${municipios.length} com arquivo. ` +
