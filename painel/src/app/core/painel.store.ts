@@ -5,6 +5,7 @@ import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './
 import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, carregarRoubos, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
 import { Bairro, carregarBairros, resumirBairros } from './bairros';
 import { CacheDisco } from './cache-disco';
+import { enderecoDaCoordenada, localizarCep, PontoCep, pontoNoBairro } from './cep';
 import { compilar } from './compilado';
 import { CFG, ESTADOS } from './dados';
 import { gerarInsights } from './insights';
@@ -506,13 +507,44 @@ export class PainelStore {
     });
   }
 
+  /** CEP pesquisado: pino no mapa com a análise de segurança do entorno, até a pessoa remover. */
+  readonly pontoCep = signal<PontoCep | null>(null);
+  /** Sem coordenada da rua, o pino vai para o centro do bairro assim que os bairros da cidade chegam. */
+  readonly pontoCepMapa = computed(() => {
+    const p = this.pontoCep();
+    const d = this.dados();
+    if (!p || !d || this.escopo() !== 'CIDADE') return null;
+    const mesma = d.codigoIbge ? String(d.codigoIbge) === p.ibge : d.uf === p.uf && normalizar(d.cidade) === normalizar(p.cidade);
+    if (!mesma) return null;
+    return pontoNoBairro(p, this.bairrosMapa().lista);
+  });
+  removerPontoCep(): void { this.pontoCep.set(null); }
+
+  /** Coordenada digitada na busca: descobre a cidade (OpenStreetMap; sem resposta, o município de sede mais próxima) e marca o ponto. */
+  buscarCoordenada(lat: number, lng: number): void {
+    this.definirStatus('search', 'Localizando a coordenada…');
+    this.pontoCep.set(null);
+    enderecoDaCoordenada(lat, lng).then((e) => {
+      const mun = (e && ESTADOS[e.uf] && e.cidade ? buscarMunicipio(e.uf, e.cidade) : null) || municipioMaisProximo(lat, lng);
+      if (!mun) { this.definirStatus('error', 'Coordenada fora do Brasil', 'erro'); return; }
+      if (this.uf() !== mun.uf || normalizar(this.cidade()) !== normalizar(mun.nome) || this.escopo() !== 'CIDADE') this.abrirLocal(mun.uf, mun.nome);
+      this.pontoCep.set({ tipo: 'coord', cep: '', logradouro: e?.rua || '', bairro: e?.bairro || '', cidade: mun.nome, uf: mun.uf, ibge: String(mun.ibge),
+        lat, lng, precisao: 'endereco', fonte: 'Coordenada informada', em: Date.now() });
+    });
+  }
+
   buscarCep(cep: string): void {
     if (cep.length !== 8) { this.definirStatus('error', 'Digite um CEP com 8 números', 'erro'); return; }
     this.definirStatus('search', 'Buscando CEP…');
     fetchComTimeout('https://viacep.com.br/ws/' + cep + '/json/').then((r) => r.json()).then((d) => {
       const mun = d && !d.erro ? municipioPorCodigo(d.ibge) || buscarMunicipio(String(d.uf).toUpperCase(), d.localidade) : null;
-      if (mun) this.abrirLocal(mun.uf, mun.nome);
-      else this.definirStatus('error', 'CEP não encontrado', 'erro');
+      if (!mun) { this.definirStatus('error', 'CEP não encontrado', 'erro'); return; }
+      this.pontoCep.set(null);
+      if (this.uf() !== mun.uf || normalizar(this.cidade()) !== normalizar(mun.nome) || this.escopo() !== 'CIDADE') this.abrirLocal(mun.uf, mun.nome);
+      return localizarCep(cep, d, { lat: mun.lat, lng: mun.lng }).then((pos) => {
+        if (this.uf() !== mun.uf || normalizar(this.cidade()) !== normalizar(mun.nome)) return;  // a pessoa já mudou de cidade
+        this.pontoCep.set({ tipo: 'cep', cep, logradouro: d.logradouro || '', bairro: d.bairro || '', cidade: mun.nome, uf: mun.uf, ibge: String(mun.ibge), ...pos, em: Date.now() });
+      });
     }).catch(() => this.definirStatus('error', 'Não foi possível consultar o CEP', 'erro'));
   }
 

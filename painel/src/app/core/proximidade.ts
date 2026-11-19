@@ -32,3 +32,34 @@ export function ocorrenciasPerto(lat: number, lng: number, lista: Ocorrencia[], 
   r.ultimas = perto.sort((a, b) => b.ts - a.ts).slice(0, 3).map((o) => ({ titulo: o.titulo, link: o.link, data: o.data, cat: o.cat, km: Math.round(o.km * 10) / 10 }));
   return r;
 }
+
+/** Raio da análise do CEP pesquisado (entorno de um endereço, a pé ou de carro em poucos minutos). */
+export const RAIO_CEP_KM = 1;
+
+export interface AnaliseLocal {
+  total: number; d30: number; graves: number; porCat: { id: string; qtd: number }[];
+  ultimas: { titulo: string; link: string; data: string; cat: string; km: number }[];
+}
+
+/** Ocorrências com local preciso a até `raio` km do ponto, em toda a janela carregada (12 meses), por tipo. */
+export function analisarLocal(lat: number, lng: number, lista: Ocorrencia[], raio = RAIO_CEP_KM, agora = Date.now()): AnaliseLocal {
+  const r: AnaliseLocal = { total: 0, d30: 0, graves: 0, porCat: [], ultimas: [] };
+  const cats: Record<string, number> = {};
+  const perto: (Ocorrencia & { km: number })[] = [];
+  const vistos = new Set<string>();
+  for (const o of lista) {
+    if (!o.precisa || o.lat == null || o.lng == null || vistos.has(o.id)) continue;
+    if (Math.abs(o.lat - lat) > raio / 100 || Math.abs(o.lng - lng) > raio / 90) continue;
+    const km = distanciaKm(lat, lng, o.lat, o.lng);
+    if (km > raio) continue;
+    vistos.add(o.id);
+    r.total++;
+    if (agora - o.ts <= 30 * DIA) r.d30++;
+    if (GRAVES.has(o.cat)) r.graves++;
+    cats[o.cat] = (cats[o.cat] || 0) + 1;
+    perto.push({ ...o, km });
+  }
+  r.porCat = Object.keys(cats).map((id) => ({ id, qtd: cats[id] })).sort((a, b) => b.qtd - a.qtd);
+  r.ultimas = perto.sort((a, b) => b.ts - a.ts).slice(0, 4).map((o) => ({ titulo: o.titulo, link: o.link, data: o.data, cat: o.cat, km: Math.round(o.km * 10) / 10 }));
+  return r;
+}

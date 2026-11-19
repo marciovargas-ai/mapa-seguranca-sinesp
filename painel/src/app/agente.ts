@@ -34,6 +34,8 @@ const SELETOR_CARTOES = '.conteudo .cartao:not(.zona):not(.noticia), .kpis .kpi'
     } @else {
       <aside class="janela" role="dialog" aria-label="Assistente de IA">
         <header>
+          <!-- Celular: o assistente ocupa a tela toda; "Voltar" à esquerda nunca fica fora da tela -->
+          <button mat-icon-button class="voltar" (click)="ia.fechar()" aria-label="Voltar ao painel"><mat-icon>arrow_back</mat-icon></button>
           <mat-icon class="logo">auto_awesome</mat-icon>
           <div class="tit"><b>Assistente IA</b><small>{{ store.nomeLocal() || 'Mapa da Segurança' }}</small></div>
           <button mat-icon-button (click)="ia.limpar()" matTooltip="Nova conversa" aria-label="Nova conversa"><mat-icon>add_comment</mat-icon></button>
@@ -134,11 +136,15 @@ const SELETOR_CARTOES = '.conteudo .cartao:not(.zona):not(.noticia), .kpis .kpi'
     textarea:focus { border-color: var(--shopee-laranja); }
     form button:not(:disabled) { color: var(--shopee-laranja); }
     .rodape { padding: 0 14px 8px; color: var(--mat-sys-on-surface-variant); font-size: 11px; }
+    .voltar { display: none; }
     @media (max-width: 600px) {
       :host { right: 12px; bottom: 12px; }
       .fab span { display: none; }
       .fab { padding: 14px; }
-      .janela { position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; }
+      .janela { position: fixed; inset: 0; width: 100%; max-width: 100vw; height: 100dvh; border-radius: 0; }
+      header { padding-left: 4px; position: sticky; top: 0; }
+      .voltar { display: inline-flex; }
+      .logo { display: none; }
     }
   `,
 })
@@ -161,6 +167,20 @@ export class AgenteComponent {
   private readonly lista = viewChild<ElementRef<HTMLElement>>('lista');
 
   constructor() {
+    // Fecha com Esc e com o botão Voltar do celular (uma entrada no histórico enquanto o assistente está aberto)
+    let noHistorico = false;
+    const aoVoltar = () => { if (this.ia.aberto()) { noHistorico = false; this.ia.fechar(); } };
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape' && this.ia.aberto() && !document.querySelector('.cdk-overlay-pane')) this.ia.fechar(); };
+    window.addEventListener('popstate', aoVoltar);
+    window.addEventListener('keydown', aoTeclar);
+    effect(() => {
+      const aberto = this.ia.aberto();
+      try {
+        if (aberto && !noHistorico) { history.pushState({ ...(history.state || {}), assistenteIA: 1 }, ''); noHistorico = true; }
+        else if (!aberto && noHistorico) { noHistorico = false; if (history.state?.assistenteIA) history.back(); }
+      } catch { /* histórico bloqueado (iframe): Esc e os botões continuam fechando */ }
+    });
+    inject(DestroyRef).onDestroy(() => { window.removeEventListener('popstate', aoVoltar); window.removeEventListener('keydown', aoTeclar); });
     // Rola a conversa para a última mensagem
     effect(() => {
       this.ia.mensagens(); this.ia.pensando();

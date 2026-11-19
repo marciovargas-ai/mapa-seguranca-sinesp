@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, OnDestroy, signal, untracked, viewChild } from '@angular/core';
-import { ocorrenciasPerto, RAIO_UNIDADE_KM } from '../core/proximidade';
+import { analisarLocal, ocorrenciasPerto, RAIO_CEP_KM, RAIO_UNIDADE_KM } from '../core/proximidade';
+import { formatarCep, formatarCoordenada, PontoCep } from '../core/cep';
 import { explicarGrau, grauDe } from '../core/confianca';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -15,7 +16,7 @@ import { Camadas, PainelStore, Relato, UnidadeShopee } from '../core/painel.stor
 import { NOME_CAT_OFICIAL } from '../core/oficial';
 import { Servidor } from '../core/servidor';
 import { AreaIsp, baixarDadosPublicos, IspMunicipio, Tiroteio } from '../core/areas';
-import { cadaN, esc, fetchComTimeout, fmt, normalizar, umACada, urlSegura } from '../core/util';
+import { cadaN, distanciaKm, esc, fetchComTimeout, fmt, normalizar, umACada, urlSegura } from '../core/util';
 
 declare const L: any;
 
@@ -54,6 +55,14 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
   template: `
     <div class="mapa" #alvo role="application" aria-label="Mapa de ocorrências"></div>
 
+    @if (store.pontoCepMapa(); as pc) {
+      <div class="chip-cep" role="status">
+        <button type="button" class="chip-cep-ir" (click)="abrirPopupCep(true)" matTooltip="Ver a análise do local">
+          <mat-icon>location_on</mat-icon><span><b>{{ pc.tipo === 'coord' ? 'Coordenada' : 'CEP' }} <span translate="no">{{ valorPonto(pc) }}</span></b> · {{ pc.logradouro || pc.bairro || pc.cidade }}</span>
+        </button>
+        <button type="button" class="chip-cep-x" (click)="store.removerPontoCep()" matTooltip="Remover a marcação" aria-label="Remover a marcação"><mat-icon>close</mat-icon></button>
+      </div>
+    }
     <div class="controles">
       <button mat-mini-fab class="botao-mapa" [matMenuTriggerFor]="menuCamadas" matTooltip="Camadas do mapa" aria-label="Camadas do mapa">
         <mat-icon>layers</mat-icon>
@@ -69,7 +78,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     </mat-menu>
 
     @if (legendaCoropletico(); as leg) {
-      <div class="legenda">
+      <div class="legenda" [class.sob-balao]="balaoAberto()">
         <div class="legenda-titulo">{{ leg.titulo }}</div>
         <div class="legenda-sub">1 caso a cada N habitantes · 12 meses</div>
         <div class="escala">
@@ -80,7 +89,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
         </div>
       </div>
     } @else if (legenda(); as leg) {
-      <div class="legenda">
+      <div class="legenda" [class.sob-balao]="balaoAberto()">
         <div class="legenda-titulo">{{ leg.total }} notícias em {{ leg.periodo >= 365 ? '12 meses' : leg.periodo >= 180 ? '6 meses' : leg.periodo + ' dias' }} · {{ leg.noMapa }} com local exato</div>
         <div class="legenda-sub">{{ leg.bairro ? leg.bairro + ' contadas no bairro citado (área pintada)' : '' }}</div>
         @if (leg.oficial; as of) {
@@ -137,6 +146,15 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
   styles: `
     :host { position: relative; display: block; height: 100%; min-height: 0; }
     .mapa { position: absolute; inset: 0; background: var(--mat-sys-surface-container); }
+    .chip-cep { position: absolute; top: 12px; left: 12px; z-index: 900; display: flex; align-items: center; max-width: calc(100% - 84px);
+      background: #113366; color: #fff; border-radius: 999px; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); font: var(--mat-sys-body-medium); }
+    .chip-cep button { border: 0; background: none; color: inherit; cursor: pointer; display: flex; align-items: center; font: inherit; }
+    .chip-cep-ir { gap: 6px; padding: 6px 4px 6px 10px; min-width: 0; }
+    .chip-cep-ir span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chip-cep-ir mat-icon { color: #EE4D2D; flex: none; }
+    .chip-cep-x { padding: 6px 10px 6px 4px; opacity: .85; }
+    .chip-cep-x:hover { opacity: 1; }
+    .chip-cep mat-icon { font-size: 20px; width: 20px; height: 20px; }
     .controles { position: absolute; top: 12px; right: 12px; z-index: 900; display: flex; flex-direction: column; gap: 8px; }
     .botao-mapa { background: var(--mat-sys-surface-container-lowest); color: var(--mat-sys-on-surface); }
     .legenda-unidades { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
@@ -176,7 +194,7 @@ const ESCALA_BAIRRO = ['#fde047', '#facc15', '#fb923c', '#f97316', '#ef4444', '#
     .gradiente div { flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #3b82f6, #22c55e, #eab308, #f97316, #dc2626); }
     .legenda-zona { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
     .legenda-zona i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #dc2626; background: rgba(220, 38, 38, .2); }
-    @media (max-width: 600px) { .legenda { font-size: 11px; padding: 6px 10px; max-width: 220px; } .cats, .legenda-zona { display: none; } }
+    @media (max-width: 600px) { .legenda { font-size: 11px; padding: 6px 10px; max-width: 220px; } .cats, .legenda-zona { display: none; } .legenda.sob-balao { display: none; } }
   `,
 })
 export class MapaComponent implements OnDestroy {
@@ -208,6 +226,11 @@ export class MapaComponent implements OnDestroy {
   private layerZonas: any;
   private layerSemLocal: any;
   private layerFogo: any;
+  private layerCep: any;
+  private markerCep: any;
+  private cepDesenhado = '';
+  /** No celular, a legenda some enquanto um balão está aberto (ela ficava por cima do balão). */
+  protected readonly balaoAberto = signal(false);
   private layerUnidades: any;
   private layerRelatos: any;
   private layerPrf: any;
@@ -359,6 +382,10 @@ export class MapaComponent implements OnDestroy {
         this.desenharPrf(ver && dado ? dado.trechos.filter((t) => t[0] === uf) : [], dado);
       });
     });
+    effect(() => {
+      const p = this.store.pontoCepMapa();
+      untracked(() => this.desenharCep(p));
+    });
     effect(() => { this.store.uf(); this.store.cidade(); this.usuarioMoveu = false; this.ultimoEnquadramento = ''; untracked(() => this.voarParaLocal()); });
   }
 
@@ -381,6 +408,9 @@ export class MapaComponent implements OnDestroy {
     const pR = map.createPane('paneRotulos'); pR.style.zIndex = 640;
     // Acima dos nomes de bairro, para o marcador de notícias sem endereço continuar clicável no centro da cidade
     const pSL = map.createPane('paneSemLocal'); pSL.style.zIndex = 645;
+    // Pino do CEP pesquisado: acima de tudo que é do mapa; o raio de 1 km é só desenho (não recebe clique)
+    const pCep = map.createPane('paneCep'); pCep.style.zIndex = 660;
+    const pCepR = map.createPane('paneCepRaio'); pCepR.style.zIndex = 356; pCepR.style.pointerEvents = 'none';
 
     // Mapas base da Esri: não exigem chave de API
     const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
@@ -406,6 +436,9 @@ export class MapaComponent implements OnDestroy {
     this.layerZonas = L.layerGroup().addTo(map);
     this.layerSemLocal = L.layerGroup().addTo(map);
     this.layerFogo = L.layerGroup().addTo(map);
+    this.layerCep = L.layerGroup().addTo(map);
+    map.on('popupopen', () => this.balaoAberto.set(true));
+    map.on('popupclose', () => this.balaoAberto.set(false));
     const pU = map.createPane('paneUnidades'); pU.style.zIndex = 620;
     // Raio de 3 km das unidades: só desenho. Num painel próprio que não recebe clique; no painel das unidades,
     // a tela (canvas) do círculo cobria o mapa inteiro e bloqueava o clique em tudo que estava embaixo.
@@ -599,6 +632,92 @@ export class MapaComponent implements OnDestroy {
       c.bindTooltip(`BR-${esc(String(br))} · km ${km}–${km + 5}`, { permanent: true, direction: 'right', offset: [8, 0], className: 'rotulo-prf' + (top.has(linha) ? '' : ' rotulo-prf-extra') });
       this.layerPrf.addLayer(c);
     }
+  }
+
+  protected valorPonto(p: PontoCep): string { return p.tipo === 'coord' ? formatarCoordenada(p.lat, p.lng) : formatarCep(p.cep); }
+  protected rotuloPonto(p: PontoCep): string { return p.tipo === 'coord' ? 'Coordenada ' + formatarCoordenada(p.lat, p.lng) : 'CEP ' + formatarCep(p.cep); }
+
+  /** Pino do CEP pesquisado com o raio de análise; no CEP novo, o mapa vai até ele e abre a análise. */
+  private desenharCep(p: PontoCep | null): void {
+    if (!this.map) return;
+    this.layerCep.clearLayers();
+    this.markerCep = null;
+    if (!p) { this.cepDesenhado = ''; return; }
+    L.circle([p.lat, p.lng], { radius: RAIO_CEP_KM * 1000, pane: 'paneCepRaio', interactive: false,
+      color: '#113366', weight: 1.5, dashArray: '5 6', fillColor: '#113366', fillOpacity: 0.06 }).addTo(this.layerCep);
+    const icone = L.divIcon({ className: 'pino-cep', html: '<span></span>', iconSize: [30, 40], iconAnchor: [15, 39], popupAnchor: [0, -36] });
+    const m = L.marker([p.lat, p.lng], { icon: icone, pane: 'paneCep', keyboard: true, title: this.rotuloPonto(p), zIndexOffset: 1000 });
+    m.bindPopup(() => this.popupCep(p), { maxWidth: 360, maxHeight: Math.min(440, Math.max(220, this.alvo().nativeElement.clientHeight - 90)), autoPanPaddingTopLeft: [12, 60] });
+    m.on('popupopen', (e: any) => {
+      const el = e.popup.getElement() as HTMLElement | null;
+      el?.querySelector('.bt-remover-cep')?.addEventListener('click', () => this.store.removerPontoCep());
+    });
+    m.addTo(this.layerCep);
+    this.markerCep = m;
+    const chave = p.tipo + p.cep + '|' + p.em + '|' + p.precisao;
+    if (this.cepDesenhado !== chave) {
+      this.cepDesenhado = chave;
+      this.usuarioMoveu = true;
+      this.map.flyTo([p.lat, p.lng], p.precisao === 'cidade' ? 13 : 15, { duration: 0.6 });
+      this.map.once('moveend', () => this.abrirPopupCep(false));
+    }
+  }
+
+  /** Abre a análise do CEP (o chip no topo do mapa também chama, depois de fechada). */
+  protected abrirPopupCep(centralizar: boolean): void {
+    if (!this.markerCep) return;
+    if (centralizar) this.map.flyTo(this.markerCep.getLatLng(), Math.max(this.map.getZoom(), 15), { duration: 0.4 });
+    this.markerCep.openPopup();
+  }
+
+  /** Análise de segurança do entorno do CEP: notícias no raio, zona vermelha, bairro, cidade e unidade Shopee mais próxima. */
+  private popupCep(p: PontoCep): string {
+    const a = analisarLocal(p.lat, p.lng, this.store.recentes30());
+    const PREC: Record<string, string> = {
+      endereco: p.tipo === 'coord' ? 'Pino na coordenada informada' : 'Pino no ponto do CEP', rua: 'Pino na rua do CEP (aproximado)',
+      bairro: 'Pino no centro do bairro (rua não localizada)', cidade: 'Pino no centro da cidade (endereço não localizado)',
+    };
+    const tipos = a.porCat.map((c) => `<span class="popup-tag" style="color:${CATEGORIA_POR_ID[c.id]?.cor || '#64748b'}">${esc(CATEGORIA_POR_ID[c.id]?.curto || c.id)} ${fmt(c.qtd)}</span>`).join(' ');
+    const ult = a.ultimas.map((o) => `<li><a href="${esc(urlSegura(o.link))}" target="_blank" rel="noopener" translate="no">${esc(o.titulo)}</a> <small>(${esc(o.data)}, ${String(o.km).replace('.', ',')} km)</small></li>`).join('');
+    const linhas: string[] = [];
+    // Zona vermelha: dentro de uma ou a mais próxima
+    const zonas = this.store.filtrados().zonas;
+    if (zonas.length) {
+      const dz = zonas.map((z) => ({ z, km: distanciaKm(p.lat, p.lng, z.lat, z.lng) })).sort((x, y) => x.km - y.km)[0];
+      linhas.push(dz.km * 1000 <= dz.z.raio
+        ? `<li class="alerta"><b>Dentro da zona vermelha ${dz.z.rank}</b> (índice ${dz.z.indice}/100, ${esc(NOME_NIVEL[dz.z.nivel].toLowerCase())})</li>`
+        : `<li>Zona vermelha mais próxima: ${dz.z.rank}ª, a ${String(Math.round(dz.km * 10) / 10).replace('.', ',')} km (índice ${dz.z.indice}/100)</li>`);
+    } else linhas.push('<li>Nenhuma zona vermelha nesta cidade com os filtros atuais.</li>');
+    // Bairro do CEP
+    if (p.bairro) {
+      const lista = this.store.bairrosMapa().lista;
+      const b = lista.find((x) => normalizar(x.nome) === normalizar(p.bairro));
+      const total = lista.reduce((s, x) => s + x.qtd, 0);
+      linhas.push(b && b.qtd
+        ? `<li>Bairro ${esc(b.nome)}: ${fmt(b.qtd)} ${b.qtd === 1 ? 'ocorrência noticiada' : 'ocorrências noticiadas'} em 12 meses (${total ? Math.round((b.qtd / total) * 100) : 0}% da cidade), ${fmt(b.graves)} ${b.graves === 1 ? 'grave' : 'graves'}</li>`
+        : `<li>Bairro ${esc(p.bairro)}: nenhuma ocorrência noticiada com o nome do bairro em 12 meses</li>`);
+    }
+    // Cidade inteira (oficial)
+    const risco = this.store.compilado().risco;
+    if (risco?.semNota) linhas.push(`<li>${esc(p.cidade)}: poucas mortes no período para dar nota de violência</li>`);
+    else if (risco) linhas.push(`<li>${esc(p.cidade)}: <span>${esc(risco.titulo)}</span> <span>${risco.valor}/100 (${esc(risco.nivel.toLowerCase())}), na comparação com o Brasil</span></li>`);
+    // Unidade Shopee mais próxima (quando a camada de unidades já foi carregada)
+    const unid = this.unidadesVisiveis().filter((u) => u.origem === 'planilha')
+      .map((u) => ({ u, km: distanciaKm(p.lat, p.lng, u.lat, u.lng) })).sort((x, y) => x.km - y.km)[0];
+    if (unid) linhas.push(`<li>Unidade Shopee mais próxima: ${esc(unid.u.codigo)} · ${esc(unid.u.nome)}, a ${String(Math.round(unid.km * 10) / 10).replace('.', ',')} km</li>`);
+    const end = [p.logradouro, p.bairro].filter(Boolean).map((x) => esc(x)).join(' · ');
+    return `<div class="popup popup-cep">` +
+      `<span class="popup-cat" style="color:#113366">Análise do local</span> · ${p.tipo === 'coord' ? 'Coordenada' : 'CEP'} <span translate="no">${esc(this.valorPonto(p))}</span>` +
+      `<div class="popup-titulo">${end || esc(p.cidade)}</div>` +
+      `<div class="popup-meta">${esc(p.cidade)}/${esc(p.uf)} · ${esc(PREC[p.precisao])}</div>` +
+      `<div class="perto-unidade"><b>Num raio de ${RAIO_CEP_KM} km · notícias com local preciso</b>` +
+      `<div class="perto-numeros"><span><b>${fmt(a.total)}</b>12 meses</span><span><b>${fmt(a.d30)}</b>30 dias</span><span class="${a.graves ? 'grave' : ''}"><b>${fmt(a.graves)}</b>graves (12 meses)</span></div>` +
+      (tipos ? `<div class="popup-tags">${tipos}</div>` : '') +
+      (ult ? `<ul class="lista-sem-local">${ult}</ul>` : '<small>Nenhuma ocorrência com local preciso no raio em 12 meses.</small>') + `</div>` +
+      `<ul class="cep-contexto">${linhas.join('')}</ul>` +
+      `<small class="popup-meta">Graves = homicídio, tiroteio e roubo de carga. A estatística oficial (Sinesp) é por município; no entorno valem as notícias com rua ou bairro identificados.</small>` +
+      `<div class="cep-acoes"><button type="button" class="bt-remover-cep">Remover marcação</button></div>` +
+      `</div>`;
   }
 
   private popupUnidade(u: UnidadeShopee): string {

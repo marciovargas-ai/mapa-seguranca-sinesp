@@ -1,3 +1,4 @@
+import { formatarCoordenada, lerCoordenada } from './cep';
 import { ESTADOS } from './dados';
 import { Municipio } from './modelos';
 import { distanciaKm, normalizar } from './util';
@@ -52,12 +53,17 @@ export function municipioMaisProximo(lat: number, lng: number): Municipio | null
   return melhor;
 }
 
-export interface Sugestao { tipo: 'CEP' | 'UF' | 'MUN'; rotulo: string; detalhe: string; uf?: string; nome?: string; cep?: string }
+export interface Sugestao { tipo: 'CEP' | 'UF' | 'MUN' | 'COORD'; rotulo: string; detalhe: string; uf?: string; nome?: string; cep?: string; lat?: number; lng?: number }
 
 export function sugerir(texto: string): Sugestao[] {
   const bruto = String(texto || '').trim();
   const digitos = bruto.replace(/\D/g, '');
   const itens: Sugestao[] = [];
+  const coord = lerCoordenada(bruto);
+  if (coord) {
+    itens.push({ tipo: 'COORD', lat: coord.lat, lng: coord.lng, rotulo: 'Marcar coordenada ' + formatarCoordenada(coord.lat, coord.lng), detalhe: 'Enter' });
+    return itens;
+  }
   if (/^\d[\d\-\s.]*$/.test(bruto) && digitos.length >= 5) {
     itens.push({ tipo: 'CEP', cep: digitos, rotulo: 'Buscar CEP ' + digitos.replace(/^(\d{5})(\d{0,3})/, '$1-$2'), detalhe: digitos.length === 8 ? 'Enter' : 'digite 8 números' });
     return itens;

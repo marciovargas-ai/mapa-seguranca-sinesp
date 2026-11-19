@@ -1,3 +1,4 @@
+import { lerCoordenada } from './core/cep';
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatBadgeModule } from '@angular/material/badge';
@@ -66,8 +67,31 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
 
       <mat-form-field class="busca" appearance="outline" subscriptSizing="dynamic">
         <mat-icon matPrefix>search</mat-icon>
-        <input #busca matInput placeholder="Buscar município ou CEP" [value]="textoBusca()" (input)="textoBusca.set($any($event.target).value)"
-          (keydown.enter)="enter()" [matAutocomplete]="auto" aria-label="Buscar município ou CEP" autocomplete="off" spellcheck="false" />
+        <input #busca matInput placeholder="Município, CEP ou coordenada" [value]="textoBusca()" (input)="textoBusca.set($any($event.target).value)"
+          (keydown.enter)="enter()" [matAutocomplete]="auto" aria-label="Buscar município, CEP ou coordenada" autocomplete="off" spellcheck="false" />
+        <button mat-icon-button matSuffix type="button" class="ajuda-busca" [matMenuTriggerFor]="menuDicaBusca" (click)="$event.stopPropagation()"
+          matTooltipClass="dica-busca" aria-label="O que dá para buscar"
+          matTooltip="Município ou estado: Campinas, SP
+CEP: 01310-100 (marca o endereço no mapa)
+Coordenada decimal: -23.5505, -46.6333
+Graus, minutos e segundos: 23°33'01.8&quot;S 46°38'00.0&quot;W
+Graus e minutos: 23°33.03'S 46°38.00'W
+Link do Google Maps: cole o endereço da página
+O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remove."><mat-icon>help_outline</mat-icon></button>
+        <mat-menu #menuDicaBusca="matMenu" class="menu-dica-busca">
+          <div class="dica-conteudo" (click)="$event.stopPropagation()">
+            <b>O que dá para buscar</b>
+            <ul>
+              <li><b>Município ou estado:&nbsp;</b>Campinas, SP</li>
+              <li><b>CEP:&nbsp;</b><span translate="no">01310-100</span> (marca o endereço no mapa)</li>
+              <li><b>Coordenada decimal:&nbsp;</b><span translate="no">-23.5505, -46.6333</span></li>
+              <li><b>Graus, minutos e segundos:&nbsp;</b><span translate="no">23°33'01.8"S 46°38'00.0"W</span></li>
+              <li><b>Graus e minutos:&nbsp;</b><span translate="no">23°33.03'S 46°38.00'W</span></li>
+              <li><b>Link do Google Maps:&nbsp;</b>cole o endereço da página</li>
+            </ul>
+            <small>O ponto ganha um pino com a análise num raio de 1 km; o X no topo do mapa remove.</small>
+          </div>
+        </mat-menu>
         <mat-autocomplete #auto="matAutocomplete" (optionSelected)="escolher($event)" [autoActiveFirstOption]="true">
           @for (s of sugestoes(); track s.rotulo + s.detalhe) {
             <mat-option [value]="s"><span>{{ s.rotulo }}</span> <small class="detalhe">{{ s.detalhe }}</small></mat-option>
@@ -300,6 +324,12 @@ const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
       .rolagem { overflow: visible; }
       .abas ::ng-deep .mat-mdc-tab-header { position: static; }
     }
+    @media (max-width: 600px) {
+      /* Celular: os botões ganham linha própria e quebram em duas se preciso; o idioma vem primeiro, sempre visível */
+      .acoes { order: 4; flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 2px; min-width: 0; }
+      .acoes .idioma { order: -1; }
+      .uf { margin-left: auto; }
+    }
     @media (max-width: 520px) {
       .marca-texto { display: none; }
       .painel-topo { padding: 12px 12px 8px; }
@@ -472,11 +502,18 @@ export class App {
     this.busca().nativeElement.value = '';
     this.busca().nativeElement.blur();
     if (s.tipo === 'CEP') this.store.buscarCep(s.cep!);
+    else if (s.tipo === 'COORD') this.store.buscarCoordenada(s.lat!, s.lng!);
     else if (s.tipo === 'UF') this.store.abrirLocal(s.uf!, 'ESTADO_INTEIRO');
     else this.store.abrirLocal(s.uf!, s.nome!);
   }
 
   protected enter(): void {
+    const coord = lerCoordenada(this.textoBusca());
+    if (coord) {
+      this.textoBusca.set(''); this.busca().nativeElement.value = ''; this.busca().nativeElement.blur();
+      this.store.buscarCoordenada(coord.lat, coord.lng);
+      return;
+    }
     const digitos = this.textoBusca().replace(/\D/g, '');
     if (digitos.length === 8 && !this.sugestoes().some((s) => s.tipo !== 'CEP')) {
       this.textoBusca.set('');

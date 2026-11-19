@@ -224,3 +224,25 @@ html.tema-escuro .popup-meta { color: #a9b6cf; }
 .perto-numeros .grave { background: rgba(220,38,38,.15); color: #dc2626; }
 .pino-relato { background: none; border: 0; }
 .pino-relato span { display: grid; place-items: center; width: 24px; height: 22px; clip-path: polygon(50% 0, 100% 100%, 0 100%); background: #EE4D2D; color: #fff; font: 900 13px/1 Roboto, Arial, sans-serif; padding-top: 6px; box-sizing: border-box; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+
+/* Pino do CEP pesquisado: gota azul-marinho com borda branca e ponto laranja (diferente dos pinos de notícia e das unidades) */
+.pino-cep { background: none; border: 0; }
+.pino-cep span { position: absolute; left: 3px; top: 0; width: 24px; height: 24px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: #113366; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0, 0, 0, .45); }
+.pino-cep span::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #EE4D2D; }
+.popup-cep .cep-contexto { margin: 8px 0 6px; padding-left: 18px; font-size: 13px; line-height: 1.4; }
+.popup-cep .cep-contexto li { margin: 2px 0; }
+.popup-cep .cep-contexto li.alerta { color: var(--cor-perigo, #dc2626); }
+.popup-cep .cep-acoes { display: flex; justify-content: flex-end; margin-top: 8px; }
+.popup-cep .bt-remover-cep { border: 1px solid currentColor; background: none; color: #EE4D2D; border-radius: 999px; padding: 5px 14px; font: 600 13px Roboto, sans-serif; cursor: pointer; }
+.popup-cep .bt-remover-cep:hover { background: #EE4D2D; color: #fff; }
+
+/* Dica do campo de busca: uma linha por formato */
+.dica-busca .mdc-tooltip__surface { white-space: pre-line; text-align: left; max-width: 340px !important; line-height: 1.45; }
+.ajuda-busca { opacity: .7; }
+
+.menu-dica-busca { max-width: 360px !important; }
+.menu-dica-busca .dica-conteudo { padding: 10px 16px 12px; font: var(--mat-sys-body-medium); }
+.menu-dica-busca .dica-conteudo ul { margin: 6px 0 8px; padding-left: 18px; }
+.menu-dica-busca .dica-conteudo li { margin: 3px 0; }
+.menu-dica-busca .dica-conteudo small { opacity: .75; }
