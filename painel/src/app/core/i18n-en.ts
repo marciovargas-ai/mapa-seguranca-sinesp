@@ -1763,4 +1763,11 @@ export const EN: Record<string, string> = {
   "Relato registrado. Enviando as fotos…": "Report saved. Sending the photos…",
   "Relato registrado com as fotos. Obrigado.": "Report saved with the photos. Thank you.",
   "Relato registrado, mas {0} de {1} fotos não foram enviadas.": "Report saved, but {0} of {1} photos were not sent.",
+  "local marcado": "location marked",
+  "Opcional. Ou toque no mapa abaixo para marcar o ponto.": "Optional. Or tap the map below to mark the spot.",
+  "Local marcado no mapa: {0}, {1}": "Location marked on the map: {0}, {1}",
+  "Não foi possível obter a localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.": "Could not get the location. Tap the map to mark the spot or pick the neighborhood from the list.",
+  "O navegador bloqueou a janela de localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.": "The browser blocked the location window. Tap the map to mark the spot or pick the neighborhood from the list.",
+  "Permita a localização na janela que abriu.": "Allow location in the window that opened.",
+  "Mapa para marcar o local da ocorrência": "Map to mark the incident location",
 };

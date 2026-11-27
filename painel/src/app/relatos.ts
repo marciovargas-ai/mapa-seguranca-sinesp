@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+
+declare const L: any;
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
@@ -90,14 +92,15 @@ function lerNome(): string { try { return localStorage.getItem(CHAVE_NOME) || ''
           </mat-form-field>
           <div class="largo local">
             @if (ponto(); as pt) {
-              <span class="ok-local"><mat-icon>my_location</mat-icon> Local salvo: {{ pt.lat.toFixed(5) }}, {{ pt.lng.toFixed(5) }} (precisão de {{ pt.precisao }} m)</span>
+              <span class="ok-local"><mat-icon>my_location</mat-icon> {{ pt.precisao ? 'Local salvo: ' + pt.lat.toFixed(5) + ', ' + pt.lng.toFixed(5) + ' (precisão de ' + pt.precisao + ' m)' : 'Local marcado no mapa: ' + pt.lat.toFixed(5) + ', ' + pt.lng.toFixed(5) }}</span>
               <button mat-button type="button" (click)="ponto.set(null)"><mat-icon>close</mat-icon> Tirar local</button>
             } @else {
               <button mat-stroked-button type="button" (click)="usarLocalizacao()" [disabled]="localizando()">
                 <mat-icon>my_location</mat-icon> {{ localizando() ? 'Buscando a sua localização…' : 'Estou no local: usar minha localização' }}</button>
-              <small>Opcional. Marca o ponto exato da ocorrência no mapa.</small>
+              <small>Opcional. Ou toque no mapa abaixo para marcar o ponto.</small>
             }
           </div>
+          <div class="largo mini-mapa" #miniMapa aria-label="Mapa para marcar o local da ocorrência"></div>
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="largo">
             <mat-label>Descrição</mat-label>
             <textarea matInput rows="3" maxlength="600" [value]="descricao()" (input)="descricao.set($any($event.target).value)" placeholder="Ex.: motorista abordado por dois homens armados na saída do hub, levaram 12 volumes"></textarea>
@@ -130,16 +133,17 @@ function lerNome(): string { try { return localStorage.getItem(CHAVE_NOME) || ''
             <div class="topo"><b>{{ r.tipos[x.tipo] || x.tipo }}</b><span class="grau" title="Fonte própria, geralmente confiável; sem confirmação externa (escala Admiralty)">B2</span>
               <small>{{ dataBr(x.data) }}{{ x.hora ? ' ' + x.hora : '' }}{{ store.escopo() === 'ESTADO' ? ' · ' + x.cidade : '' }}</small></div>
             <div translate="no">{{ x.descricao }}</div>
-            <small>{{ [x.unidade && 'Unidade ' + x.unidade, x.bairro && 'Bairro ' + x.bairro, x.meu ? 'registrado por você' : 'equipe Shopee'].filter(ok).join(' · ') }}</small>
-            @if (x.fotos) {
-              @if (fotosVistas()[x.id]; as urls) {
-                <div class="miniaturas">@for (u of urls; track $index) { <a [href]="u" target="_blank" rel="noopener"><img [src]="u" alt="Foto do relato" /></a> }</div>
-              } @else {
-                <button mat-button class="ver-fotos" (click)="verFotos(x)" [disabled]="carregandoFotos() === x.id">
-                  <mat-icon>photo_library</mat-icon> {{ carregandoFotos() === x.id ? 'Carregando fotos…' : x.fotos === 1 ? 'Ver foto' : 'Ver ' + x.fotos + ' fotos' }}</button>
-              }
+            @if (fotosVistas()[x.id]; as urls) {
+              <div class="miniaturas">@for (u of urls; track $index) { <a [href]="u" target="_blank" rel="noopener"><img [src]="u" alt="Foto do relato" /></a> }</div>
             }
-            @if (x.meu) { <button mat-button class="apagar" (click)="apagar(x)" [disabled]="ocupado() || x.id.startsWith('novo-')"><mat-icon>delete</mat-icon> Apagar</button> }
+            <div class="rodape">
+              <small>{{ [x.unidade && 'Unidade ' + x.unidade, x.bairro && 'Bairro ' + x.bairro, x.lat != null ? 'local marcado' : '', x.meu ? 'registrado por você' : 'equipe Shopee'].filter(ok).join(' · ') }}</small>
+              @if (x.fotos && !fotosVistas()[x.id]) {
+                <button type="button" class="acao" (click)="verFotos(x)" [disabled]="carregandoFotos() === x.id">
+                  <mat-icon>photo_library</mat-icon>{{ carregandoFotos() === x.id ? 'Carregando fotos…' : x.fotos === 1 ? 'Ver foto' : 'Ver ' + x.fotos + ' fotos' }}</button>
+              }
+              @if (x.meu) { <button type="button" class="acao" (click)="apagar(x)" [disabled]="ocupado() || x.id.startsWith('novo-')"><mat-icon>delete</mat-icon>Apagar</button> }
+            </div>
           </div>
         } @empty { <p class="dica">Nenhum relato neste local ainda.</p> }
         }
@@ -162,12 +166,22 @@ function lerNome(): string { try { return localStorage.getItem(CHAVE_NOME) || ''
     .largo { grid-column: 1 / -1; }
     h3 { font: var(--mat-sys-title-small); margin: 18px 0 8px; }
     h3 small { font-weight: 400; color: var(--mat-sys-on-surface-variant); }
-    .relato { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--mat-sys-surface-container); margin-bottom: 6px; font-size: 13px; position: relative; }
+    .relato { display: grid; gap: 2px; padding: 8px 12px; border-radius: 10px; background: var(--mat-sys-surface-container); margin-bottom: 6px; font-size: 13px; position: relative; }
+    .relato .rodape { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; }
+    .relato .rodape small { flex: 1; min-width: 140px; }
+    .acao { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 4px; cursor: pointer;
+      font: 500 12px/1.4 Roboto, sans-serif; color: #EE4D2D; border-radius: 6px; }
+    .acao:hover { background: color-mix(in srgb, #EE4D2D 10%, transparent); }
+    .acao:disabled { opacity: .5; cursor: default; }
+    .acao mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .relato .miniaturas { margin: 4px 0 2px; }
     .relato .topo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .relato .topo small { margin-left: auto; }
+    .dica:last-child { margin-bottom: 0; }
     .relato small { color: var(--mat-sys-on-surface-variant); }
     .grau { font: 700 10px/1 Roboto, sans-serif; padding: 2px 5px; border: 1px solid var(--borda-suave); border-radius: 5px; cursor: help; }
     .apagar { justify-self: end; }
+    .mini-mapa { height: 220px; border-radius: 10px; overflow: hidden; border: 1px solid var(--borda-suave); z-index: 0; }
     .local { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
     .local small { color: var(--mat-sys-on-surface-variant); font-size: 12px; }
     .ok-local { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #1b7f3b; }
@@ -228,6 +242,25 @@ export class RelatosComponent {
   });
 
   constructor() {
+    window.addEventListener('message', this.receberLocal);
+    inject(DestroyRef).onDestroy(() => { window.removeEventListener('message', this.receberLocal); this.mapa?.remove(); });
+    // Cria o mini mapa quando o formulário aparece; desfaz ao voltar para a lista
+    effect(() => {
+      const el = this.miniMapa()?.nativeElement;
+      untracked(() => {
+        if (el && !this.mapa) this.iniciarMiniMapa(el);
+        if (!el && this.mapa) { this.mapa.remove(); this.mapa = null; this.marcador = null; }
+      });
+    });
+    effect(() => {
+      const p = this.ponto();
+      untracked(() => {
+        if (!this.mapa) return;
+        if (!p) { if (this.marcador) { this.mapa.removeLayer(this.marcador); this.marcador = null; } return; }
+        if (!this.marcador) this.marcador = L.circleMarker([p.lat, p.lng], { radius: 9, color: '#fff', weight: 3, fillColor: '#EE4D2D', fillOpacity: 1 }).addTo(this.mapa); else this.marcador.setLatLng([p.lat, p.lng]);
+        if (p.precisao || !this.mapa.getBounds().contains([p.lat, p.lng])) this.mapa.setView([p.lat, p.lng], 16);
+      });
+    });
     this.store.carregarRelatos(true);
     this.store.carregarUnidades();
     // Sem nome guardado: sugere a partir da conta assim que ela chega
@@ -243,8 +276,16 @@ export class RelatosComponent {
     }
   }
 
+  /**
+   * Localização do aparelho. O Apps Script mostra o painel dentro de um quadro do Google que não tem permissão
+   * de localização (e o Google Sites põe mais um quadro por fora). Nesse caso abre uma janelinha própria, fora
+   * do quadro, que pede a localização ao navegador e devolve o ponto para cá.
+   */
   protected usarLocalizacao(): void {
     if (!navigator.geolocation) { this.erro.set(true); this.mensagem.set('Este aparelho não informa a localização.'); return; }
+    const pol = (document as any).permissionsPolicy || (document as any).featurePolicy;
+    const liberado = pol?.allowsFeature ? pol.allowsFeature('geolocation') : true;
+    if (!liberado) { this.abrirJanelaLocal(); return; }
     this.localizando.set(true);
     navigator.geolocation.getCurrentPosition((pos) => {
       this.localizando.set(false);
@@ -253,8 +294,59 @@ export class RelatosComponent {
     }, (e) => {
       this.localizando.set(false);
       this.erro.set(true);
-      this.mensagem.set(e.code === 1 ? 'A localização foi bloqueada. Libere o acesso à localização no navegador ou escolha o bairro na lista.' : 'Não foi possível obter a localização. Escolha o bairro na lista.');
+      if (e.code === 1) { this.erro.set(false); this.abrirJanelaLocal(); return; }
+      this.mensagem.set('Não foi possível obter a localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.');
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }
+
+  private janelaLocal: Window | null = null;
+  private abrirJanelaLocal(): void {
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Localização do relato</title><style>body{font:15px/1.5 Roboto,Arial,sans-serif;margin:0;padding:24px;background:#0b1a33;color:#fff;text-align:center}
+b{color:#EE4D2D}button{font:inherit;margin-top:14px;padding:10px 18px;border:0;border-radius:20px;background:#EE4D2D;color:#fff;cursor:pointer}</style></head>
+<body><p><b>Mapa da Segurança</b></p><p id="m">Permita o acesso à localização quando o navegador perguntar.</p>
+<button id="b" onclick="pedir()">Tentar de novo</button><script>
+function pedir(){document.getElementById('m').textContent='Buscando a sua localização…';
+navigator.geolocation.getCurrentPosition(function(p){
+ if(window.opener)window.opener.postMessage({mapaSegLocal:{lat:p.coords.latitude,lng:p.coords.longitude,precisao:Math.round(p.coords.accuracy||0)}},'*');
+ document.getElementById('m').textContent='Localização enviada ao relato. Esta janela vai fechar.';setTimeout(function(){window.close()},900);},
+function(e){document.getElementById('m').textContent=e.code===1?'O navegador bloqueou a localização. Toque no cadeado ao lado do endereço, permita a localização e tente de novo.':'Não foi possível obter a localização. Tente de novo.';},
+{enableHighAccuracy:true,timeout:20000,maximumAge:60000});}
+pedir();</script></body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    this.janelaLocal = window.open(url, 'mapa-seg-local', 'width=440,height=360');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (!this.janelaLocal) {
+      this.erro.set(true);
+      this.mensagem.set('O navegador bloqueou a janela de localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.');
+      return;
+    }
+    this.erro.set(false);
+    this.mensagem.set('Permita a localização na janela que abriu.');
+  }
+
+  private readonly receberLocal = (ev: MessageEvent) => {
+    const d = ev.data?.mapaSegLocal;
+    if (!d || (this.janelaLocal && ev.source !== this.janelaLocal)) return;
+    const lat = Number(d.lat), lng = Number(d.lng);
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    this.ponto.set({ lat, lng, precisao: Math.round(Number(d.precisao) || 0) });
+    this.mensagem.set('');
+  };
+
+  // Mini mapa do formulário: tocar marca o ponto; o ponto do GPS aparece nele também
+  private readonly miniMapa = viewChild<ElementRef<HTMLDivElement>>('miniMapa');
+  private mapa: any = null;
+  private marcador: any = null;
+  private iniciarMiniMapa(el: HTMLDivElement): void {
+    if (typeof L === 'undefined') return;
+    const p = this.ponto();
+    const d = this.store.dados();
+    const centro: [number, number] = p ? [p.lat, p.lng] : d ? [d.centroLat, d.centroLng] : [-15.8, -47.9];
+    this.mapa = L.map(el, { zoomControl: true, attributionControl: false }).setView(centro, p ? 16 : 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(this.mapa);
+    this.mapa.on('click', (e: any) => this.ponto.set({ lat: e.latlng.lat, lng: e.latlng.lng, precisao: 0 }));
+    setTimeout(() => this.mapa?.invalidateSize(), 200);
   }
 
   protected abrirFormulario(): void { this.mensagem.set(''); this.erro.set(false); this.modo.set('form'); }
