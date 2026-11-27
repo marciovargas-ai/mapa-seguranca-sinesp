@@ -1770,4 +1770,5 @@ export const EN: Record<string, string> = {
   "O navegador bloqueou a janela de localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.": "The browser blocked the location window. Tap the map to mark the spot or pick the neighborhood from the list.",
   "Permita a localização na janela que abriu.": "Allow location in the window that opened.",
   "Mapa para marcar o local da ocorrência": "Map to mark the incident location",
+  "Permita a localização na janela que abriu. O ponto volta para cá sozinho.": "Allow location in the window that opened. The point comes back here on its own.",
 };

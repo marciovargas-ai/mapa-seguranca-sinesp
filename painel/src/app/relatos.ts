@@ -95,8 +95,14 @@ function lerNome(): string { try { return localStorage.getItem(CHAVE_NOME) || ''
               <span class="ok-local"><mat-icon>my_location</mat-icon> {{ pt.precisao ? 'Local salvo: ' + pt.lat.toFixed(5) + ', ' + pt.lng.toFixed(5) + ' (precisão de ' + pt.precisao + ' m)' : 'Local marcado no mapa: ' + pt.lat.toFixed(5) + ', ' + pt.lng.toFixed(5) }}</span>
               <button mat-button type="button" (click)="ponto.set(null)"><mat-icon>close</mat-icon> Tirar local</button>
             } @else {
-              <button mat-stroked-button type="button" (click)="usarLocalizacao()" [disabled]="localizando()">
-                <mat-icon>my_location</mat-icon> {{ localizando() ? 'Buscando a sua localização…' : 'Estou no local: usar minha localização' }}</button>
+              @if (emQuadro) {
+                <!-- Dentro do quadro do Apps Script o GPS é bloqueado: o link abre a janelinha de localização direto no toque -->
+                <a mat-stroked-button [href]="urlJanela" target="mapa-seg-local" (click)="aoAbrirJanela()">
+                  <mat-icon>my_location</mat-icon> Estou no local: usar minha localização</a>
+              } @else {
+                <button mat-stroked-button type="button" (click)="usarLocalizacao()" [disabled]="localizando()">
+                  <mat-icon>my_location</mat-icon> {{ localizando() ? 'Buscando a sua localização…' : 'Estou no local: usar minha localização' }}</button>
+              }
               <small>Opcional. Ou toque no mapa abaixo para marcar o ponto.</small>
             }
           </div>
@@ -243,7 +249,7 @@ export class RelatosComponent {
 
   constructor() {
     window.addEventListener('message', this.receberLocal);
-    inject(DestroyRef).onDestroy(() => { window.removeEventListener('message', this.receberLocal); this.mapa?.remove(); });
+    inject(DestroyRef).onDestroy(() => { window.removeEventListener('message', this.receberLocal); this.mapa?.remove(); URL.revokeObjectURL(this.urlJanela); });
     // Cria o mini mapa quando o formulário aparece; desfaz ao voltar para a lista
     effect(() => {
       const el = this.miniMapa()?.nativeElement;
@@ -300,8 +306,9 @@ export class RelatosComponent {
   }
 
   private janelaLocal: Window | null = null;
-  private abrirJanelaLocal(): void {
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  /** Painel dentro de um quadro (Apps Script, Google Sites): o GPS só funciona na janelinha própria. */
+  protected readonly emQuadro = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  private static readonly HTML_JANELA = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Localização do relato</title><style>body{font:15px/1.5 Roboto,Arial,sans-serif;margin:0;padding:24px;background:#0b1a33;color:#fff;text-align:center}
 b{color:#EE4D2D}button{font:inherit;margin-top:14px;padding:10px 18px;border:0;border-radius:20px;background:#EE4D2D;color:#fff;cursor:pointer}</style></head>
 <body><p><b>Mapa da Segurança</b></p><p id="m">Permita o acesso à localização quando o navegador perguntar.</p>
@@ -313,21 +320,23 @@ navigator.geolocation.getCurrentPosition(function(p){
 function(e){document.getElementById('m').textContent=e.code===1?'O navegador bloqueou a localização. Toque no cadeado ao lado do endereço, permita a localização e tente de novo.':'Não foi possível obter a localização. Tente de novo.';},
 {enableHighAccuracy:true,timeout:20000,maximumAge:60000});}
 pedir();</script></body></html>`;
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    this.janelaLocal = window.open(url, 'mapa-seg-local', 'width=440,height=360');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  protected readonly urlJanela = URL.createObjectURL(new Blob([RelatosComponent.HTML_JANELA], { type: 'text/html' }));
+  protected aoAbrirJanela(): void { this.erro.set(false); this.mensagem.set('Permita a localização na janela que abriu. O ponto volta para cá sozinho.'); }
+
+  /** Fora de quadro, quando o navegador negou no próprio painel: tenta a janelinha (pode ser barrada sem um toque novo). */
+  private abrirJanelaLocal(): void {
+    this.janelaLocal = window.open(this.urlJanela, 'mapa-seg-local', 'width=440,height=360');
     if (!this.janelaLocal) {
       this.erro.set(true);
       this.mensagem.set('O navegador bloqueou a janela de localização. Toque no mapa para marcar o ponto ou escolha o bairro na lista.');
       return;
     }
-    this.erro.set(false);
-    this.mensagem.set('Permita a localização na janela que abriu.');
+    this.aoAbrirJanela();
   }
 
   private readonly receberLocal = (ev: MessageEvent) => {
     const d = ev.data?.mapaSegLocal;
-    if (!d || (this.janelaLocal && ev.source !== this.janelaLocal)) return;
+    if (!d) return;
     const lat = Number(d.lat), lng = Number(d.lng);
     if (!isFinite(lat) || !isFinite(lng)) return;
     this.ponto.set({ lat, lng, precisao: Math.round(Number(d.precisao) || 0) });
