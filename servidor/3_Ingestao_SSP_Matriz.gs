@@ -95,6 +95,8 @@ function obterOuAtualizarCidadeNacional(uf, nomeCidade, latCentro, lngCentro, fo
   // (arquivos gravados a partir da v5 já vêm filtrados e marcados; a leitura fica rápida)
   const salvoBairros = lerJson_('bairros_' + mun.ibge + '.json');
   const bairrosSalvos = salvoBairros && salvoBairros.itens ? salvoBairros.itens : [];
+  // Arquivo anterior ao filtro 6: tira na leitura as notícias do "Rádio Guaíba" e os bairros com nome de outra cidade
+  if (registro && registro.filtroLocal !== 1) limparLocaisNoticias_(mun, registro, bairrosSalvos);
   const daCidade = !registro ? [] : registro.filtroHomonimos === 2 ? registro.ocorrencias
     : registro.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosSalvos));
 

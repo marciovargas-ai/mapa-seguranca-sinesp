@@ -25,7 +25,8 @@ const PRECISOES_NO_MAPA_ = new Set(['ENDERECO', 'BAIRRO', 'RODOVIA']);
  */
 const MIN_NOTICIAS_HISTORICO_ = 20;
 /** Sobe quando o filtro de cidade passa a aceitar mais notícias: cada cidade refaz os 12 meses uma vez. */
-const VERSAO_FILTRO_CIDADE_ = 5;  // 4-5 (19/11/2026): capital citada pela sigla/região/bairro, DF pelas regiões administrativas, verbos de crime (roubar, matar)
+const VERSAO_FILTRO_CIDADE_ = 6;  // 6 (27/11/2026): nome do veículo não conta como cidade; bairro com nome de outro município só com "bairro X" ou "X, em <cidade>".
+// 4-5 (19/11/2026): capital citada pela sigla/região/bairro, DF pelas regiões administrativas, verbos de crime (roubar, matar)
 const SEGUNDOS_ORCAMENTO_COLETA_ = 60;
 const IMPRENSA_LOCAL_UF = {
   AC: ['ac24horas.com', 'contilnetnoticias.com.br', 'oaltoacre.com'],
@@ -251,10 +252,63 @@ function citaCapitalPorContexto_(mun, norm, ufs, bairros, imprensaLocal) {
   });
 }
 
+/**
+ * Nome de bairro que também é nome de município do mesmo estado ou de uma capital: "Alvorada" e "Passo Fundo"
+ * em Guaíba (RS), "Canoas", "Bonsucesso"... Nesses casos o nome sozinho no texto é a outra cidade.
+ */
+let CAPITAIS_NORM_ = null;
+function bairroComNomeDeMunicipio_(nomeNorm, uf, cidNorm) {
+  if (!nomeNorm || nomeNorm === cidNorm) return false;
+  if (!CAPITAIS_NORM_) CAPITAIS_NORM_ = new Set(Object.keys(ESTADOS_BRASIL_METADATA).map(u => normalizarTexto_(ESTADOS_BRASIL_METADATA[u].capital)));
+  return CAPITAIS_NORM_.has(nomeNorm) || municipiosNormUf_(uf).has(nomeNorm);
+}
+
+/**
+ * O texto usa o nome como bairro, e não como a cidade de mesmo nome: "bairro Alvorada", "Vila Alvorada",
+ * "comunidade do Passo Fundo", "Alvorada, em Guaíba", "Alvorada (Guaíba)". "Porto Alegre e Alvorada" não conta.
+ */
+function citaComoBairro_(textoNorm, nomeNorm, cidNorm) {
+  const n = escaparRegex_(nomeNorm), c = escaparRegex_(cidNorm);
+  return new RegExp('(^|\\s)(bairro|bairros|vila|loteamento|comunidade|conjunto|residencial|condominio|ocupacao|favela|morro|localidade|regiao do|regiao da)( d[aeo]s?)? ' + n + '(\\s|$)').test(textoNorm) ||
+    new RegExp('(^|\\s)' + n + ' ((em|de|no|na) )?' + c + '(\\s|$)').test(textoNorm);
+}
+
+/** Tira do texto o nome do veículo ("Rádio Guaíba", "Rádio Itatiaia", "Jornal Cruzeiro do Sul"): ele não diz onde foi o fato. */
+function semNomeDoVeiculo_(norm, veiculo) {
+  const v = normalizarTexto_(veiculo);
+  if (v.length < 3) return norm;
+  return (' ' + norm + ' ').split(' ' + v + ' ').join(' ').trim();
+}
+
+/**
+ * Limpeza única dos arquivos gravados antes do filtro 6 (marca filtroLocal = 1):
+ * - sai a notícia que só entrou porque o nome do veículo tem o nome da cidade ("Rádio Guaíba" em Guaíba);
+ * - bairro com nome de outro município sem "bairro X" na manchete volta a "Local não informado"
+ *   e a matéria é lida de novo com a regra nova. Devolve true se mudou algo.
+ */
+function limparLocaisNoticias_(mun, reg, bairros) {
+  if (!reg || !Array.isArray(reg.ocorrencias) || reg.filtroLocal === 1) return false;
+  const cidNorm = normalizarTexto_(mun.nome);
+  const agora = Date.now();
+  reg.ocorrencias = reg.ocorrencias.filter(o =>
+    !(contemTermoInteiro_(normalizarTexto_(o.v), cidNorm) && !noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairros)));
+  reg.ocorrencias.forEach(o => {
+    const bn = normalizarTexto_(String(o.b || '').split(',')[0]);
+    if (!bn || o.p === PRECISAO.ENDERECO || o.p === PRECISAO.RODOVIA) return;
+    if (!bairroComNomeDeMunicipio_(bn, mun.uf, cidNorm) || citaComoBairro_(normalizarTexto_(o.t), bn, cidNorm)) return;
+    o.b = 'Local não informado';
+    if (o.p === PRECISAO.BAIRRO) { o.lat = mun.lat; o.lng = mun.lng; o.p = PRECISAO.MUNICIPIO; o.g = 'Local não identificado na notícia'; }
+    delete o.l; delete o.mt; o.m = agora;
+  });
+  reg.filtroLocal = 1;
+  return true;
+}
+
 function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros) {
   const h = homonimosCidade_(mun);
   const original = String(texto || '') + ' | ' + String(veiculo || '');
-  let norm = normalizarTexto_(original);
+  // A cidade precisa estar no texto da notícia; o nome do jornal não conta ("Rádio Guaíba" noticia o RS inteiro)
+  let norm = semNomeDoVeiculo_(normalizarTexto_(texto), veiculo);
   h.maiores.forEach(n => { norm = norm.split(n).join(' '); });
   norm = norm.replace(h.logradouro, ' ');
   if (!contemTermoInteiro_(norm, h.cidNorm) && !citaApelidoCapital_(mun, norm) &&
@@ -265,7 +319,8 @@ function noticiaDaCidade_(mun, texto, veiculo, imprensaLocal, urlFonte, bairros)
   // Sigla da UF no nome do veículo ("Correio SC", "GZH RS") também conta como sinal do estado
   let propria = !!imprensaLocal || !!ufs[mun.uf] || new RegExp('\\b' + mun.uf + '\\b').test(String(veiculo || ''));
   if (!propria) propria = h.vizinhos.some(v => contemTermoInteiro_(norm, v));
-  if (!propria && bairros) propria = bairros.some(b => { const n = normalizarTexto_(b.n); return n.length >= 5 && n !== h.cidNorm && contemTermoInteiro_(norm, n); });
+  if (!propria && bairros) propria = bairros.some(b => { const n = normalizarTexto_(b.n); return n.length >= 5 && n !== h.cidNorm && contemTermoInteiro_(norm, n) &&
+    (!bairroComNomeDeMunicipio_(n, mun.uf, h.cidNorm) || citaComoBairro_(norm, n, h.cidNorm)); });
 
   if (outraUf && !propria) return false;
   if (h.ambigua && !propria) return false;
@@ -338,7 +393,7 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
       idsExistentes.add(id);
       assinaturas.push(assinatura);
 
-      const local = extrairLocalNLP_(c.texto, ctx.locais, mun.nome);
+      const local = extrairLocalNLP_(c.texto, ctx.locais, mun.nome, mun.uf);
       const geo = resolverCoordenadaOcorrencia_(local, ctx);
       const oc = {
         id: id, d: c.dataIso, t: c.manchete, v: c.veiculo, u: c.link,
@@ -356,7 +411,7 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
     const revalidadas = {};
     atual.ocorrencias.forEach(o => {
       if (o.p !== PRECISAO.MUNICIPIO) return;
-      const local = extrairLocalNLP_(o.t, ctx.locais, mun.nome);
+      const local = extrairLocalNLP_(o.t, ctx.locais, mun.nome, mun.uf);
       const entrada = local.bairro && ctx.locais[normalizarTexto_(local.bairro)];
       if (entrada && entrada.lat && PRECISOES_NO_MAPA_.has(entrada.p)) {
         revalidadas[o.id] = { lat: entrada.lat, lng: entrada.lng, precisao: entrada.p, descricao: entrada.o, rotulo: local.rotulo };
@@ -383,7 +438,7 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
         materiasLidas[o.id] = 1;
         o.mt = 1;
         if (!textos[i]) return;
-        const local = extrairLocalNLP_(o.t + '. ' + textos[i], ctx.locais, mun.nome);
+        const local = extrairLocalNLP_(o.t + '. ' + textos[i], ctx.locais, mun.nome, mun.uf);
         if (!local.bairro && !local.rua && !local.rodovia) return;
         const geo = resolverCoordenadaOcorrencia_(local, ctx);
         if (geo.precisao === PRECISAO.MUNICIPIO || geo.precisao === PRECISAO.PENDENTE) {
@@ -421,6 +476,7 @@ function coletarNoticiasCidade_(mun, modo, opcoes) {
       // (refiltrar a cada coleta só pela manchete apagava notícias válidas e o total caía)
       if (reg.filtroHomonimos !== 2) reg.ocorrencias = reg.ocorrencias.filter(o => noticiaDaCidade_(mun, o.t, o.v, !!o.il, '', bairrosOsm));
       reg.filtroHomonimos = 2;  // já filtrado: a leitura do painel não precisa refazer
+      limparLocaisNoticias_(mun, reg, bairrosOsm);
       if (modo !== 'materias') reg.coletadoEm = agora;
       if (primeiraColeta && !etapaRapida) { reg.historicoEm = agora; reg.versaoFiltro = VERSAO_FILTRO_CIDADE_; }
       return podarRegistroCidade_(reg);
@@ -1010,7 +1066,7 @@ function limparLocalExtraido_(bruto, nomeCidade) {
 /**
  * Devolve { bairro, rua, rodovia, metodo, rotulo } (cada parte pode faltar).
  */
-function extrairLocalNLP_(texto, locaisCidade, nomeCidade) {
+function extrairLocalNLP_(texto, locaisCidade, nomeCidade, uf) {
   const textoNorm = normalizarTexto_(texto);
   const cidNorm = normalizarTexto_(nomeCidade);
   const res = { bairro: '', rua: '', rodovia: '', metodo: 'SEM_LOCAL', rotulo: 'Local não informado' };
@@ -1023,6 +1079,8 @@ function extrairLocalNLP_(texto, locaisCidade, nomeCidade) {
     const k = ordenados[i];
     const e = locaisCidade[k];
     if (k.indexOf(',') !== -1 || !contemTermoInteiro_(textoNorm, k)) continue;
+    // Bairro com nome de outra cidade do estado (Alvorada em Guaíba): só vale se o texto o trata como bairro
+    if (uf && e.p !== PRECISAO.RODOVIA && bairroComNomeDeMunicipio_(k, uf, cidNorm) && !citaComoBairro_(textoNorm, k, cidNorm)) continue;
     if (e.p === PRECISAO.RODOVIA) { if (!res.rodovia) res.rodovia = e.o; continue; }
     if (e.p === PRECISAO.ENDERECO || /^(rua|avenida|av|travessa|servidao|alameda|estrada)\b/.test(k)) {
       if (!res.rua) res.rua = e.o.split(',')[0];

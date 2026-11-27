@@ -1,6 +1,7 @@
 import { CacheDisco } from './cache-disco';
 import { Servidor } from './servidor';
-import { CATEGORIA_POR_ID, CFG } from './dados';
+import { CATEGORIA_POR_ID, CFG, ESTADOS } from './dados';
+import { municipiosUf } from './municipios';
 import { Ocorrencia } from './modelos';
 import { fetchComTimeout, idadeDias, normalizar } from './util';
 
@@ -177,7 +178,25 @@ export function dentro(lat: number, lng: number, aneis: [number, number][][]): b
  */
 export interface PeloBairro { o: Ocorrencia; bairro: string }
 
-export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
+/**
+ * Bairro com nome de outro município do estado ou de uma capital ("Alvorada" e "Passo Fundo" em Guaíba).
+ * Só vale como bairro quando o texto o trata como bairro: "bairro Alvorada", "Vila Alvorada",
+ * "Alvorada, em Guaíba". "Porto Alegre e Alvorada" é a cidade. Mesma regra do servidor (citaComoBairro_).
+ */
+let capitaisNorm: Set<string> | null = null;
+export function bairroComNomeDeMunicipio(nomeNorm: string, uf: string, cidNorm: string): boolean {
+  if (!nomeNorm || nomeNorm === cidNorm) return false;
+  if (!capitaisNorm) capitaisNorm = new Set(Object.values(ESTADOS).map((e: any) => normalizar(e.capital)));
+  return capitaisNorm.has(nomeNorm) || municipiosUf(uf).some((m) => m.norm === nomeNorm);
+}
+const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function citaComoBairro(textoNorm: string, nomeNorm: string, cidNorm: string): boolean {
+  const n = escapar(nomeNorm), c = escapar(cidNorm);
+  return new RegExp('(^|\\s)(bairro|bairros|vila|loteamento|comunidade|conjunto|residencial|condominio|ocupacao|favela|morro|localidade|regiao do|regiao da)( d[aeo]s?)? ' + n + '(\\s|$)').test(textoNorm) ||
+    new RegExp('(^|\\s)' + n + ' ((em|de|no|na) )?' + c + '(\\s|$)').test(textoNorm);
+}
+
+export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[], uf = ''):
   { lista: BairroResumo[]; ligadas: number; peloBairro: PeloBairro[] } {
   const resumo = new Map<string, BairroResumo>();
   const porNome = new Map(bairros.map((b) => [normalizar(b.n), b]));
@@ -193,12 +212,18 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[]):
   for (const o of ocorrencias) {
     let alvo: Bairro | undefined;
     if (o.precisa && o.lat != null && o.lng != null) alvo = comContorno.find((b) => dentro(o.lat!, o.lng!, b.aneis!));
-    const citado = o.bairro && o.bairro !== 'Local não informado' ? normalizar(o.bairro.split(',')[0]) : '';
+    const tituloNorm = normalizar(o.titulo);
+    const cidNorm = normalizar(o.cidade);
+    // Nome que também é outra cidade: na manchete sem "bairro X" / "X, em <cidade>", é a cidade, não o bairro
+    const ehOutraCidade = (n: string) => !!uf && bairroComNomeDeMunicipio(n, uf, cidNorm) &&
+      (' ' + tituloNorm + ' ').includes(' ' + n + ' ') && !citaComoBairro(tituloNorm, n, cidNorm);
+    let citado = o.bairro && o.bairro !== 'Local não informado' ? normalizar(o.bairro.split(',')[0]) : '';
+    if (citado && !o.precisa && ehOutraCidade(citado)) citado = '';
     if (!alvo && citado) alvo = porNome.get(citado);
     if (!alvo && !o.precisa && procurar.length) {
-      const titulo = ' ' + normalizar(o.titulo) + ' ';
-      const cidade = ' ' + normalizar(o.cidade) + ' ';
-      alvo = procurar.find((x) => x.n !== cidade && titulo.includes(x.n))?.b;
+      const titulo = ' ' + tituloNorm + ' ';
+      const cidade = ' ' + cidNorm + ' ';
+      alvo = procurar.find((x) => x.n !== cidade && titulo.includes(x.n) && !ehOutraCidade(x.n.trim()))?.b;
     }
     let chave = alvo ? normalizar(alvo.n) : '';
     // Bairro citado que o OSM não conhece, mas com coordenada: entra como bairro próprio

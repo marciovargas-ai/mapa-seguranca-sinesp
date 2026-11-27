@@ -149,8 +149,8 @@ export class PainelStore {
     return v && this.escopo() === 'CIDADE' && v.chave === this.uf() + '|' + this.cidade() ? v : null;
   });
   /** Bairros com as notícias do filtro atual (mapa) e dos 12 meses (Panorama). */
-  readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas));
-  readonly bairros12 = computed(() => resumirBairros(this.listaBairros(), this.filtrados12().todas));
+  readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas, this.uf()));
+  readonly bairros12 = computed(() => resumirBairros(this.listaBairros(), this.filtrados12().todas, this.uf()));
 
   /** Estatística do Sinesp montada no navegador direto da CDN, sem esperar o Apps Script. */
   readonly oficialCdn = signal<{ chave: string; dado: Oficial | null } | null>(null);
