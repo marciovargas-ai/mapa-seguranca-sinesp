@@ -31,7 +31,7 @@ export interface AvisoInmet {
 
 export interface Relato {
   id: string; uf: string; cidade: string; data: string; hora: string; tipo: string; descricao: string;
-  unidade: string; bairro: string; lat: number | null; lng: number | null; criadoEm: number; meu: boolean;
+  unidade: string; bairro: string; lat: number | null; lng: number | null; criadoEm: number; meu: boolean; fotos?: number;
 }
 export interface Status { icone: string; texto: string; tipo: '' | 'ok' | 'erro' }
 export type Foco = { lat: number; lng: number; zoom?: number; raio?: number; n: number } | null;
