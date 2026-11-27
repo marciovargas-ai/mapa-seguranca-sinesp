@@ -3,6 +3,7 @@ import { Servidor } from './servidor';
 import { CATEGORIA_POR_ID, CFG, ESTADOS } from './dados';
 import { municipiosUf } from './municipios';
 import { Ocorrencia } from './modelos';
+import type { Relato } from './painel.store';
 import { fetchComTimeout, idadeDias, normalizar } from './util';
 
 /**
@@ -246,4 +247,27 @@ export function resumirBairros(bairros: Bairro[], ocorrencias: Ocorrencia[], uf 
   lista.forEach((r) => { r.catTop = Object.keys(r.cats).sort((a, b) => r.cats[b] - r.cats[a])[0] || ''; });
   lista.sort((a, b) => b.qtd - a.qtd || b.graves - a.graves || a.nome.localeCompare(b.nome));
   return { lista, ligadas, peloBairro };
+}
+
+/**
+ * Relatos das equipes Shopee por bairro: pelo ponto (unidade escolhida no relato) dentro do contorno,
+ * ou pelo campo "Bairro ou referência" (nome igual ou citado no texto, o mais longo primeiro).
+ * Ficam fora do índice e do ranking; só entram nas estatísticas por bairro.
+ */
+export function relatosPorBairro(bairros: Bairro[], relatos: Relato[]): Map<string, Relato[]> {
+  const mapa = new Map<string, Relato[]>();
+  if (!bairros.length || !relatos.length) return mapa;
+  const comContorno = bairros.filter((b) => b.aneis);
+  const procurar = bairros.map((b) => ({ b, n: normalizar(b.n) })).filter((x) => x.n.length >= 4).sort((a, b) => b.n.length - a.n.length);
+  for (const r of relatos) {
+    let alvo: Bairro | undefined;
+    if (r.lat != null && r.lng != null) alvo = comContorno.find((b) => dentro(r.lat!, r.lng!, b.aneis!));
+    const texto = normalizar(r.bairro || '');
+    if (!alvo && texto) alvo = (procurar.find((x) => x.n === texto) || procurar.find((x) => (' ' + texto + ' ').includes(' ' + x.n + ' ')))?.b;
+    if (!alvo) continue;
+    const l = mapa.get(alvo.n) || [];
+    l.push(r);
+    mapa.set(alvo.n, l);
+  }
+  return mapa;
 }

@@ -3,7 +3,7 @@ import { ocorrenciasPerto } from './proximidade';
 import { calcularZonas, encurtarOficial, encurtarPanorama, filtrar, normalizarPacote, pacoteVazio } from './analise';
 import { carregarOficial, catsOficiais, OficialArea, oficialPorBairro } from './oficial';
 import { carregarFogoCruzado, carregarIsp, carregarReferencia, carregarSim, carregarRoubos, FogoCruzado, IspMunicipio, ReferenciaNacional, Tiroteio } from './areas';
-import { Bairro, carregarBairros, resumirBairros } from './bairros';
+import { Bairro, carregarBairros, resumirBairros, relatosPorBairro as resumirRelatosBairro } from './bairros';
 import { CacheDisco } from './cache-disco';
 import { enderecoDaCoordenada, localizarCep, PontoCep, pontoNoBairro, buscarEnderecoTexto } from './cep';
 import { compilar } from './compilado';
@@ -149,6 +149,8 @@ export class PainelStore {
     return v && this.escopo() === 'CIDADE' && v.chave === this.uf() + '|' + this.cidade() ? v : null;
   });
   /** Bairros com as notícias do filtro atual (mapa) e dos 12 meses (Panorama). */
+  /** Relatos das equipes Shopee ligados a cada bairro (nome do bairro → relatos dos últimos 180 dias). */
+  readonly relatosBairro = computed(() => resumirRelatosBairro(this.listaBairros(), this.relatos()?.lista || []));
   readonly bairrosMapa = computed(() => resumirBairros(this.listaBairros(), this.filtrados().todas, this.uf()));
   readonly bairros12 = computed(() => resumirBairros(this.listaBairros(), this.filtrados12().todas, this.uf()));
 

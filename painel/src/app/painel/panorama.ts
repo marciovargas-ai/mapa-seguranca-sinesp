@@ -1,4 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, untracked } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
+import { RelatosComponent } from '../relatos';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -20,7 +23,7 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 @Component({
   selector: 'app-panorama',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatTooltipModule, MatProgressBarModule, DeltaComponent, GraficoComponent, InsightsComponent],
+  imports: [MatIconModule, MatButtonModule, MatTooltipModule, MatProgressBarModule, DeltaComponent, GraficoComponent, InsightsComponent],
   template: `
     @let c = store.compilado();
     @if (carregando()) { <mat-progress-bar mode="indeterminate" /> }
@@ -189,14 +192,16 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
         </div>
         @if (bairros().length) {
           <div class="tabela" role="table" aria-label="Ocorrências por bairro">
-            <div class="linha cabeca" role="row"><span>Bairro</span><span>Notícias</span><span>Graves</span><span>Últimos 30 dias</span><span>Tipo principal</span></div>
+            <div class="linha cabeca" role="row" [class.r]="comRelatos()"><span>Bairro</span><span>Notícias</span><span>Graves</span><span>Últimos 30 dias</span><span>Tipo principal</span>
+              @if (comRelatos()) { <span matTooltip="Relatos das equipes Shopee nos últimos 180 dias, pelo bairro informado ou pela unidade escolhida no relato">Relatos Shopee</span> }</div>
             @for (b of bairros(); track b.nome) {
-              <button type="button" class="linha" role="row" (click)="store.focar(b.lat, b.lng, 15)" [matTooltip]="'Ver ' + b.nome + ' no mapa'">
+              <button type="button" class="linha" role="row" [class.r]="comRelatos()" (click)="store.focar(b.lat, b.lng, 15)" [matTooltip]="'Ver ' + b.nome + ' no mapa'">
                 <span class="b-nome">{{ b.nome }}</span>
                 <span class="b-qtd"><span class="barra"><span [style.width.%]="largura(b.qtd)"></span></span>{{ fmt(b.qtd) }}</span>
                 <span [class.perigo]="b.graves">{{ fmt(b.graves) }}</span>
                 <span>{{ fmt(b.recentes) }}</span>
-                <span class="tipo"><i [style.background]="cor(b.catTop)"></i>{{ nomeCat(b.catTop) }}</span>
+                <span class="tipo"><i [style.background]="cor(b.catTop)"></i>{{ b.qtd ? nomeCat(b.catTop) : '—' }}</span>
+                @if (comRelatos()) { <span class="rel-qtd" [class.tem]="b.relatos">{{ fmt(b.relatos) }}</span> }
               </button>
             }
           </div>
@@ -222,6 +227,29 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
       </section>
     }
 
+    @if (relatosCartao(); as rc) {
+      <section class="cartao relatos-shopee">
+        <div class="titulo-bloco">
+          <h3 matTooltip="Ocorrências registradas pelas equipes da Shopee neste local nos últimos 180 dias. Fonte própria (grau B2): fica fora do índice de criminalidade e do ranking, que usam só dados oficiais e valem igual para todas as cidades.">
+            <mat-icon>campaign</mat-icon> Relatos das equipes Shopee <mat-icon class="info">info</mat-icon></h3>
+          <span class="nota">últimos 180 dias · fonte interna</span>
+        </div>
+        @if (rc.total) {
+          <div class="rel-nums">
+            <div><b>{{ fmt(rc.total) }}</b><span>relatos em 180 dias</span></div>
+            <div><b>{{ fmt(rc.d30) }}</b><span>nos últimos 30 dias</span></div>
+            <div><b>{{ fmt(rc.d90) }}</b><span>nos últimos 90 dias</span></div>
+          </div>
+          <ul class="rel-tipos">
+            @for (t of rc.tipos; track t.nome) { <li><span class="barra"><span [style.width.%]="t.pct"></span></span><span>{{ t.nome }}</span><b>{{ fmt(t.qtd) }}</b></li> }
+          </ul>
+        } @else {
+          <div class="vazio pequeno"><mat-icon>campaign</mat-icon>Nenhum relato das equipes neste local nos últimos 180 dias.</div>
+        }
+        <button mat-stroked-button class="rel-bt" (click)="abrirRelatos()"><mat-icon>list</mat-icon> Ver e adicionar relatos</button>
+      </section>
+    }
+
     <section class="cartao">
       <div class="titulo-bloco"><h3><mat-icon>auto_awesome</mat-icon> Insights</h3><span class="nota">oficiais primeiro</span></div>
       <app-insights [itens]="store.insights()" />
@@ -238,6 +266,15 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
   `,
   styles: `
     :host { display: grid; gap: 12px; }
+    .rel-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 10px; }
+    .rel-nums div { display: grid; gap: 2px; }
+    .rel-nums b { font-size: 26px; line-height: 1.1; color: var(--shopee-laranja, #EE4D2D); }
+    .rel-nums span { font-size: 12px; color: var(--mat-sys-on-surface-variant); }
+    .rel-tipos { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+    .rel-tipos li { display: grid; grid-template-columns: 90px 1fr auto; gap: 10px; align-items: center; }
+    .rel-tipos .barra { height: 6px; border-radius: 3px; background: var(--mat-sys-surface-container-high); overflow: hidden; }
+    .rel-tipos .barra span { display: block; height: 100%; background: #EE4D2D; }
+    .rel-bt { justify-self: start; }
     .topo { display: grid; gap: 12px; grid-template-columns: 1fr; }
     @container painel (min-width: 760px) { .topo { grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); } }
     header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -300,6 +337,9 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
     .linha { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(90px, 1.2fr) 60px 70px minmax(0, 1fr); gap: 8px; align-items: center;
       padding: 7px 6px; border: 0; border-bottom: 1px solid var(--mat-sys-outline-variant); background: none; color: inherit; font: var(--mat-sys-body-medium);
       text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
+    .linha.r { grid-template-columns: minmax(0, 1.5fr) minmax(80px, 1.1fr) 56px 64px minmax(0, 1fr) 70px; }
+    .rel-qtd { color: var(--mat-sys-on-surface-variant); }
+    .rel-qtd.tem { color: #EE4D2D; font-weight: 700; }
     .linha.m { grid-template-columns: minmax(0, 2fr) 70px 60px 60px; }
     .linha.d { grid-template-columns: minmax(0, 1fr) minmax(90px, 1.4fr) 60px 80px 90px; cursor: default; }
     .fc { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 6px; }
@@ -332,6 +372,28 @@ const CORES_ANOS = ['#9aa7bb', '#5b7bb0', '#ee4d2d'];
 })
 export class PanoramaComponent {
   protected readonly store = inject(PainelStore);
+  private readonly dialog = inject(MatDialog);
+
+  constructor() {
+    // Relatos das equipes (só contas @shopee.com recebem): carregam com o local aberto
+    effect(() => { this.store.uf(); this.store.cidade(); this.store.escopo(); untracked(() => this.store.carregarRelatos()); });
+  }
+
+  /** Cartão dos relatos internos: só aparece para quem tem conta @shopee.com. */
+  protected readonly relatosCartao = computed(() => {
+    const r = this.store.relatos();
+    if (!r?.conta) return null;
+    const agora = Date.now();
+    const dias = (d: string) => (agora - new Date(d + 'T12:00:00').getTime()) / 86400000;
+    const porTipo: Record<string, number> = {};
+    r.lista.forEach((x) => (porTipo[x.tipo] = (porTipo[x.tipo] || 0) + 1));
+    const max = Math.max(1, ...Object.values(porTipo));
+    const tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1])
+      .map(([k, q]) => ({ nome: r.tipos[k] || k, qtd: q, pct: (q / max) * 100 }));
+    return { total: r.lista.length, d30: r.lista.filter((x) => dias(x.data) <= 30).length, d90: r.lista.filter((x) => dias(x.data) <= 90).length, tipos };
+  });
+
+  protected abrirRelatos(): void { this.dialog.open(RelatosComponent, { width: '680px', maxWidth: '96vw', autoFocus: false }); }
   protected readonly fmt = fmt;
   protected readonly f1 = fmt1;
   protected readonly cadaN = cadaN;
@@ -339,7 +401,15 @@ export class PanoramaComponent {
   protected readonly nomeCat = nomeCategoria;
   protected readonly carregando = computed(() => this.store.carregando() && (!this.store.dados() || !!this.store.dados()!.vazio));
 
-  protected readonly bairros = computed(() => this.store.bairros12().lista.filter((b) => b.qtd > 0).slice(0, 15));
+  /** Notícias por bairro (12 meses) com os relatos das equipes Shopee ao lado (180 dias); bairro só com relato também entra. */
+  protected readonly comRelatos = computed(() => !!this.store.relatos()?.conta);
+  protected readonly bairros = computed(() => {
+    const rel = this.store.relatosBairro();
+    return this.store.bairros12().lista.map((b) => ({ ...b, relatos: rel.get(b.nome)?.length || 0 }))
+      .filter((b) => b.qtd > 0 || b.relatos > 0)
+      .sort((a, b) => b.qtd - a.qtd || b.relatos - a.relatos)
+      .slice(0, 15);
+  });
   protected readonly resumoBairros = computed(() => {
     const r = this.store.bairros12();
     const total = this.store.filtrados12().todas.length;

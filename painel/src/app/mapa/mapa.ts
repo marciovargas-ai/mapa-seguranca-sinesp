@@ -836,7 +836,11 @@ export class MapaComponent implements OnDestroy {
     const of = ob?.porBairro.get(b.nome);
     const oficial = ob ? `<div class="popup-oficial"><b>${of ? fmt(of.total) : 0} registros oficiais</b> (${esc(ob.dado.orgao)}, ${esc(ob.dado.periodo)})` +
       (of ? '<ul class="lista-sem-local">' + Object.entries(of.cats).sort((x, y) => y[1] - x[1]).map(([c, n]) => `<li>${esc(NOME_CAT_OFICIAL[c] || c)}: <b>${fmt(n)}</b></li>`).join('') + '</ul>' : '') + '</div>' : '';
-    return `<div class="popup"><b class="nome-bairro">Bairro ${esc(b.nome)}</b><br>${oficial}${corpo}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
+    const rel = this.store.relatos()?.conta ? this.store.relatosBairro().get(b.nome) || [] : [];
+    const tiposRel = this.store.relatos()?.tipos || {};
+    const relatos = rel.length ? `<div class="popup-relatos"><b style="color:#EE4D2D">${fmt(rel.length)} ${rel.length === 1 ? 'relato' : 'relatos'} das equipes Shopee</b> <small>(180 dias)</small><ul class="lista-sem-local">` +
+      rel.slice(0, 4).map((r) => `<li>${esc(tiposRel[r.tipo] || r.tipo)} <small>(${esc(r.data.split('-').reverse().join('/'))})</small></li>`).join('') + '</ul></div>' : '';
+    return `<div class="popup"><b class="nome-bairro">Bairro ${esc(b.nome)}</b><br>${oficial}${corpo}${relatos}<small>Notícias (complemento) · contorno: ${b.fonte === 'IBGE' ? 'IBGE, Censo 2022 (oficial)' : b.aprox ? 'aproximado pelo ponto do bairro no OpenStreetMap' : 'OpenStreetMap'}</small></div>`;
   }
 
   /** Cor do bairro pela quantidade relativa (amarelo → vermelho escuro). */

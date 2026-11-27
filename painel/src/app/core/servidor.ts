@@ -44,6 +44,7 @@ export const Servidor = {
   relatos: (uf: string, cidade: string) => chamar<any>('obterRelatos', uf, cidade),
   salvarRelato: (r: unknown) => chamar<any>('salvarRelato', r),
   apagarRelato: (id: string) => chamar<any>('apagarRelato', id),
+  adicionarFotoRelato: (id: string, foto: unknown) => chamar<any>('adicionarFotoRelato', id, foto),
   fotoRelato: (id: string, n: number) => chamar<any>('obterFotoRelato', id, n),
   avisosInmet: (uf: string, ibge: string) => chamar<any>('obterAvisosInmet', uf, ibge),
   shopee: (desde: number) => chamar<any>('obterNoticiasShopee', desde || 0),

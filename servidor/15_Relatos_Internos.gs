@@ -84,6 +84,31 @@ function salvarRelato(r) {
   return { ok: true, id: item.id };
 }
 
+/**
+ * Painel: acrescenta uma foto a um relato já gravado (só quem registrou). O painel grava o relato primeiro,
+ * sem fotos, e manda cada foto numa chamada própria, em paralelo: o relato aparece na hora e as fotos chegam depois.
+ */
+function adicionarFotoRelato(id, foto) {
+  const conta = contaFavoritos_();
+  if (!conta) return { ok: false, erro: 'Sem conta @shopee.com identificada.' };
+  const atual = ((lerJson_(ARQUIVO_RELATOS_) || { itens: [] }).itens).find(x => x.id === id);
+  if (!atual || atual.autor !== conta) return { ok: false, erro: 'Relato não encontrado.' };
+  let fotoId;
+  try { fotoId = salvarFotosRelato_(atual, [foto])[0]; } catch (e) { return { ok: false, erro: 'Não foi possível salvar a foto: ' + e.message }; }
+  let total = 0;
+  atualizarJsonComTrava_(ARQUIVO_RELATOS_, dados => {
+    const itens = (dados && dados.itens) || [];
+    const item = itens.find(x => x.id === id);
+    if (item) {
+      item.fotos = item.fotos || [];
+      if (item.fotos.length < RELATOS_MAX_FOTOS_) item.fotos.push(fotoId); else apagarFotosRelato_({ fotos: [fotoId] });
+      total = item.fotos.length;
+    }
+    return { v: 1, itens: itens };
+  });
+  return { ok: true, fotos: total };
+}
+
 /** Painel: apaga um relato (só quem registrou). */
 function apagarRelato(id) {
   const conta = contaFavoritos_();
